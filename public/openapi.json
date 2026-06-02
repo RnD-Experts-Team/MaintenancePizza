@@ -1,0 +1,421 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "MaintenancePizza API",
+    "version": "1.0.0",
+    "description": "Ticket system microservice for store maintenance. An authenticated user files a ticket describing the issues in a store; dispatchers then drive each issue through its lifecycle (diagnosis, technician assignment, attendance, parts, pay/driving, warranty) until completion.\n\nKey design notes:\n- All endpoints require a Sanctum bearer token (`Authorization: Bearer <token>`). There are no login/registration endpoints in this service — tokens are issued elsewhere.\n- Most endpoints are store-scoped under `/api/stores/{store}`, where `{store}` is the store NUMBER (e.g. `03795-00001`), not a numeric id.\n- The system is append-only: there are no update (PUT/PATCH) endpoints. Corrections are made by marking leaf records `mistaken` and creating new ones. Lifecycle changes are explicit POST actions.\n- A ticket's status is DERIVED from its issues and is never set directly.\n- Workflow records (diagnosis, attendance, parts, pay, warranty, assignment, technicians) attach to ONE OR MANY issues via `ticket_issue_ids`, enabling flexible grouping.\n- Attachments are uploaded as multipart `files[]` together with the record they belong to and stored on the public disk; responses include a full `url`."
+  },
+  "servers": [
+    { "url": "http://localhost:8000/api", "description": "Local dev server" }
+  ],
+  "security": [{ "bearerAuth": [] }],
+  "tags": [
+    { "name": "Issues", "description": "Controlled catalog of issues" },
+    { "name": "Technicians", "description": "Controlled catalog of technicians" },
+    { "name": "Categories", "description": "Technician categories" },
+    { "name": "Parts", "description": "Controlled catalog of parts" },
+    { "name": "Tickets", "description": "Filing, listing, deleting, restoring tickets" },
+    { "name": "Issue Workflow", "description": "Per-issue lifecycle: status, deferral, assignment, diagnosis, parts, pay, attendance, warranty" },
+    { "name": "Export", "description": "Full data export" }
+  ],
+  "x-tagGroups": [
+    { "name": "Catalog", "tags": ["Issues", "Technicians", "Categories", "Parts"] },
+    { "name": "Tickets", "tags": ["Tickets", "Issue Workflow"] },
+    { "name": "Export", "tags": ["Export"] }
+  ],
+  "paths": {
+    "/issues": {
+      "get": {
+        "tags": ["Issues"], "summary": "List issues", "operationId": "listIssues",
+        "parameters": [
+          { "$ref": "#/components/parameters/Trashed" },
+          { "$ref": "#/components/parameters/PerPage" }
+        ],
+        "responses": { "200": { "description": "Paginated issues", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IssueCollection" } } } }, "401": { "$ref": "#/components/responses/Unauthenticated" } }
+      },
+      "post": {
+        "tags": ["Issues"], "summary": "Create issue", "operationId": "createIssue",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["title"], "properties": { "title": { "type": "string", "maxLength": 255 }, "description": { "type": "string", "nullable": true } } } } } },
+        "responses": { "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IssueResource" } } } }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/issues/{issue}": {
+      "delete": {
+        "tags": ["Issues"], "summary": "Soft-delete issue", "operationId": "deleteIssue",
+        "parameters": [{ "name": "issue", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "204": { "description": "Soft-deleted" } }
+      }
+    },
+    "/issues/{issue}/restore": {
+      "post": {
+        "tags": ["Issues"], "summary": "Restore soft-deleted issue", "operationId": "restoreIssue",
+        "parameters": [{ "name": "issue", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Restored", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IssueResource" } } } } }
+      }
+    },
+    "/technicians": {
+      "get": {
+        "tags": ["Technicians"], "summary": "List technicians", "operationId": "listTechnicians",
+        "parameters": [{ "$ref": "#/components/parameters/Trashed" }, { "$ref": "#/components/parameters/PerPage" }],
+        "responses": { "200": { "description": "Paginated technicians" } }
+      },
+      "post": {
+        "tags": ["Technicians"], "summary": "Create technician", "operationId": "createTechnician",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string" }, "category_id": { "type": "integer", "nullable": true } } } } } },
+        "responses": { "201": { "description": "Created" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/technicians/{technician}": {
+      "delete": { "tags": ["Technicians"], "summary": "Soft-delete technician", "parameters": [{ "name": "technician", "in": "path", "required": true, "schema": { "type": "integer" } }], "responses": { "204": { "description": "Soft-deleted" } } }
+    },
+    "/technicians/{technician}/restore": {
+      "post": { "tags": ["Technicians"], "summary": "Restore technician", "parameters": [{ "name": "technician", "in": "path", "required": true, "schema": { "type": "integer" } }], "responses": { "200": { "description": "Restored" } } }
+    },
+    "/categories": {
+      "get": { "tags": ["Categories"], "summary": "List categories", "parameters": [{ "$ref": "#/components/parameters/PerPage" }], "responses": { "200": { "description": "Paginated categories" } } },
+      "post": {
+        "tags": ["Categories"], "summary": "Create category",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string" } } } } } },
+        "responses": { "201": { "description": "Created" } }
+      }
+    },
+    "/categories/{category}": {
+      "delete": { "tags": ["Categories"], "summary": "Hard-delete category (technicians keep, category_id nulled)", "parameters": [{ "name": "category", "in": "path", "required": true, "schema": { "type": "integer" } }], "responses": { "204": { "description": "Deleted" } } }
+    },
+    "/parts": {
+      "get": { "tags": ["Parts"], "summary": "List parts", "parameters": [{ "$ref": "#/components/parameters/Trashed" }, { "$ref": "#/components/parameters/PerPage" }], "responses": { "200": { "description": "Paginated parts" } } },
+      "post": {
+        "tags": ["Parts"], "summary": "Create part",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string" } } } } } },
+        "responses": { "201": { "description": "Created" } }
+      }
+    },
+    "/parts/{part}": {
+      "delete": { "tags": ["Parts"], "summary": "Soft-delete part", "parameters": [{ "name": "part", "in": "path", "required": true, "schema": { "type": "integer" } }], "responses": { "204": { "description": "Soft-deleted" } } }
+    },
+    "/parts/{part}/restore": {
+      "post": { "tags": ["Parts"], "summary": "Restore part", "parameters": [{ "name": "part", "in": "path", "required": true, "schema": { "type": "integer" } }], "responses": { "200": { "description": "Restored" } } }
+    },
+    "/tickets": {
+      "get": {
+        "tags": ["Tickets"], "summary": "Global ticket index (all stores)", "operationId": "globalTicketIndex",
+        "description": "Lists tickets across every store. Supports the full filter set.",
+        "parameters": [
+          { "name": "store", "in": "query", "schema": { "type": "string" }, "description": "Limit to a store number" },
+          { "$ref": "#/components/parameters/FilterStatus" },
+          { "$ref": "#/components/parameters/FilterIssueId" },
+          { "$ref": "#/components/parameters/FilterIssueStatus" },
+          { "$ref": "#/components/parameters/FilterPriority" },
+          { "name": "created_from", "in": "query", "schema": { "type": "string", "format": "date" } },
+          { "name": "created_to", "in": "query", "schema": { "type": "string", "format": "date" } },
+          { "name": "assigned_from", "in": "query", "schema": { "type": "string", "format": "date" } },
+          { "name": "assigned_to", "in": "query", "schema": { "type": "string", "format": "date" } },
+          { "name": "part_cost_single_gt", "in": "query", "schema": { "type": "number" }, "description": "At least one issue whose summed (non-mistaken) part cost exceeds this" },
+          { "name": "part_cost_total_gt", "in": "query", "schema": { "type": "number" }, "description": "Whole-ticket part cost (non-mistaken) exceeds this" },
+          { "name": "technician_id", "in": "query", "schema": { "type": "integer" } },
+          { "name": "creator_id", "in": "query", "schema": { "type": "integer" } },
+          { "$ref": "#/components/parameters/Trashed" },
+          { "name": "sort", "in": "query", "schema": { "type": "string", "enum": ["created_at", "updated_at", "id"] } },
+          { "name": "dir", "in": "query", "schema": { "type": "string", "enum": ["asc", "desc"] } },
+          { "$ref": "#/components/parameters/PerPage" }
+        ],
+        "responses": { "200": { "description": "Paginated tickets", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TicketCollection" } } } } }
+      }
+    },
+    "/stores/{store}/tickets": {
+      "get": {
+        "tags": ["Tickets"], "summary": "Store-scoped ticket index", "operationId": "storeTicketIndex",
+        "parameters": [
+          { "$ref": "#/components/parameters/Store" },
+          { "$ref": "#/components/parameters/FilterStatus" },
+          { "$ref": "#/components/parameters/FilterIssueId" },
+          { "$ref": "#/components/parameters/FilterIssueStatus" },
+          { "$ref": "#/components/parameters/FilterPriority" },
+          { "name": "part_cost_total_gt", "in": "query", "schema": { "type": "number" } },
+          { "name": "technician_id", "in": "query", "schema": { "type": "integer" } },
+          { "$ref": "#/components/parameters/Trashed" },
+          { "$ref": "#/components/parameters/PerPage" }
+        ],
+        "responses": { "200": { "description": "Paginated tickets", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TicketCollection" } } } } }
+      },
+      "post": {
+        "tags": ["Tickets"], "summary": "File a new ticket", "operationId": "createTicket",
+        "parameters": [{ "$ref": "#/components/parameters/Store" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTicketRequest" } } } },
+        "responses": { "201": { "description": "Created ticket (status pending)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TicketResource" } } } }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}": {
+      "delete": {
+        "tags": ["Tickets"], "summary": "Soft-delete ticket", "operationId": "deleteTicket",
+        "parameters": [{ "$ref": "#/components/parameters/Store" }, { "$ref": "#/components/parameters/Ticket" }],
+        "responses": { "204": { "description": "Soft-deleted" } }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/restore": {
+      "post": {
+        "tags": ["Tickets"], "summary": "Restore ticket", "operationId": "restoreTicket",
+        "parameters": [{ "$ref": "#/components/parameters/Store" }, { "$ref": "#/components/parameters/Ticket" }],
+        "responses": { "200": { "description": "Restored", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TicketResource" } } } } }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/final-note": {
+      "post": {
+        "tags": ["Tickets"], "summary": "Set/clear the ticket final note", "operationId": "setFinalNote",
+        "parameters": [{ "$ref": "#/components/parameters/Store" }, { "$ref": "#/components/parameters/Ticket" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["final_note"], "properties": { "final_note": { "type": "string", "nullable": true } } } } } },
+        "responses": { "200": { "description": "Updated ticket", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TicketResource" } } } } }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/issues": {
+      "get": {
+        "tags": ["Issue Workflow"], "summary": "List a ticket's issues with full workflow history", "operationId": "listTicketIssues",
+        "parameters": [{ "$ref": "#/components/parameters/Store" }, { "$ref": "#/components/parameters/Ticket" }],
+        "responses": { "200": { "description": "Issues with diagnoses, attendance, parts, pay, warranties, assignments, technicians, and status-change history", "content": { "application/json": { "schema": { "type": "object", "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/TicketIssueResource" } } } } } } } }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}": {
+      "get": {
+        "tags": ["Issue Workflow"], "summary": "Show one issue with full workflow history", "operationId": "showTicketIssue",
+        "parameters": [{ "$ref": "#/components/parameters/Store" }, { "$ref": "#/components/parameters/Ticket" }, { "$ref": "#/components/parameters/TicketIssue" }],
+        "responses": { "200": { "description": "Issue", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TicketIssueResource" } } } } }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/issues/status": {
+      "post": {
+        "tags": ["Issue Workflow"], "summary": "Set status on one or many issues", "operationId": "setIssueStatus",
+        "description": "Sets the status of the listed issues (the ticket status then derives automatically). 'deferred' is NOT allowed here — use the defer endpoint.",
+        "parameters": [{ "$ref": "#/components/parameters/Store" }, { "$ref": "#/components/parameters/Ticket" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["ticket_issue_ids", "status"], "properties": { "ticket_issue_ids": { "type": "array", "items": { "type": "integer" } }, "status": { "type": "string", "enum": ["pending", "assigned", "in_progress", "complete"] } } } } } },
+        "responses": { "200": { "description": "Updated issues" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/defer": {
+      "post": {
+        "tags": ["Issue Workflow"], "summary": "Defer an issue (spawns a child)", "operationId": "deferIssue",
+        "description": "Records the reason, marks the issue Deferred, and creates a new Pending child issue carrying the same initial details (issue, priority, description) with parent_id set.",
+        "parameters": [{ "$ref": "#/components/parameters/Store" }, { "$ref": "#/components/parameters/Ticket" }, { "$ref": "#/components/parameters/TicketIssue" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["reason"], "properties": { "reason": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "The newly created child issue", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TicketIssueResource" } } } } }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/assignments": {
+      "post": {
+        "tags": ["Issue Workflow"], "summary": "Assign issues to technicians on a date", "operationId": "createAssignment",
+        "description": "Attaches the technicians to the issues and moves each issue to Assigned.",
+        "parameters": [{ "$ref": "#/components/parameters/Store" }, { "$ref": "#/components/parameters/Ticket" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["ticket_issue_ids", "technician_ids", "assigned_date"], "properties": { "ticket_issue_ids": { "type": "array", "items": { "type": "integer" } }, "technician_ids": { "type": "array", "items": { "type": "integer" } }, "assigned_date": { "type": "string", "format": "date" }, "assigned_hour": { "type": "string", "example": "09:30", "nullable": true } } } } } },
+        "responses": { "201": { "description": "Assignment", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AssignmentResource" } } } } }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/assignments/{assignment}/delays": {
+      "post": {
+        "tags": ["Issue Workflow"], "summary": "Delay an assignment", "operationId": "delayAssignment",
+        "description": "Snapshots the current date/time into history, stores the reason, and moves the assignment to the new date/time.",
+        "parameters": [{ "$ref": "#/components/parameters/Store" }, { "$ref": "#/components/parameters/Ticket" }, { "name": "assignment", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["new_date", "reason"], "properties": { "new_date": { "type": "string", "format": "date" }, "new_hour": { "type": "string", "nullable": true }, "reason": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Assignment with delay history" } }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/assignments/{assignment}/change-technicians": {
+      "post": {
+        "tags": ["Issue Workflow"], "summary": "Replace technicians on an assignment (no delay)", "operationId": "changeAssignmentTechnicians",
+        "description": "Changes the technicians on the assignment's issues WITHOUT changing the date/time — this is NOT recorded as a delay.",
+        "parameters": [{ "$ref": "#/components/parameters/Store" }, { "$ref": "#/components/parameters/Ticket" }, { "name": "assignment", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["technician_ids"], "properties": { "technician_ids": { "type": "array", "items": { "type": "integer" } } } } } } },
+        "responses": { "200": { "description": "Assignment" } }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/diagnoses": {
+      "post": {
+        "tags": ["Issue Workflow"], "summary": "Add a diagnosis (multipart, optional files)", "operationId": "createDiagnosis",
+        "parameters": [{ "$ref": "#/components/parameters/Store" }, { "$ref": "#/components/parameters/Ticket" }],
+        "requestBody": { "required": true, "content": { "multipart/form-data": { "schema": { "type": "object", "required": ["ticket_issue_ids"], "properties": { "ticket_issue_ids[]": { "type": "array", "items": { "type": "integer" } }, "body": { "type": "string", "nullable": true }, "files[]": { "type": "array", "items": { "type": "string", "format": "binary" } } } } } } },
+        "responses": { "201": { "description": "Diagnosis", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DiagnosisResource" } } } } }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/diagnoses/{diagnosis}/mistaken": {
+      "post": {
+        "tags": ["Issue Workflow"], "summary": "Mark a diagnosis as mistaken", "operationId": "markDiagnosisMistaken",
+        "parameters": [{ "$ref": "#/components/parameters/Store" }, { "$ref": "#/components/parameters/Ticket" }, { "name": "diagnosis", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Diagnosis (mistaken=true)" } }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/attendance-entries": {
+      "post": {
+        "tags": ["Issue Workflow"], "summary": "Add an attendance entry (multipart, optional files)", "operationId": "createAttendanceEntry",
+        "description": "Clock fields are unconstrained — any subset may be set. The technician must already be attached to at least one target issue.",
+        "parameters": [{ "$ref": "#/components/parameters/Store" }, { "$ref": "#/components/parameters/Ticket" }],
+        "requestBody": { "required": true, "content": { "multipart/form-data": { "schema": { "type": "object", "required": ["ticket_issue_ids", "technician_id"], "properties": { "ticket_issue_ids[]": { "type": "array", "items": { "type": "integer" } }, "technician_id": { "type": "integer" }, "start_clock": { "type": "string", "format": "date-time", "nullable": true }, "end_clock": { "type": "string", "format": "date-time", "nullable": true }, "start_break": { "type": "string", "format": "date-time", "nullable": true }, "end_break": { "type": "string", "format": "date-time", "nullable": true }, "start_parts_run": { "type": "string", "format": "date-time", "nullable": true }, "end_parts_run": { "type": "string", "format": "date-time", "nullable": true }, "files[]": { "type": "array", "items": { "type": "string", "format": "binary" } } } } } } },
+        "responses": { "201": { "description": "Attendance entry" }, "422": { "$ref": "#/components/responses/ValidationError" } }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/attendance-entries/{attendanceEntry}/mistaken": {
+      "post": {
+        "tags": ["Issue Workflow"], "summary": "Mark an attendance entry as mistaken", "operationId": "markAttendanceMistaken",
+        "parameters": [{ "$ref": "#/components/parameters/Store" }, { "$ref": "#/components/parameters/Ticket" }, { "name": "attendanceEntry", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Attendance entry (mistaken=true)" } }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/part-usages": {
+      "post": {
+        "tags": ["Issue Workflow"], "summary": "Add a part usage (multipart, optional files)", "operationId": "createPartUsage",
+        "parameters": [{ "$ref": "#/components/parameters/Store" }, { "$ref": "#/components/parameters/Ticket" }],
+        "requestBody": { "required": true, "content": { "multipart/form-data": { "schema": { "type": "object", "required": ["ticket_issue_ids", "part_id", "cost"], "properties": { "ticket_issue_ids[]": { "type": "array", "items": { "type": "integer" } }, "part_id": { "type": "integer" }, "cost": { "type": "number" }, "files[]": { "type": "array", "items": { "type": "string", "format": "binary" } } } } } } },
+        "responses": { "201": { "description": "Part usage", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PartUsageResource" } } } } }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/part-usages/{partUsage}/mistaken": {
+      "post": {
+        "tags": ["Issue Workflow"], "summary": "Mark a part usage as mistaken", "operationId": "markPartUsageMistaken",
+        "parameters": [{ "$ref": "#/components/parameters/Store" }, { "$ref": "#/components/parameters/Ticket" }, { "name": "partUsage", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Part usage (mistaken=true)" } }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/pay-entries": {
+      "post": {
+        "tags": ["Issue Workflow"], "summary": "Add a pay/driving entry", "operationId": "createPayEntry",
+        "description": "All money fields are optional. Attendance pay (base_pay/performance_pay, per hour) is separate from driving pay (driving_base_pay/driving_performance_pay) and per-mile.",
+        "parameters": [{ "$ref": "#/components/parameters/Store" }, { "$ref": "#/components/parameters/Ticket" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["ticket_issue_ids", "technician_id"], "properties": { "ticket_issue_ids": { "type": "array", "items": { "type": "integer" } }, "technician_id": { "type": "integer" }, "base_pay": { "type": "number", "nullable": true }, "performance_pay": { "type": "number", "nullable": true }, "driving_time": { "type": "number", "nullable": true }, "miles_driven": { "type": "number", "nullable": true }, "per_mile_rate": { "type": "number", "nullable": true }, "driving_base_pay": { "type": "number", "nullable": true }, "driving_performance_pay": { "type": "number", "nullable": true } } } } } },
+        "responses": { "201": { "description": "Pay entry" } }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/pay-entries/{payEntry}/mistaken": {
+      "post": {
+        "tags": ["Issue Workflow"], "summary": "Mark a pay entry as mistaken", "operationId": "markPayEntryMistaken",
+        "parameters": [{ "$ref": "#/components/parameters/Store" }, { "$ref": "#/components/parameters/Ticket" }, { "name": "payEntry", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Pay entry (mistaken=true)" } }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/warranties": {
+      "post": {
+        "tags": ["Issue Workflow"], "summary": "Add a warranty (multipart, optional files)", "operationId": "createWarranty",
+        "parameters": [{ "$ref": "#/components/parameters/Store" }, { "$ref": "#/components/parameters/Ticket" }],
+        "requestBody": { "required": true, "content": { "multipart/form-data": { "schema": { "type": "object", "required": ["ticket_issue_ids", "body"], "properties": { "ticket_issue_ids[]": { "type": "array", "items": { "type": "integer" } }, "body": { "type": "string" }, "files[]": { "type": "array", "items": { "type": "string", "format": "binary" } } } } } } },
+        "responses": { "201": { "description": "Warranty" } }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/technicians": {
+      "post": {
+        "tags": ["Issue Workflow"], "summary": "Attach technicians to issues (no schedule)", "operationId": "attachTechnicians",
+        "parameters": [{ "$ref": "#/components/parameters/Store" }, { "$ref": "#/components/parameters/Ticket" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["ticket_issue_ids", "technician_ids"], "properties": { "ticket_issue_ids": { "type": "array", "items": { "type": "integer" } }, "technician_ids": { "type": "array", "items": { "type": "integer" } } } } } } },
+        "responses": { "200": { "description": "Updated issues with technicians" } }
+      }
+    },
+    "/export/excel": {
+      "get": {
+        "tags": ["Export"], "summary": "Download a multi-sheet Excel export of all data", "operationId": "exportExcel",
+        "responses": { "200": { "description": "xlsx workbook", "content": { "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { "schema": { "type": "string", "format": "binary" } } } } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "description": "Sanctum personal access token." }
+    },
+    "parameters": {
+      "Store": { "name": "store", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Store number, e.g. 03795-00001", "example": "03795-00001" },
+      "Ticket": { "name": "ticket", "in": "path", "required": true, "schema": { "type": "integer" } },
+      "TicketIssue": { "name": "ticketIssue", "in": "path", "required": true, "schema": { "type": "integer" } },
+      "Trashed": { "name": "trashed", "in": "query", "schema": { "type": "string", "enum": ["with", "only"] }, "description": "Include ('with') or limit to ('only') soft-deleted records" },
+      "PerPage": { "name": "per_page", "in": "query", "schema": { "type": "integer", "default": 15 } },
+      "FilterStatus": { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["pending", "assigned", "in_progress", "complete"] }, "description": "Filter by derived ticket status" },
+      "FilterIssueId": { "name": "issue_id", "in": "query", "schema": { "type": "integer" }, "description": "Tickets containing this catalog issue" },
+      "FilterIssueStatus": { "name": "issue_status", "in": "query", "schema": { "type": "string", "enum": ["pending", "assigned", "in_progress", "complete", "deferred"] }, "description": "Tickets with at least one issue in this status" },
+      "FilterPriority": { "name": "priority", "in": "query", "schema": { "type": "string", "enum": ["urgent", "high", "medium", "low"] } }
+    },
+    "responses": {
+      "Unauthenticated": { "description": "Missing/invalid token", "content": { "application/json": { "schema": { "type": "object", "properties": { "message": { "type": "string", "example": "Unauthenticated." } } } } } },
+      "ValidationError": { "description": "Validation failed", "content": { "application/json": { "schema": { "type": "object", "properties": { "message": { "type": "string" }, "errors": { "type": "object", "additionalProperties": { "type": "array", "items": { "type": "string" } } } } } } } }
+    },
+    "schemas": {
+      "Priority": { "type": "object", "properties": { "value": { "type": "string", "enum": ["urgent", "high", "medium", "low"] }, "label": { "type": "string" } } },
+      "IssueStatus": { "type": "object", "properties": { "value": { "type": "string", "enum": ["pending", "assigned", "in_progress", "complete", "deferred"] }, "label": { "type": "string" } } },
+      "TicketStatus": { "type": "object", "properties": { "value": { "type": "string", "enum": ["pending", "assigned", "in_progress", "complete"] }, "label": { "type": "string" } } },
+      "User": { "type": "object", "properties": { "id": { "type": "integer" }, "name": { "type": "string" }, "email": { "type": "string" } } },
+      "Store": { "type": "object", "properties": { "id": { "type": "integer" }, "store_number": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } },
+      "IssueResource": { "type": "object", "properties": { "data": { "$ref": "#/components/schemas/Issue" } } },
+      "Issue": { "type": "object", "properties": { "id": { "type": "integer" }, "title": { "type": "string" }, "description": { "type": "string", "nullable": true }, "created_by": { "type": "integer", "nullable": true }, "created_at": { "type": "string", "format": "date-time" }, "deleted_at": { "type": "string", "format": "date-time", "nullable": true } } },
+      "IssueCollection": { "type": "object", "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/Issue" } }, "links": { "type": "object" }, "meta": { "type": "object" } } },
+      "Technician": { "type": "object", "properties": { "id": { "type": "integer" }, "name": { "type": "string" }, "category_id": { "type": "integer", "nullable": true }, "category": { "type": "object", "nullable": true }, "deleted_at": { "type": "string", "nullable": true } } },
+      "Category": { "type": "object", "properties": { "id": { "type": "integer" }, "name": { "type": "string" }, "technicians_count": { "type": "integer" } } },
+      "Part": { "type": "object", "properties": { "id": { "type": "integer" }, "name": { "type": "string" }, "deleted_at": { "type": "string", "nullable": true } } },
+      "Attachment": { "type": "object", "properties": { "id": { "type": "integer" }, "path": { "type": "string" }, "url": { "type": "string" }, "original_name": { "type": "string", "nullable": true }, "mime_type": { "type": "string", "nullable": true }, "size": { "type": "integer", "nullable": true } } },
+      "IssueStatusChange": { "type": "object", "properties": { "id": { "type": "integer" }, "ticket_issue_id": { "type": "integer" }, "from_status": { "type": "string", "nullable": true }, "to_status": { "type": "string" }, "reason": { "type": "string", "nullable": true }, "created_by": { "type": "integer", "nullable": true }, "created_at": { "type": "string", "format": "date-time" } } },
+      "Diagnosis": { "type": "object", "properties": { "id": { "type": "integer" }, "body": { "type": "string", "nullable": true }, "mistaken": { "type": "boolean" }, "attachments": { "type": "array", "items": { "$ref": "#/components/schemas/Attachment" } }, "ticket_issue_ids": { "type": "array", "items": { "type": "integer" } } } },
+      "DiagnosisResource": { "type": "object", "properties": { "data": { "$ref": "#/components/schemas/Diagnosis" } } },
+      "AttendanceEntry": { "type": "object", "properties": { "id": { "type": "integer" }, "technician_id": { "type": "integer" }, "start_clock": { "type": "string", "nullable": true }, "end_clock": { "type": "string", "nullable": true }, "start_break": { "type": "string", "nullable": true }, "end_break": { "type": "string", "nullable": true }, "start_parts_run": { "type": "string", "nullable": true }, "end_parts_run": { "type": "string", "nullable": true }, "mistaken": { "type": "boolean" }, "attachments": { "type": "array", "items": { "$ref": "#/components/schemas/Attachment" } } } },
+      "PartUsage": { "type": "object", "properties": { "id": { "type": "integer" }, "part_id": { "type": "integer" }, "part": { "$ref": "#/components/schemas/Part" }, "cost": { "type": "string" }, "mistaken": { "type": "boolean" }, "attachments": { "type": "array", "items": { "$ref": "#/components/schemas/Attachment" } } } },
+      "PartUsageResource": { "type": "object", "properties": { "data": { "$ref": "#/components/schemas/PartUsage" } } },
+      "PayEntry": { "type": "object", "properties": { "id": { "type": "integer" }, "technician_id": { "type": "integer" }, "base_pay": { "type": "string", "nullable": true }, "performance_pay": { "type": "string", "nullable": true }, "driving_time": { "type": "string", "nullable": true }, "miles_driven": { "type": "string", "nullable": true }, "per_mile_rate": { "type": "string", "nullable": true }, "driving_base_pay": { "type": "string", "nullable": true }, "driving_performance_pay": { "type": "string", "nullable": true }, "mistaken": { "type": "boolean" } } },
+      "Warranty": { "type": "object", "properties": { "id": { "type": "integer" }, "body": { "type": "string" }, "attachments": { "type": "array", "items": { "$ref": "#/components/schemas/Attachment" } } } },
+      "AssignmentDelay": { "type": "object", "properties": { "id": { "type": "integer" }, "assignment_id": { "type": "integer" }, "old_date": { "type": "string", "nullable": true }, "old_hour": { "type": "string", "nullable": true }, "new_date": { "type": "string" }, "new_hour": { "type": "string", "nullable": true }, "reason": { "type": "string" } } },
+      "Assignment": { "type": "object", "properties": { "id": { "type": "integer" }, "assigned_date": { "type": "string", "format": "date" }, "assigned_hour": { "type": "string", "nullable": true }, "delays": { "type": "array", "items": { "$ref": "#/components/schemas/AssignmentDelay" } }, "ticket_issue_ids": { "type": "array", "items": { "type": "integer" } } } },
+      "AssignmentResource": { "type": "object", "properties": { "data": { "$ref": "#/components/schemas/Assignment" } } },
+      "TicketIssue": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "ticket_id": { "type": "integer" },
+          "issue_id": { "type": "integer", "nullable": true },
+          "issue": { "$ref": "#/components/schemas/Issue" },
+          "other_title": { "type": "string", "nullable": true },
+          "display_title": { "type": "string" },
+          "priority": { "$ref": "#/components/schemas/Priority" },
+          "description": { "type": "string" },
+          "status": { "$ref": "#/components/schemas/IssueStatus" },
+          "parent_id": { "type": "integer", "nullable": true },
+          "children": { "type": "array", "items": { "$ref": "#/components/schemas/TicketIssue" } },
+          "diagnoses": { "type": "array", "items": { "$ref": "#/components/schemas/Diagnosis" } },
+          "attendance_entries": { "type": "array", "items": { "$ref": "#/components/schemas/AttendanceEntry" } },
+          "part_usages": { "type": "array", "items": { "$ref": "#/components/schemas/PartUsage" } },
+          "pay_entries": { "type": "array", "items": { "$ref": "#/components/schemas/PayEntry" } },
+          "warranties": { "type": "array", "items": { "$ref": "#/components/schemas/Warranty" } },
+          "assignments": { "type": "array", "items": { "$ref": "#/components/schemas/Assignment" } },
+          "technicians": { "type": "array", "items": { "$ref": "#/components/schemas/Technician" } },
+          "status_changes": { "type": "array", "items": { "$ref": "#/components/schemas/IssueStatusChange" } }
+        }
+      },
+      "TicketIssueResource": { "type": "object", "properties": { "data": { "$ref": "#/components/schemas/TicketIssue" } } },
+      "Ticket": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "store_id": { "type": "integer" },
+          "store": { "$ref": "#/components/schemas/Store" },
+          "status": { "$ref": "#/components/schemas/TicketStatus" },
+          "final_note": { "type": "string", "nullable": true },
+          "issues": { "type": "array", "items": { "$ref": "#/components/schemas/TicketIssue" } },
+          "issues_count": { "type": "integer" },
+          "created_by": { "type": "integer", "nullable": true },
+          "created_at": { "type": "string", "format": "date-time" },
+          "deleted_at": { "type": "string", "format": "date-time", "nullable": true }
+        }
+      },
+      "TicketResource": { "type": "object", "properties": { "data": { "$ref": "#/components/schemas/Ticket" } } },
+      "TicketCollection": { "type": "object", "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/Ticket" } }, "links": { "type": "object" }, "meta": { "type": "object" } } },
+      "CreateTicketRequest": {
+        "type": "object",
+        "required": ["issues"],
+        "properties": {
+          "issues": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["priority", "description"],
+              "properties": {
+                "issue_id": { "type": "integer", "nullable": true, "description": "A catalog issue id. Provide this OR other_title, not both." },
+                "other_title": { "type": "string", "nullable": true, "description": "Free-text issue title (each is its own issue). Required if issue_id is absent." },
+                "priority": { "type": "string", "enum": ["urgent", "high", "medium", "low"] },
+                "description": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
