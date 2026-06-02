@@ -12,7 +12,7 @@ class Store extends Model
     /** @use HasFactory<StoreFactory> */
     use HasFactory;
 
-    protected $fillable = ['store_number'];
+    protected $fillable = ['store_number', 'id'];
 
     /**
      * Bind {store} route parameters by the business store number, not the id.

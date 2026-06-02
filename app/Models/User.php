@@ -12,8 +12,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['name', 'email', 'password'])]
-#[Hidden(['password', 'remember_token'])]
+#[Fillable(['name', 'email', 'id', 'image_path'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -29,16 +28,57 @@ class User extends Authenticatable
         return $this->hasMany(Ticket::class, 'created_by');
     }
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
+    protected $appends = [
+        'image_url',
+    ];
+
+
+    public function getImageUrlAttribute(): ?string
     {
-        return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-        ];
+        $path = $this->image_path;
+
+        if (!$path) {
+            return null;
+        }
+
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            return $path;
+        }
+
+        if (str_starts_with($path, 'storage/') || str_starts_with($path, '/storage/')) {
+            return $this->authUrl($path);
+        }
+
+        $baseUrl = $this->authBaseUrl();
+
+        if ($baseUrl === '') {
+            return url($path);
+        }
+
+        return $baseUrl . '/storage/' . ltrim($path, '/');
+    }
+
+    protected function authUrl(string $path): string
+    {
+        $baseUrl = $this->authBaseUrl();
+
+        if ($baseUrl === '') {
+            return url($path);
+        }
+
+        return $baseUrl . '/' . ltrim($path, '/');
+    }
+
+    protected function authBaseUrl(): string
+    {
+        $baseUrl = rtrim((string) config('services.auth_server.base_url'), '/');
+
+        if ($baseUrl === '') {
+            return '';
+        }
+
+        $baseUrl = preg_replace('~/api(?:/.*)?$~i', '', $baseUrl);
+
+        return rtrim((string) $baseUrl, '/');
     }
 }

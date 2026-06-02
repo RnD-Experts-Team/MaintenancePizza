@@ -18,10 +18,7 @@ use App\Http\Controllers\WarrantyController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('auth:sanctum')->group(function () {
-    // Convenience endpoint for the seeded dev token.
-    Route::get('/user', fn (Request $request) => $request->user());
-
+Route::middleware('auth.token.store')->group(function () {
     /*
     |--------------------------------------------------------------------------
     | Controlled reference catalogs (global, not store-scoped)
@@ -52,7 +49,7 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     */
     Route::get('tickets', [TicketController::class, 'globalIndex'])->name('tickets.global');
-    Route::get('export/excel', ExportController::class)->name('export.excel');
+    Route::get('export/excel', ExportController::class)->name('export.excel')->withoutMiddleware('auth.token.store')->middleware('auth.secret.key');
 
     /*
     |--------------------------------------------------------------------------
