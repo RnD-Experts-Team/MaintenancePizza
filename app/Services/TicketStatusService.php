@@ -25,7 +25,7 @@ class TicketStatusService
         // Use the already-loaded relation when present to avoid extra queries.
         $statuses = $ticket->relationLoaded('ticketIssues')
             ? $ticket->ticketIssues->pluck('status')
-            : $ticket->ticketIssues()->pluck('status')->map(fn ($s) => IssueStatus::from($s));
+            : $ticket->ticketIssues()->pluck('status')->map(fn($s) => IssueStatus::from($s));
 
         if ($statuses->isEmpty()) {
             return TicketStatus::Pending;
@@ -41,12 +41,12 @@ class TicketStatusService
 
         // All issues cancelled -> the ticket itself is cancelled (checked before
         // the all-terminal rollup, since Cancelled is now a terminal status).
-        if ($statuses->every(fn (IssueStatus $s) => $s === IssueStatus::Cancelled)) {
+        if ($statuses->every(fn(IssueStatus $s) => $s === IssueStatus::Cancelled)) {
             return TicketStatus::Cancelled;
         }
 
         $terminal = IssueStatus::terminal();
-        $allTerminal = $statuses->every(fn (IssueStatus $s) => in_array($s, $terminal, true));
+        $allTerminal = $statuses->every(fn(IssueStatus $s) => in_array($s, $terminal, true));
 
         return $allTerminal ? TicketStatus::Complete : TicketStatus::Pending;
     }
@@ -62,6 +62,7 @@ class TicketStatusService
             'from_status' => $issue->status,
             'to_status' => $to,
             'reason' => $reason,
+            'created_by' => auth()->id(),
         ]);
 
         $issue->status = $to;
