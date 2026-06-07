@@ -348,6 +348,32 @@
         }
       }
     },
+    "/stores/{store}/tickets/{ticket}/cancel": {
+      "post": {
+        "tags": ["Tickets"], "summary": "Cancel a ticket by cancelling all of its issues", "operationId": "cancelTicket",
+        "description": "Cancels every issue on the ticket that is not already cancelled, recording the provided reason on each status-change entry. Once all issues are cancelled the ticket's derived status becomes `cancelled`.",
+        "parameters": [{ "$ref": "#/components/parameters/Store" }, { "$ref": "#/components/parameters/Ticket" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["reason"],
+                "properties": {
+                  "reason": { "type": "string", "description": "Reason for cancelling the ticket." }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Ticket with all issues cancelled", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TicketResource" } } } },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
+    },
     "/stores/{store}/tickets/{ticket}/final-note": {
       "post": {
         "tags": ["Tickets"], "summary": "Append a typed closing note to a ticket (multipart, optional files)", "operationId": "addFinalNote",
