@@ -11,6 +11,7 @@ use App\Http\Controllers\NoteController;
 use App\Http\Controllers\PartUsageController;
 use App\Http\Controllers\PayEntryController;
 use App\Http\Controllers\TechnicianAssignmentController;
+use App\Http\Controllers\TicketCancellationController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TicketFinalNoteController;
 use App\Http\Controllers\TicketIssueCancellationController;
@@ -80,6 +81,7 @@ Route::middleware('auth.token.store')->group(function () {
         Route::post('tickets', [TicketController::class, 'store'])->name('stores.tickets.store');
         Route::delete('tickets/{ticket}', [TicketController::class, 'destroy'])->name('stores.tickets.destroy');
         Route::post('tickets/{ticket}/restore', [TicketController::class, 'restore'])->withTrashed()->name('stores.tickets.restore');
+        Route::post('tickets/{ticket}/cancel', TicketCancellationController::class)->name('stores.tickets.cancel');
         // Append a typed closing note (Final Notes / What we learned) — many allowed.
         Route::post('tickets/{ticket}/final-note', TicketFinalNoteController::class)->name('stores.tickets.final-note');
 

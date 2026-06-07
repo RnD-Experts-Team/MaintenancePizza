@@ -131,6 +131,19 @@ class TicketIssueService
     }
 
     /**
+     * Cancel all non-cancelled issues on a ticket, making its derived status Cancelled.
+     */
+    public function cancelAll(Ticket $ticket, string $reason): void
+    {
+        DB::transaction(function () use ($ticket, $reason) {
+            $ticket->ticketIssues()
+                ->where('status', '!=', IssueStatus::Cancelled->value)
+                ->get()
+                ->each(fn (TicketIssue $issue) => TicketStatusService::changeIssueStatus($issue, IssueStatus::Cancelled, $reason));
+        });
+    }
+
+    /**
      * Cancel an issue (records the reason). Unlike deferral it spawns no child.
      *
      * @return array<string, mixed>
