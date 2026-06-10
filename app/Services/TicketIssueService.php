@@ -31,7 +31,7 @@ class TicketIssueService
         'notes.attachments',
         'notes.creator',
         'notes.attachments',
-        'attachments.creator',
+        'attachments',
         'diagnoses.creator',
         'diagnoses.attachments',
         'diagnoses.notes.attachments',
