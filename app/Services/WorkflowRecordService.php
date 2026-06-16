@@ -20,18 +20,37 @@ use Illuminate\Support\Facades\DB;
 class WorkflowRecordService
 {
     private const CLOCKS = [
-        'start_clock', 'end_clock', 'start_break', 'end_break', 'start_parts_run', 'end_parts_run',
+        'start_clock',
+        'end_clock',
+        'start_break',
+        'end_break',
+        'start_parts_run',
+        'end_parts_run',
     ];
 
     private const PAY_FIELDS = [
-        'base_pay', 'performance_pay', 'driving_time', 'miles_driven',
-        'per_mile_rate', 'driving_base_pay', 'driving_performance_pay',
+        'base_pay',
+        'performance_pay',
+        'driving_time',
+        'miles_driven',
+        'per_mile_rate',
+        'driving_base_pay',
+        'driving_performance_pay',
     ];
 
     public function __construct(
         private AttachmentService $attachments,
         private CatalogService $catalog,
-    ) {}
+        private NoteService $notes,
+    ) {
+    }
+
+    /**
+     * Eager loads for a record's notes (with their files + author) and files.
+     *
+     * @var list<string>
+     */
+    private const NOTE_LOADS = ['creator', 'attachments.creator', 'notes.creator', 'notes.attachments.creator'];
 
     // ---------------------------------------------------------------- Diagnosis
 
@@ -53,7 +72,7 @@ class WorkflowRecordService
             return $diagnosis;
         });
 
-        return $this->presentDiagnosis($diagnosis->load(['attachments', 'ticketIssues']));
+        return $this->presentDiagnosis($diagnosis->load(['ticketIssues', ...self::NOTE_LOADS]));
     }
 
     /**
@@ -63,7 +82,7 @@ class WorkflowRecordService
     {
         $diagnosis->update(['mistaken' => true]);
 
-        return $this->presentDiagnosis($diagnosis->load('attachments'));
+        return $this->presentDiagnosis($diagnosis->load(self::NOTE_LOADS));
     }
 
     // --------------------------------------------------------------- Attendance
@@ -89,7 +108,7 @@ class WorkflowRecordService
             return $entry;
         });
 
-        return $this->presentAttendance($entry->load(['technician', 'attachments', 'ticketIssues']));
+        return $this->presentAttendance($entry->load(['technician', 'ticketIssues', ...self::NOTE_LOADS]));
     }
 
     /**
@@ -99,7 +118,7 @@ class WorkflowRecordService
     {
         $entry->update(['mistaken' => true]);
 
-        return $this->presentAttendance($entry->load(['technician', 'attachments']));
+        return $this->presentAttendance($entry->load(['technician', ...self::NOTE_LOADS]));
     }
 
     // -------------------------------------------------------------- Part usage
@@ -122,7 +141,7 @@ class WorkflowRecordService
             return $usage;
         });
 
-        return $this->presentPartUsage($usage->load(['part', 'attachments', 'ticketIssues']));
+        return $this->presentPartUsage($usage->load(['part', 'ticketIssues', ...self::NOTE_LOADS]));
     }
 
     /**
@@ -132,7 +151,7 @@ class WorkflowRecordService
     {
         $usage->update(['mistaken' => true]);
 
-        return $this->presentPartUsage($usage->load(['part', 'attachments']));
+        return $this->presentPartUsage($usage->load(['part', ...self::NOTE_LOADS]));
     }
 
     // --------------------------------------------------------------- Pay entry
@@ -156,7 +175,7 @@ class WorkflowRecordService
             return $entry;
         });
 
-        return $this->presentPayEntry($entry->load(['technician', 'ticketIssues']));
+        return $this->presentPayEntry($entry->load(['technician', 'ticketIssues', ...self::NOTE_LOADS]));
     }
 
     /**
@@ -166,7 +185,7 @@ class WorkflowRecordService
     {
         $entry->update(['mistaken' => true]);
 
-        return $this->presentPayEntry($entry->load('technician'));
+        return $this->presentPayEntry($entry->load(['technician', ...self::NOTE_LOADS]));
     }
 
     // ---------------------------------------------------------------- Warranty
@@ -176,10 +195,10 @@ class WorkflowRecordService
      * @param  array<int, UploadedFile>  $files
      * @return array<string, mixed>
      */
-    public function createWarranty(array $ticketIssueIds, string $body, array $files): array
+    public function createWarranty(array $ticketIssueIds, string $body, string $expiryDate, array $files): array
     {
-        $warranty = DB::transaction(function () use ($ticketIssueIds, $body, $files) {
-            $warranty = new Warranty(['body' => $body]);
+        $warranty = DB::transaction(function () use ($ticketIssueIds, $body, $expiryDate, $files) {
+            $warranty = new Warranty(['body' => $body, 'expiry_date' => $expiryDate]);
             $warranty->created_by = Auth::id();
             $warranty->save();
 
@@ -189,7 +208,17 @@ class WorkflowRecordService
             return $warranty;
         });
 
-        return $this->presentWarranty($warranty->load(['attachments', 'ticketIssues']));
+        return $this->presentWarranty($warranty->load(['ticketIssues', ...self::NOTE_LOADS]));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function markWarrantyMistaken(Warranty $warranty): array
+    {
+        $warranty->update(['mistaken' => true]);
+
+        return $this->presentWarranty($warranty->load(['ticketIssues', ...self::NOTE_LOADS]));
     }
 
     // ------------------------------------------------------------- Presenters
@@ -204,8 +233,12 @@ class WorkflowRecordService
             'body' => $diagnosis->body,
             'mistaken' => $diagnosis->mistaken,
             'attachments' => $this->presentAttachments($diagnosis),
+            'notes' => $this->notes->presentMany($diagnosis),
             'ticket_issue_ids' => $this->ticketIssueIds($diagnosis),
             'created_by' => $diagnosis->created_by,
+            'creator' => $diagnosis->relationLoaded('creator') && $diagnosis->creator
+                ? ['id' => $diagnosis->creator->id, 'name' => $diagnosis->creator->name, 'email' => $diagnosis->creator->email]
+                : null,
             'created_at' => $diagnosis->created_at,
             'updated_at' => $diagnosis->updated_at,
         ];
@@ -230,8 +263,12 @@ class WorkflowRecordService
             'end_parts_run' => $entry->end_parts_run,
             'mistaken' => $entry->mistaken,
             'attachments' => $this->presentAttachments($entry),
+            'notes' => $this->notes->presentMany($entry),
             'ticket_issue_ids' => $this->ticketIssueIds($entry),
             'created_by' => $entry->created_by,
+            'creator' => $entry->relationLoaded('creator') && $entry->creator
+                ? ['id' => $entry->creator->id, 'name' => $entry->creator->name, 'email' => $entry->creator->email]
+                : null,
             'created_at' => $entry->created_at,
             'updated_at' => $entry->updated_at,
         ];
@@ -251,8 +288,12 @@ class WorkflowRecordService
             'cost' => $usage->cost,
             'mistaken' => $usage->mistaken,
             'attachments' => $this->presentAttachments($usage),
+            'notes' => $this->notes->presentMany($usage),
             'ticket_issue_ids' => $this->ticketIssueIds($usage),
             'created_by' => $usage->created_by,
+            'creator' => $usage->relationLoaded('creator') && $usage->creator
+                ? ['id' => $usage->creator->id, 'name' => $usage->creator->name, 'email' => $usage->creator->email]
+                : null,
             'created_at' => $usage->created_at,
             'updated_at' => $usage->updated_at,
         ];
@@ -277,8 +318,13 @@ class WorkflowRecordService
             'driving_base_pay' => $entry->driving_base_pay,
             'driving_performance_pay' => $entry->driving_performance_pay,
             'mistaken' => $entry->mistaken,
+            'attachments' => $this->presentAttachments($entry),
+            'notes' => $this->notes->presentMany($entry),
             'ticket_issue_ids' => $this->ticketIssueIds($entry),
             'created_by' => $entry->created_by,
+            'creator' => $entry->relationLoaded('creator') && $entry->creator
+                ? ['id' => $entry->creator->id, 'name' => $entry->creator->name, 'email' => $entry->creator->email]
+                : null,
             'created_at' => $entry->created_at,
             'updated_at' => $entry->updated_at,
         ];
@@ -292,9 +338,15 @@ class WorkflowRecordService
         return [
             'id' => $warranty->id,
             'body' => $warranty->body,
+            'expiry_date' => $warranty->expiry_date?->toDateString(),
+            'mistaken' => $warranty->mistaken,
             'attachments' => $this->presentAttachments($warranty),
+            'notes' => $this->notes->presentMany($warranty),
             'ticket_issue_ids' => $this->ticketIssueIds($warranty),
             'created_by' => $warranty->created_by,
+            'creator' => $warranty->relationLoaded('creator') && $warranty->creator
+                ? ['id' => $warranty->creator->id, 'name' => $warranty->creator->name, 'email' => $warranty->creator->email]
+                : null,
             'created_at' => $warranty->created_at,
             'updated_at' => $warranty->updated_at,
         ];
@@ -306,11 +358,11 @@ class WorkflowRecordService
      */
     private function presentAttachments($model): ?array
     {
-        if (! $model->relationLoaded('attachments')) {
+        if (!$model->relationLoaded('attachments')) {
             return null;
         }
 
-        return $model->attachments->map(fn ($a) => $this->attachments->present($a))->all();
+        return $model->attachments->map(fn($a) => $this->attachments->present($a))->all();
     }
 
     /**

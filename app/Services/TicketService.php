@@ -11,6 +11,7 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -24,12 +25,24 @@ class TicketService
     /**
      * @var list<string>
      */
-    private array $listWith = ['store', 'ticketIssues.issue', 'creator'];
+    private array $listWith = [
+        'store',
+        'ticketIssues.issue.creator',
+        'ticketIssues.creator',
+        'ticketIssues',
+        'creator',
+        'notes.creator',
+        'notes.attachments.creator',
+        'attachments.creator',
+    ];
 
     public function __construct(
         private TicketIssueService $issues,
         private CatalogService $catalog,
-    ) {}
+        private NoteService $notes,
+        private AttachmentService $attachments,
+    ) {
+    }
 
     /**
      * Store-scoped index when $store is given, otherwise the global index.
@@ -45,21 +58,31 @@ class TicketService
         $this->applyFilters($query, $request);
 
         return $query->paginate($request->integer('per_page', 15))
-            ->through(fn (Ticket $t) => $this->present($t));
+            ->through(fn(Ticket $t) => $this->present($t));
     }
 
     /**
      * @param  array<string, mixed>  $data
+     * @param  array<int, UploadedFile>  $ticketFiles  Direct ticket attachments.
+     * @param  array<int, array<int, UploadedFile>>  $issueFiles  Per-issue files, keyed by issue array index.
      * @return array<string, mixed>
      */
-    public function create(Store $store, array $data): array
+    public function create(Store $store, array $data, array $ticketFiles = [], array $issueFiles = []): array
     {
-        $ticket = DB::transaction(function () use ($store, $data) {
+        $ticket = DB::transaction(function () use ($store, $data, $ticketFiles, $issueFiles) {
             $ticket = new Ticket(['store_id' => $store->id]);
             $ticket->created_by = Auth::id();
             $ticket->save();
 
-            foreach ($data['issues'] as $line) {
+            // Ticket-level notes (text-only at creation; attach files via POST .../notes afterward).
+            foreach ($data['notes'] ?? [] as $noteData) {
+                $this->notes->store($ticket, $noteData['body'], $noteData['type'] ?? null, []);
+            }
+
+            // Ticket-level direct file attachments.
+            $this->attachments->store($ticket, $ticketFiles);
+
+            foreach ($data['issues'] as $i => $line) {
                 $issue = new TicketIssue([
                     'ticket_id' => $ticket->id,
                     'issue_id' => $line['issue_id'] ?? null,
@@ -70,6 +93,16 @@ class TicketService
                 ]);
                 $issue->created_by = Auth::id();
                 $issue->save();
+
+                // Per-issue notes.
+                foreach ($line['notes'] ?? [] as $noteData) {
+                    $this->notes->store($issue, $noteData['body'], $noteData['type'] ?? null, []);
+                }
+
+                // Per-issue direct file attachments.
+                if (!empty($issueFiles[$i])) {
+                    $this->attachments->store($issue, $issueFiles[$i]);
+                }
             }
 
             return $ticket;
@@ -94,12 +127,13 @@ class TicketService
     }
 
     /**
+     * Re-load a ticket with the standard relations and present it. Used after a
+     * side-effecting action (e.g. appending a final note) to return fresh data.
+     *
      * @return array<string, mixed>
      */
-    public function setFinalNote(Ticket $ticket, ?string $note): array
+    public function presentFresh(Ticket $ticket): array
     {
-        $ticket->update(['final_note' => $note]);
-
         return $this->present($ticket->load($this->listWith)->loadCount('ticketIssues'));
     }
 
@@ -125,9 +159,10 @@ class TicketService
                 ? $this->presentStore($ticket->store)
                 : null,
             'status' => ['value' => $status->value, 'label' => $status->label()],
-            'final_note' => $ticket->final_note,
+            'notes' => $this->notes->presentMany($ticket),
+            'attachments' => $this->attachments->presentMany($ticket),
             'issues' => $ticket->relationLoaded('ticketIssues')
-                ? $ticket->ticketIssues->map(fn (TicketIssue $i) => $this->issues->present($i))->all()
+                ? $ticket->ticketIssues->map(fn(TicketIssue $i) => $this->issues->present($i))->all()
                 : null,
             'issues_count' => $ticket->ticket_issues_count ?? null,
             'created_by' => $ticket->created_by,
@@ -148,6 +183,8 @@ class TicketService
         return [
             'id' => $store->id,
             'store_number' => $store->store_number,
+            'notes' => $this->notes->presentMany($store),
+            'attachments' => $this->attachments->presentMany($store),
             'created_at' => $store->created_at,
             'updated_at' => $store->updated_at,
         ];
@@ -165,7 +202,7 @@ class TicketService
     {
         // ?store=03795-00001 (mainly for the global index)
         if ($store = $request->query('store')) {
-            $query->whereHas('store', fn (Builder $q) => $q->where('store_number', $store));
+            $query->whereHas('store', fn(Builder $q) => $q->where('store_number', $store));
         }
 
         // ?status= derived ticket status (mirrors TicketStatusService precedence)
@@ -174,15 +211,15 @@ class TicketService
         }
 
         if ($issueId = $request->query('issue_id')) {
-            $query->whereHas('ticketIssues', fn (Builder $q) => $q->where('issue_id', $issueId));
+            $query->whereHas('ticketIssues', fn(Builder $q) => $q->where('issue_id', $issueId));
         }
 
         if ($issueStatus = $request->query('issue_status')) {
-            $query->whereHas('ticketIssues', fn (Builder $q) => $q->where('status', $issueStatus));
+            $query->whereHas('ticketIssues', fn(Builder $q) => $q->where('status', $issueStatus));
         }
 
         if ($priority = $request->query('priority')) {
-            $query->whereHas('ticketIssues', fn (Builder $q) => $q->where('priority', $priority));
+            $query->whereHas('ticketIssues', fn(Builder $q) => $q->where('priority', $priority));
         }
 
         if ($from = $request->query('created_from')) {
@@ -237,7 +274,7 @@ class TicketService
         }
 
         if ($technicianId = $request->query('technician_id')) {
-            $query->whereHas('ticketIssues.technicians', fn (Builder $q) => $q->where('technicians.id', $technicianId));
+            $query->whereHas('ticketIssues.technicians', fn(Builder $q) => $q->where('technicians.id', $technicianId));
         }
 
         if ($creator = $request->query('creator_id', $request->query('created_by'))) {
@@ -262,7 +299,7 @@ class TicketService
      */
     private function filterByDerivedStatus(Builder $query, TicketStatus $status): void
     {
-        $hasStatus = fn (IssueStatus $s) => fn (Builder $q) => $q->where('status', $s->value);
+        $hasStatus = fn(IssueStatus $s) => fn(Builder $q) => $q->where('status', $s->value);
 
         match ($status) {
             TicketStatus::InProgress => $query->whereHas('ticketIssues', $hasStatus(IssueStatus::InProgress)),
@@ -271,17 +308,29 @@ class TicketService
                 ->whereHas('ticketIssues', $hasStatus(IssueStatus::Assigned))
                 ->whereDoesntHave('ticketIssues', $hasStatus(IssueStatus::InProgress)),
 
+                // All issues finished (complete/deferred/cancelled) AND at least one
+                // is not a cancellation — an all-cancelled ticket is Cancelled, below.
             TicketStatus::Complete => $query
                 ->whereHas('ticketIssues')
-                ->whereDoesntHave('ticketIssues', fn (Builder $q) => $q->whereNotIn('status', [
+                ->whereDoesntHave('ticketIssues', fn(Builder $q) => $q->whereNotIn('status', [
+                    IssueStatus::Complete->value,
+                    IssueStatus::Deferred->value,
+                    IssueStatus::Cancelled->value,
+                ]))
+                ->whereHas('ticketIssues', fn(Builder $q) => $q->whereIn('status', [
                     IssueStatus::Complete->value,
                     IssueStatus::Deferred->value,
                 ])),
 
+                // Every issue cancelled.
+            TicketStatus::Cancelled => $query
+                ->whereHas('ticketIssues')
+                ->whereDoesntHave('ticketIssues', fn(Builder $q) => $q->where('status', '!=', IssueStatus::Cancelled->value)),
+
             TicketStatus::Pending => $query
                 ->whereDoesntHave('ticketIssues', $hasStatus(IssueStatus::InProgress))
                 ->whereDoesntHave('ticketIssues', $hasStatus(IssueStatus::Assigned))
-                ->where(fn (Builder $q) => $q
+                ->where(fn(Builder $q) => $q
                     ->whereDoesntHave('ticketIssues')
                     ->orWhereHas('ticketIssues', $hasStatus(IssueStatus::Pending))),
         };

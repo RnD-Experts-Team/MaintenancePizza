@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasNotesAndAttachments;
 use Database\Factories\AssignmentDelayFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class AssignmentDelay extends Model
 {
     /** @use HasFactory<AssignmentDelayFactory> */
-    use HasFactory;
+    use HasFactory, HasNotesAndAttachments;
 
     protected $fillable = [
         'assignment_id',
@@ -19,6 +20,7 @@ class AssignmentDelay extends Model
         'new_date',
         'new_hour',
         'reason',
+        'mistaken',
     ];
 
     /**
@@ -29,6 +31,7 @@ class AssignmentDelay extends Model
         return [
             'old_date' => 'date',
             'new_date' => 'date',
+            'mistaken' => 'boolean',
         ];
     }
 
@@ -36,5 +39,11 @@ class AssignmentDelay extends Model
     public function assignment(): BelongsTo
     {
         return $this->belongsTo(Assignment::class);
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 }

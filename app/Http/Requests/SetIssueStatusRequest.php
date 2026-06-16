@@ -24,11 +24,12 @@ class SetIssueStatusRequest extends FormRequest
         return [
             'ticket_issue_ids' => ['required', 'array', 'min:1'],
             'ticket_issue_ids.*' => ['integer'],
-            // Deferral has its own endpoint (it needs a reason and spawns a child).
+            // Deferral and cancellation each have their own endpoint (both need a
+            // reason; deferral additionally spawns a child).
             'status' => [
                 'required',
                 Rule::enum(IssueStatus::class),
-                Rule::notIn([IssueStatus::Deferred->value]),
+                Rule::notIn([IssueStatus::Deferred->value, IssueStatus::Cancelled->value]),
             ],
         ];
     }

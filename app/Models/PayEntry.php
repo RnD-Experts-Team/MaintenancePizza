@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasNotesAndAttachments;
 use Database\Factories\PayEntryFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 class PayEntry extends Model
 {
     /** @use HasFactory<PayEntryFactory> */
-    use HasFactory;
+    use HasFactory, HasNotesAndAttachments;
 
     protected $fillable = [
         'technician_id',
@@ -52,5 +53,10 @@ class PayEntry extends Model
     public function ticketIssues(): BelongsToMany
     {
         return $this->belongsToMany(TicketIssue::class, 'pay_entry_ticket_issue')->withTimestamps();
+    }
+    /** @return BelongsTo<User, $this> */
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 }

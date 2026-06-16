@@ -23,6 +23,7 @@ class StoreWarrantyRequest extends FormRequest
             'ticket_issue_ids' => ['required', 'array', 'min:1'],
             'ticket_issue_ids.*' => ['integer'],
             'body' => ['required', 'string'],
+            'expiry_date' => ['required', 'date'],
             'files' => ['nullable', 'array'],
             'files.*' => ['file', 'max:10240'],
         ];

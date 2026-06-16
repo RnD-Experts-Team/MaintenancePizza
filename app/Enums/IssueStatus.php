@@ -9,6 +9,7 @@ enum IssueStatus: string
     case InProgress = 'in_progress';
     case Complete = 'complete';
     case Deferred = 'deferred';
+    case Cancelled = 'cancelled';
 
     /**
      * Human-readable label for the status.
@@ -21,6 +22,7 @@ enum IssueStatus: string
             self::InProgress => 'In Progress',
             self::Complete => 'Complete',
             self::Deferred => 'Deferred',
+            self::Cancelled => 'Cancelled',
         };
     }
 
@@ -31,7 +33,7 @@ enum IssueStatus: string
      */
     public static function terminal(): array
     {
-        return [self::Complete, self::Deferred];
+        return [self::Complete, self::Deferred, self::Cancelled];
     }
 
     /**

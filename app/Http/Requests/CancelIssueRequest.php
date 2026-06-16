@@ -5,7 +5,7 @@ namespace App\Http\Requests;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
-class SetFinalNoteRequest extends FormRequest
+class CancelIssueRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -18,8 +18,7 @@ class SetFinalNoteRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // Present but may be null to clear the note.
-            'final_note' => ['present', 'nullable', 'string'],
+            'reason' => ['required', 'string'],
         ];
     }
 }

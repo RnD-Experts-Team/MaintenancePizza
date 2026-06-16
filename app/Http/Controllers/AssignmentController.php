@@ -28,4 +28,12 @@ class AssignmentController extends Controller
     {
         return ['data' => $this->assignments->changeTechnicians($assignment, $request->validated()['technician_ids'])];
     }
+
+    /**
+     * Flag an assignment as entered in error.
+     */
+    public function mistaken(Store $store, Ticket $ticket, Assignment $assignment)
+    {
+        return ['data' => $this->assignments->markAssignmentMistaken($assignment)];
+    }
 }

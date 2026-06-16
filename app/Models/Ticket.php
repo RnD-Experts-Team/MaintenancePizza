@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasNotesAndAttachments;
 use Database\Factories\TicketFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -12,9 +13,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Ticket extends Model
 {
     /** @use HasFactory<TicketFactory> */
-    use HasFactory, SoftDeletes;
+    use HasFactory, HasNotesAndAttachments, SoftDeletes;
 
-    protected $fillable = ['store_id', 'final_note'];
+    protected $fillable = ['store_id'];
 
     /** @return BelongsTo<Store, $this> */
     public function store(): BelongsTo

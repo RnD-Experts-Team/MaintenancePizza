@@ -2,17 +2,17 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasNotesAndAttachments;
 use Database\Factories\AttendanceEntryFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class AttendanceEntry extends Model
 {
     /** @use HasFactory<AttendanceEntryFactory> */
-    use HasFactory;
+    use HasFactory, HasNotesAndAttachments;
 
     protected $fillable = [
         'technician_id',
@@ -53,9 +53,9 @@ class AttendanceEntry extends Model
         return $this->belongsToMany(TicketIssue::class, 'attendance_entry_ticket_issue')->withTimestamps();
     }
 
-    /** @return MorphMany<Attachment, $this> */
-    public function attachments(): MorphMany
+    /** @return BelongsTo<User, $this> */
+    public function creator(): BelongsTo
     {
-        return $this->morphMany(Attachment::class, 'attachable');
+        return $this->belongsTo(User::class, 'created_by');
     }
 }

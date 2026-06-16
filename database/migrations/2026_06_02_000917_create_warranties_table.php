@@ -11,6 +11,9 @@ return new class extends Migration
         Schema::create('warranties', function (Blueprint $table) {
             $table->id();
             $table->text('body');
+            // Required: the date the warranty coverage expires.
+            $table->date('expiry_date');
+            $table->boolean('mistaken')->default(false);
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
         });

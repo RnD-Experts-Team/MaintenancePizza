@@ -8,6 +8,7 @@ enum TicketStatus: string
     case Assigned = 'assigned';
     case InProgress = 'in_progress';
     case Complete = 'complete';
+    case Cancelled = 'cancelled';
 
     /**
      * Human-readable label for the status.
@@ -19,6 +20,7 @@ enum TicketStatus: string
             self::Assigned => 'Assigned',
             self::InProgress => 'In Progress',
             self::Complete => 'Complete',
+            self::Cancelled => 'Cancelled',
         };
     }
 

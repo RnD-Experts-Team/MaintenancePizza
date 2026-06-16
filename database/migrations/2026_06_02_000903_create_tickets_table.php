@@ -11,8 +11,8 @@ return new class extends Migration
         Schema::create('tickets', function (Blueprint $table) {
             $table->id();
             $table->foreignId('store_id')->constrained('stores')->restrictOnDelete();
-            // Optional closing note; status is NOT stored, it is derived from the issues.
-            $table->longText('final_note')->nullable();
+            // Status is NOT stored, it is derived from the issues. Closing notes
+            // are polymorphic Note rows (type = App\Enums\FinalNoteType), not a column.
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
             $table->softDeletes();

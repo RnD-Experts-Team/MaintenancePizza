@@ -1,27 +1,28 @@
 <?php
 
 use App\Http\Controllers\AssignmentController;
+use App\Http\Controllers\DailyPayEntryController;
 use App\Http\Controllers\AssignmentDelayController;
+use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\AttendanceEntryController;
 use App\Http\Controllers\CatalogController;
 use App\Http\Controllers\DiagnosisController;
 use App\Http\Controllers\ExportController;
+use App\Http\Controllers\NoteController;
 use App\Http\Controllers\PartUsageController;
 use App\Http\Controllers\PayEntryController;
 use App\Http\Controllers\TechnicianAssignmentController;
+use App\Http\Controllers\TicketCancellationController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TicketFinalNoteController;
+use App\Http\Controllers\TicketIssueCancellationController;
 use App\Http\Controllers\TicketIssueController;
 use App\Http\Controllers\TicketIssueDeferralController;
 use App\Http\Controllers\TicketIssueStatusController;
 use App\Http\Controllers\WarrantyController;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('auth:sanctum')->group(function () {
-    // Convenience endpoint for the seeded dev token.
-    Route::get('/user', fn (Request $request) => $request->user());
-
+Route::middleware('auth.token.store')->group(function () {
     /*
     |--------------------------------------------------------------------------
     | Controlled reference catalogs (global, not store-scoped)
@@ -48,11 +49,36 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
+    | Notes & attachments for the global catalogs. Any number can be appended
+    | (one note + optional files per note call; one or many files per upload).
+    |--------------------------------------------------------------------------
+    */
+    Route::post('issues/{issue}/notes', [NoteController::class, 'catalogIssue'])->name('issues.notes');
+    Route::post('issues/{issue}/attachments', [AttachmentController::class, 'catalogIssue'])->name('issues.attachments');
+    Route::post('technicians/{technician}/notes', [NoteController::class, 'technician'])->name('technicians.notes');
+    Route::post('technicians/{technician}/attachments', [AttachmentController::class, 'technician'])->name('technicians.attachments');
+    Route::post('categories/{category}/notes', [NoteController::class, 'category'])->name('categories.notes');
+    Route::post('categories/{category}/attachments', [AttachmentController::class, 'category'])->name('categories.attachments');
+    Route::post('parts/{part}/notes', [NoteController::class, 'part'])->name('parts.notes');
+    Route::post('parts/{part}/attachments', [AttachmentController::class, 'part'])->name('parts.attachments');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Daily Pay Entries (global, not store-scoped)
+    |--------------------------------------------------------------------------
+    */
+    Route::get('daily-pay-entries', [DailyPayEntryController::class, 'index'])->name('daily-pay-entries.index');
+    Route::post('daily-pay-entries', [DailyPayEntryController::class, 'store'])->name('daily-pay-entries.store');
+    Route::get('daily-pay-entries/{dailyPayEntry}', [DailyPayEntryController::class, 'show'])->name('daily-pay-entries.show');
+    Route::post('daily-pay-entries/{dailyPayEntry}/edit', [DailyPayEntryController::class, 'edit'])->name('daily-pay-entries.edit');
+
+    /*
+    |--------------------------------------------------------------------------
     | Tickets — global index + Excel export
     |--------------------------------------------------------------------------
     */
     Route::get('tickets', [TicketController::class, 'globalIndex'])->name('tickets.global');
-    Route::get('export/excel', ExportController::class)->name('export.excel');
+    Route::get('export/excel', ExportController::class)->name('export.excel')->withoutMiddleware('auth.token.store')->middleware('auth.secret.key');
 
     /*
     |--------------------------------------------------------------------------
@@ -66,7 +92,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('tickets', [TicketController::class, 'store'])->name('stores.tickets.store');
         Route::delete('tickets/{ticket}', [TicketController::class, 'destroy'])->name('stores.tickets.destroy');
         Route::post('tickets/{ticket}/restore', [TicketController::class, 'restore'])->withTrashed()->name('stores.tickets.restore');
+        Route::post('tickets/{ticket}/cancel', TicketCancellationController::class)->name('stores.tickets.cancel');
+        // Append a typed closing note (Final Notes / What we learned) — many allowed.
         Route::post('tickets/{ticket}/final-note', TicketFinalNoteController::class)->name('stores.tickets.final-note');
+
+        // Generic notes & attachments on the ticket and on the store itself.
+        Route::post('tickets/{ticket}/notes', [NoteController::class, 'ticket'])->name('stores.tickets.notes');
+        Route::post('tickets/{ticket}/attachments', [AttachmentController::class, 'ticket'])->name('stores.tickets.attachments');
+        Route::post('notes', [NoteController::class, 'store'])->name('stores.notes');
+        Route::post('attachments', [AttachmentController::class, 'store'])->name('stores.attachments');
 
         Route::prefix('tickets/{ticket}')->group(function () {
             // The "one look" lifecycle views.
@@ -76,6 +110,11 @@ Route::middleware('auth:sanctum')->group(function () {
             // Issue state transitions.
             Route::post('issues/status', [TicketIssueStatusController::class, 'store'])->name('tickets.issues.status');
             Route::post('issues/{ticketIssue}/defer', TicketIssueDeferralController::class)->name('tickets.issues.defer');
+            Route::post('issues/{ticketIssue}/cancel', TicketIssueCancellationController::class)->name('tickets.issues.cancel');
+
+            // Generic notes & attachments on an individual issue.
+            Route::post('issues/{ticketIssue}/notes', [NoteController::class, 'ticketIssue'])->name('tickets.issues.notes');
+            Route::post('issues/{ticketIssue}/attachments', [AttachmentController::class, 'ticketIssue'])->name('tickets.issues.attachments');
 
             // Creating workflow records (each targets one-or-many issues).
             Route::post('assignments', [AssignmentController::class, 'store'])->name('tickets.assignments.store');
@@ -102,5 +141,22 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('attendance-entries/{attendanceEntry}/mistaken', [AttendanceEntryController::class, 'mistaken'])->name('tickets.attendance.mistaken');
         Route::post('part-usages/{partUsage}/mistaken', [PartUsageController::class, 'mistaken'])->name('tickets.part-usages.mistaken');
         Route::post('pay-entries/{payEntry}/mistaken', [PayEntryController::class, 'mistaken'])->name('tickets.pay-entries.mistaken');
+        Route::post('warranties/{warranty}/mistaken', [WarrantyController::class, 'mistaken'])->name('tickets.warranties.mistaken');
+        Route::post('assignments/{assignment}/mistaken', [AssignmentController::class, 'mistaken'])->name('tickets.assignments.mistaken');
+        Route::post('assignments/{assignment}/delays/{delay}/mistaken', [AssignmentDelayController::class, 'mistaken'])->name('tickets.assignments.delays.mistaken');
+
+        // Notes & attachments for each leaf workflow record (any number).
+        Route::post('diagnoses/{diagnosis}/notes', [NoteController::class, 'diagnosis'])->name('tickets.diagnoses.notes');
+        Route::post('diagnoses/{diagnosis}/attachments', [AttachmentController::class, 'diagnosis'])->name('tickets.diagnoses.attachments');
+        Route::post('attendance-entries/{attendanceEntry}/notes', [NoteController::class, 'attendance'])->name('tickets.attendance.notes');
+        Route::post('attendance-entries/{attendanceEntry}/attachments', [AttachmentController::class, 'attendance'])->name('tickets.attendance.attachments');
+        Route::post('part-usages/{partUsage}/notes', [NoteController::class, 'partUsage'])->name('tickets.part-usages.notes');
+        Route::post('part-usages/{partUsage}/attachments', [AttachmentController::class, 'partUsage'])->name('tickets.part-usages.attachments');
+        Route::post('pay-entries/{payEntry}/notes', [NoteController::class, 'payEntry'])->name('tickets.pay-entries.notes');
+        Route::post('pay-entries/{payEntry}/attachments', [AttachmentController::class, 'payEntry'])->name('tickets.pay-entries.attachments');
+        Route::post('warranties/{warranty}/notes', [NoteController::class, 'warranty'])->name('tickets.warranties.notes');
+        Route::post('warranties/{warranty}/attachments', [AttachmentController::class, 'warranty'])->name('tickets.warranties.attachments');
+        Route::post('assignments/{assignment}/notes', [NoteController::class, 'assignment'])->name('tickets.assignments.notes');
+        Route::post('assignments/{assignment}/attachments', [AttachmentController::class, 'assignment'])->name('tickets.assignments.attachments');
     });
 });

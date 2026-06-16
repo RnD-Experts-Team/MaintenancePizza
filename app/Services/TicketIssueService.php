@@ -27,23 +27,49 @@ class TicketIssueService
         'parent',
         'children',
         'creator',
-        'statusChanges',
-        'diagnoses.attachments',
+        'statusChanges.creator',
+        'notes.creator',
+        'notes.attachments.creator',
+        'attachments.creator',
+        'diagnoses.creator',
+        'diagnoses.attachments.creator',
+        'diagnoses.notes.creator',
+        'diagnoses.notes.attachments.creator',
+        'attendanceEntries.creator',
         'attendanceEntries.technician',
-        'attendanceEntries.attachments',
+        'attendanceEntries.attachments.creator',
+        'attendanceEntries.notes.creator',
+        'attendanceEntries.notes.attachments.creator',
+        'partUsages.creator',
         'partUsages.part',
-        'partUsages.attachments',
+        'partUsages.attachments.creator',
+        'partUsages.notes.creator',
+        'partUsages.notes.attachments.creator',
+        'payEntries.creator',
         'payEntries.technician',
-        'warranties.attachments',
-        'assignments.delays',
-        'technicians',
+        'payEntries.attachments.creator',
+        'payEntries.notes.creator',
+        'payEntries.notes.attachments.creator',
+        'warranties.creator',
+        'warranties.attachments.creator',
+        'warranties.notes.creator',
+        'warranties.notes.attachments.creator',
+        'assignments.creator',
+        'assignments.delays.creator',
+        'assignments.attachments.creator',
+        'assignments.notes.creator',
+        'assignments.notes.attachments.creator',
+        'technicians.creator',
     ];
 
     public function __construct(
         private WorkflowRecordService $workflow,
         private AssignmentService $assignments,
         private CatalogService $catalog,
-    ) {}
+        private NoteService $notes,
+        private AttachmentService $attachments,
+    ) {
+    }
 
     /**
      * @return array<int, array<string, mixed>>
@@ -51,7 +77,7 @@ class TicketIssueService
     public function index(Ticket $ticket): array
     {
         return $ticket->ticketIssues()->with($this->detailWith)->get()
-            ->map(fn (TicketIssue $i) => $this->present($i))->all();
+            ->map(fn(TicketIssue $i) => $this->present($i))->all();
     }
 
     /**
@@ -79,8 +105,8 @@ class TicketIssueService
             }
         });
 
-        return $issues->load(['issue', 'statusChanges'])
-            ->map(fn (TicketIssue $i) => $this->present($i))->all();
+        return $issues->load(['issue', 'creator', 'statusChanges.creator'])
+            ->map(fn(TicketIssue $i) => $this->present($i))->all();
     }
 
     /**
@@ -108,7 +134,34 @@ class TicketIssueService
             return $child;
         });
 
-        return $this->present($child->load(['issue', 'parent']));
+        return $this->present($child->load(['issue', 'parent', 'creator']));
+    }
+
+    /**
+     * Cancel all non-cancelled issues on a ticket, making its derived status Cancelled.
+     */
+    public function cancelAll(Ticket $ticket, string $reason): void
+    {
+        DB::transaction(function () use ($ticket, $reason) {
+            $ticket->ticketIssues()
+                ->where('status', '!=', IssueStatus::Cancelled->value)
+                ->get()
+                ->each(fn(TicketIssue $issue) => TicketStatusService::changeIssueStatus($issue, IssueStatus::Cancelled, $reason));
+        });
+    }
+
+    /**
+     * Cancel an issue (records the reason). Unlike deferral it spawns no child.
+     *
+     * @return array<string, mixed>
+     */
+    public function cancel(TicketIssue $ticketIssue, string $reason): array
+    {
+        DB::transaction(function () use ($ticketIssue, $reason) {
+            TicketStatusService::changeIssueStatus($ticketIssue, IssueStatus::Cancelled, $reason);
+        });
+
+        return $this->present($ticketIssue->load(['issue', 'creator', 'statusChanges.creator']));
     }
 
     /**
@@ -121,7 +174,7 @@ class TicketIssueService
     public function attachTechnicians(Ticket $ticket, array $ticketIssueIds, array $technicianIds): array
     {
         $pivot = ['created_by' => Auth::id()];
-        $technicians = collect($technicianIds)->mapWithKeys(fn ($id) => [$id => $pivot])->all();
+        $technicians = collect($technicianIds)->mapWithKeys(fn($id) => [$id => $pivot])->all();
         $issues = $ticket->ticketIssues()->whereIn('id', $ticketIssueIds)->get();
 
         DB::transaction(function () use ($issues, $technicians) {
@@ -130,7 +183,7 @@ class TicketIssueService
             }
         });
 
-        return $issues->load('technicians')->map(fn (TicketIssue $i) => $this->present($i))->all();
+        return $issues->load(['creator', 'technicians.creator'])->map(fn(TicketIssue $i) => $this->present($i))->all();
     }
 
     /**
@@ -155,16 +208,16 @@ class TicketIssueService
      */
     public function validateIssuesBelongToTicket(Validator $validator, ?Ticket $ticket, array $ids): void
     {
-        if (! $ticket || empty($ids)) {
+        if (!$ticket || empty($ids)) {
             return;
         }
 
         $invalid = $this->issuesNotBelongingToTicket($ticket, $ids);
 
-        if (! empty($invalid)) {
+        if (!empty($invalid)) {
             $validator->errors()->add(
                 'ticket_issue_ids',
-                'The selected issues do not all belong to this ticket: '.implode(', ', $invalid).'.'
+                'The selected issues do not all belong to this ticket: ' . implode(', ', $invalid) . '.'
             );
         }
     }
@@ -188,16 +241,18 @@ class TicketIssueService
             'status' => ['value' => $issue->status->value, 'label' => $issue->status->label()],
             'parent_id' => $issue->parent_id,
             'children' => $issue->relationLoaded('children')
-                ? $issue->children->map(fn (TicketIssue $c) => $this->present($c))->all()
+                ? $issue->children->map(fn(TicketIssue $c) => $this->present($c))->all()
                 : null,
-            'diagnoses' => $this->mapLoaded($issue, 'diagnoses', fn ($d) => $this->workflow->presentDiagnosis($d)),
-            'attendance_entries' => $this->mapLoaded($issue, 'attendanceEntries', fn ($a) => $this->workflow->presentAttendance($a)),
-            'part_usages' => $this->mapLoaded($issue, 'partUsages', fn ($p) => $this->workflow->presentPartUsage($p)),
-            'pay_entries' => $this->mapLoaded($issue, 'payEntries', fn ($p) => $this->workflow->presentPayEntry($p)),
-            'warranties' => $this->mapLoaded($issue, 'warranties', fn ($w) => $this->workflow->presentWarranty($w)),
-            'assignments' => $this->mapLoaded($issue, 'assignments', fn ($a) => $this->assignments->present($a)),
-            'technicians' => $this->mapLoaded($issue, 'technicians', fn ($t) => $this->catalog->presentTechnician($t)),
-            'status_changes' => $this->mapLoaded($issue, 'statusChanges', fn ($s) => $this->presentStatusChange($s)),
+            'diagnoses' => $this->mapLoaded($issue, 'diagnoses', fn($d) => $this->workflow->presentDiagnosis($d)),
+            'attendance_entries' => $this->mapLoaded($issue, 'attendanceEntries', fn($a) => $this->workflow->presentAttendance($a)),
+            'part_usages' => $this->mapLoaded($issue, 'partUsages', fn($p) => $this->workflow->presentPartUsage($p)),
+            'pay_entries' => $this->mapLoaded($issue, 'payEntries', fn($p) => $this->workflow->presentPayEntry($p)),
+            'warranties' => $this->mapLoaded($issue, 'warranties', fn($w) => $this->workflow->presentWarranty($w)),
+            'assignments' => $this->mapLoaded($issue, 'assignments', fn($a) => $this->assignments->present($a)),
+            'technicians' => $this->mapLoaded($issue, 'technicians', fn($t) => $this->catalog->presentTechnician($t)),
+            'status_changes' => $this->mapLoaded($issue, 'statusChanges', fn($s) => $this->presentStatusChange($s)),
+            'notes' => $this->notes->presentMany($issue),
+            'attachments' => $this->attachments->presentMany($issue),
             'created_by' => $issue->created_by,
             'creator' => $issue->relationLoaded('creator') && $issue->creator
                 ? $this->catalog->presentUser($issue->creator)
@@ -219,6 +274,9 @@ class TicketIssueService
             'to_status' => $change->to_status->value,
             'reason' => $change->reason,
             'created_by' => $change->created_by,
+            'creator' => $change->relationLoaded('creator') && $change->creator
+                ? $this->catalog->presentUser($change->creator)
+                : null,
             'created_at' => $change->created_at,
         ];
     }
@@ -230,7 +288,7 @@ class TicketIssueService
      */
     private function mapLoaded(TicketIssue $issue, string $relation, callable $present): ?array
     {
-        if (! $issue->relationLoaded($relation)) {
+        if (!$issue->relationLoaded($relation)) {
             return null;
         }
 

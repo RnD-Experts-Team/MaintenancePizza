@@ -5,7 +5,15 @@
       "Bash(Select-Object Name, PSIsContainer)",
       "Bash(Format-Table -AutoSize)",
       "mcp__plugin_context7_context7__resolve-library-id",
-      "mcp__plugin_context7_context7__query-docs"
+      "mcp__plugin_context7_context7__query-docs",
+      "Bash(Get-ChildItem -Path \"C:\\\\Projects\\\\MaintenancePizza\" -Recurse -Filter \"openapi.json\" -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object FullName)",
+      "Bash(Get-Content)",
+      "Bash(Select-String -Pattern \"^class \")",
+      "Bash(Select-Object -ExpandProperty Line)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Projects\\\\MaintenancePizza\" -Directory)",
+      "Bash(Select-Object -First 10)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Projects\\\\MaintenancePizza\" -Directory | Select-Object -First 20 | ForEach-Object { $_.Name })"
     ]
   }
 }

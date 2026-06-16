@@ -17,6 +17,28 @@ use Illuminate\Support\Facades\DB;
 class AssignmentService
 {
     /**
+     * Eager loads for an assignment's own notes/files and its delays' notes/files.
+     *
+     * @var list<string>
+     */
+    private const RECORD_LOADS = [
+        'creator',
+        'notes.creator',
+        'notes.attachments.creator',
+        'attachments.creator',
+        'delays.creator',
+        'delays.notes.creator',
+        'delays.notes.attachments.creator',
+        'delays.attachments.creator',
+    ];
+
+    public function __construct(
+        private NoteService $notes,
+        private AttachmentService $attachments,
+    ) {
+    }
+
+    /**
      * @param  array<string, mixed>  $data  ticket_issue_ids, technician_ids, assigned_date, assigned_hour?
      * @return array<string, mixed>
      */
@@ -34,7 +56,7 @@ class AssignmentService
 
             $assignment->ticketIssues()->attach($data['ticket_issue_ids']);
 
-            $technicians = collect($data['technician_ids'])->mapWithKeys(fn ($id) => [$id => $pivot])->all();
+            $technicians = collect($data['technician_ids'])->mapWithKeys(fn($id) => [$id => $pivot])->all();
             $issues = $ticket->ticketIssues()->whereIn('id', $data['ticket_issue_ids'])->get();
 
             foreach ($issues as $issue) {
@@ -45,7 +67,7 @@ class AssignmentService
             return $assignment;
         });
 
-        return $this->present($assignment->load(['delays', 'ticketIssues']));
+        return $this->present($assignment->load(['delays', 'ticketIssues', ...self::RECORD_LOADS]));
     }
 
     /**
@@ -72,7 +94,31 @@ class AssignmentService
             ]);
         });
 
-        return $this->present($assignment->load('delays'));
+        return $this->present($assignment->load(['delays', ...self::RECORD_LOADS]));
+    }
+
+    /**
+     * Mark an assignment as entered in error.
+     *
+     * @return array<string, mixed>
+     */
+    public function markAssignmentMistaken(Assignment $assignment): array
+    {
+        $assignment->update(['mistaken' => true]);
+
+        return $this->present($assignment->load(['delays', ...self::RECORD_LOADS]));
+    }
+
+    /**
+     * Mark a delay record as entered in error.
+     *
+     * @return array<string, mixed>
+     */
+    public function markDelayMistaken(AssignmentDelay $delay): array
+    {
+        $delay->update(['mistaken' => true]);
+
+        return $this->presentDelay($delay->load(['notes.attachments', 'notes', 'attachments']));
     }
 
     /**
@@ -84,7 +130,7 @@ class AssignmentService
     public function changeTechnicians(Assignment $assignment, array $technicianIds): array
     {
         $pivot = ['created_by' => Auth::id()];
-        $technicians = collect($technicianIds)->mapWithKeys(fn ($id) => [$id => $pivot])->all();
+        $technicians = collect($technicianIds)->mapWithKeys(fn($id) => [$id => $pivot])->all();
 
         DB::transaction(function () use ($assignment, $technicians) {
             $assignment->load('ticketIssues');
@@ -94,7 +140,7 @@ class AssignmentService
             }
         });
 
-        return $this->present($assignment->load(['delays', 'ticketIssues']));
+        return $this->present($assignment->load(['delays', 'ticketIssues', ...self::RECORD_LOADS]));
     }
 
     /**
@@ -106,13 +152,19 @@ class AssignmentService
             'id' => $assignment->id,
             'assigned_date' => $assignment->assigned_date?->toDateString(),
             'assigned_hour' => $assignment->assigned_hour,
+            'mistaken' => $assignment->mistaken,
             'delays' => $assignment->relationLoaded('delays')
-                ? $assignment->delays->map(fn (AssignmentDelay $d) => $this->presentDelay($d))->all()
+                ? $assignment->delays->map(fn(AssignmentDelay $d) => $this->presentDelay($d))->all()
                 : null,
             'ticket_issue_ids' => $assignment->relationLoaded('ticketIssues')
                 ? $assignment->ticketIssues->pluck('id')->all()
                 : null,
+            'notes' => $this->notes->presentMany($assignment),
+            'attachments' => $this->attachments->presentMany($assignment),
             'created_by' => $assignment->created_by,
+            'creator' => $assignment->relationLoaded('creator') && $assignment->creator
+                ? ['id' => $assignment->creator->id, 'name' => $assignment->creator->name, 'email' => $assignment->creator->email]
+                : null,
             'created_at' => $assignment->created_at,
             'updated_at' => $assignment->updated_at,
         ];
@@ -131,7 +183,13 @@ class AssignmentService
             'new_date' => $delay->new_date?->toDateString(),
             'new_hour' => $delay->new_hour,
             'reason' => $delay->reason,
+            'mistaken' => $delay->mistaken,
+            'notes' => $this->notes->presentMany($delay),
+            'attachments' => $this->attachments->presentMany($delay),
             'created_by' => $delay->created_by,
+            'creator' => $delay->relationLoaded('creator') && $delay->creator
+                ? ['id' => $delay->creator->id, 'name' => $delay->creator->name, 'email' => $delay->creator->email]
+                : null,
             'created_at' => $delay->created_at,
         ];
     }

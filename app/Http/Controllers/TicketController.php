@@ -25,7 +25,20 @@ class TicketController extends Controller
 
     public function store(StoreTicketRequest $request, Store $store)
     {
-        return response()->json(['data' => $this->tickets->create($store, $request->validated())], 201);
+        // Ticket-level files (direct attachments to the ticket).
+        $ticketFiles = (array) $request->file('files', []);
+
+        // Per-issue files keyed by issue array index (issues[0][files][], etc.).
+        $issueFiles = [];
+        foreach ((array) $request->file('issues', []) as $i => $issueFileData) {
+            if (is_array($issueFileData) && ! empty($issueFileData['files'])) {
+                $issueFiles[(int) $i] = (array) $issueFileData['files'];
+            }
+        }
+
+        return response()->json([
+            'data' => $this->tickets->create($store, $request->validated(), $ticketFiles, $issueFiles),
+        ], 201);
     }
 
     public function destroy(Store $store, Ticket $ticket): Response

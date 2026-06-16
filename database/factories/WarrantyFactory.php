@@ -18,7 +18,8 @@ class WarrantyFactory extends Factory
     public function definition(): array
     {
         return [
-            //
+            'body' => fake()->sentence(),
+            'expiry_date' => fake()->dateTimeBetween('now', '+2 years')->format('Y-m-d'),
         ];
     }
 }

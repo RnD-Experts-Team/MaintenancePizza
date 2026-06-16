@@ -16,6 +16,7 @@ return new class extends Migration
             $table->date('new_date');
             $table->time('new_hour')->nullable();
             $table->text('reason');
+            $table->boolean('mistaken')->default(false);
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
         });
