@@ -26,7 +26,7 @@ class AssignmentsSheet implements FromCollection, WithHeadings, WithMapping, Wit
      */
     public function headings(): array
     {
-        return ['ID', 'Assigned Date', 'Assigned Hour', 'Ticket Issue IDs', 'Created By', 'Created At'];
+        return ['ID', 'Assigned Date', 'Assigned Hour', 'Mistaken', 'Ticket Issue IDs', 'Created By', 'Created At'];
     }
 
     /**
@@ -39,6 +39,7 @@ class AssignmentsSheet implements FromCollection, WithHeadings, WithMapping, Wit
             $assignment->id,
             $assignment->assigned_date?->toDateString(),
             $assignment->assigned_hour,
+            $assignment->mistaken ? 'yes' : 'no',
             $assignment->ticketIssues->pluck('id')->implode(', '),
             $assignment->created_by,
             (string) $assignment->created_at,

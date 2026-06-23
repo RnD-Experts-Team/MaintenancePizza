@@ -18,7 +18,17 @@ class TicketIssuesSheet implements FromCollection, WithHeadings, WithMapping, Wi
 
     public function collection(): Collection
     {
-        return TicketIssue::with('issue')->orderBy('id')->get();
+        return TicketIssue::with([
+            'issue',
+            'technicians',
+            'assignments',
+            'attendanceEntries',
+            'diagnoses',
+            'partUsages',
+            'payEntries',
+            'warranties',
+            'dailyPayLines',
+        ])->orderBy('id')->get();
     }
 
     /**
@@ -26,7 +36,12 @@ class TicketIssuesSheet implements FromCollection, WithHeadings, WithMapping, Wi
      */
     public function headings(): array
     {
-        return ['ID', 'Ticket ID', 'Title', 'Priority', 'Status', 'Description', 'Parent ID', 'Created By', 'Created At'];
+        return [
+            'ID', 'Ticket ID', 'Title', 'Priority', 'Status', 'Description', 'Parent ID',
+            'Technician IDs', 'Assignment IDs', 'Attendance Entry IDs', 'Diagnosis IDs',
+            'Part Usage IDs', 'Pay Entry IDs', 'Warranty IDs', 'Daily Pay Line IDs',
+            'Created By', 'Created At',
+        ];
     }
 
     /**
@@ -43,6 +58,14 @@ class TicketIssuesSheet implements FromCollection, WithHeadings, WithMapping, Wi
             $issue->status->value,
             $issue->description,
             $issue->parent_id,
+            $issue->technicians->pluck('id')->implode(', '),
+            $issue->assignments->pluck('id')->implode(', '),
+            $issue->attendanceEntries->pluck('id')->implode(', '),
+            $issue->diagnoses->pluck('id')->implode(', '),
+            $issue->partUsages->pluck('id')->implode(', '),
+            $issue->payEntries->pluck('id')->implode(', '),
+            $issue->warranties->pluck('id')->implode(', '),
+            $issue->dailyPayLines->pluck('id')->implode(', '),
             $issue->created_by,
             (string) $issue->created_at,
         ];
