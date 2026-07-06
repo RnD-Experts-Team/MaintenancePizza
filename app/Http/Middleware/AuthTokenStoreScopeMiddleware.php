@@ -153,6 +153,7 @@ class AuthTokenStoreScopeMiddleware
             'store_ids',
             'storeId',
             'storeIds',
+            'stores',
             'store',
         ];
 
