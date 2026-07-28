@@ -7,6 +7,7 @@ enum TicketStatus: string
     case Pending = 'pending';
     case Assigned = 'assigned';
     case InProgress = 'in_progress';
+    case Waiting = 'waiting';
     case Complete = 'complete';
     case Cancelled = 'cancelled';
 
@@ -19,6 +20,7 @@ enum TicketStatus: string
             self::Pending => 'Pending',
             self::Assigned => 'Assigned',
             self::InProgress => 'In Progress',
+            self::Waiting => 'Waiting',
             self::Complete => 'Complete',
             self::Cancelled => 'Cancelled',
         };

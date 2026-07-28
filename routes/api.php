@@ -19,6 +19,7 @@ use App\Http\Controllers\TicketIssueCancellationController;
 use App\Http\Controllers\TicketIssueController;
 use App\Http\Controllers\TicketIssueDeferralController;
 use App\Http\Controllers\TicketIssueStatusController;
+use App\Http\Controllers\TicketIssueWaitingController;
 use App\Http\Controllers\WarrantyController;
 use Illuminate\Support\Facades\Route;
 
@@ -112,6 +113,7 @@ Route::middleware('auth.token.store')->group(function () {
             Route::post('issues/status', [TicketIssueStatusController::class, 'store'])->name('tickets.issues.status');
             Route::post('issues/{ticketIssue}/defer', TicketIssueDeferralController::class)->name('tickets.issues.defer');
             Route::post('issues/{ticketIssue}/cancel', TicketIssueCancellationController::class)->name('tickets.issues.cancel');
+            Route::post('issues/{ticketIssue}/wait', TicketIssueWaitingController::class)->name('tickets.issues.wait');
 
             // Generic notes & attachments on an individual issue.
             Route::post('issues/{ticketIssue}/notes', [NoteController::class, 'ticketIssue'])->name('tickets.issues.notes');
