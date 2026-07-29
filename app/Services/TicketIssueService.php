@@ -165,6 +165,21 @@ class TicketIssueService
     }
 
     /**
+     * Mark an issue as Waiting (records the reason it's blocked). Unlike
+     * deferral it spawns no child — the same issue resumes once unblocked.
+     *
+     * @return array<string, mixed>
+     */
+    public function wait(TicketIssue $ticketIssue, string $reason): array
+    {
+        DB::transaction(function () use ($ticketIssue, $reason) {
+            TicketStatusService::changeIssueStatus($ticketIssue, IssueStatus::Waiting, $reason);
+        });
+
+        return $this->present($ticketIssue->load(['issue', 'creator', 'statusChanges.creator']));
+    }
+
+    /**
      * Attach technicians to one or more issues (no schedule).
      *
      * @param  array<int>  $ticketIssueIds

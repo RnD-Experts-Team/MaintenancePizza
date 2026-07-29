@@ -395,11 +395,16 @@ class TicketService
         $hasStatus = fn(IssueStatus $s) => fn(Builder $q) => $q->where('status', $s->value);
 
         match ($status) {
-            TicketStatus::InProgress => $query->whereHas('ticketIssues', $hasStatus(IssueStatus::InProgress)),
+            TicketStatus::Waiting => $query->whereHas('ticketIssues', $hasStatus(IssueStatus::Waiting)),
+
+            TicketStatus::InProgress => $query
+                ->whereHas('ticketIssues', $hasStatus(IssueStatus::InProgress))
+                ->whereDoesntHave('ticketIssues', $hasStatus(IssueStatus::Waiting)),
 
             TicketStatus::Assigned => $query
                 ->whereHas('ticketIssues', $hasStatus(IssueStatus::Assigned))
-                ->whereDoesntHave('ticketIssues', $hasStatus(IssueStatus::InProgress)),
+                ->whereDoesntHave('ticketIssues', $hasStatus(IssueStatus::InProgress))
+                ->whereDoesntHave('ticketIssues', $hasStatus(IssueStatus::Waiting)),
 
             TicketStatus::Complete => $query
                 ->whereHas('ticketIssues')

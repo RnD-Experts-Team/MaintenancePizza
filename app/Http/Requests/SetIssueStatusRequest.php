@@ -29,7 +29,7 @@ class SetIssueStatusRequest extends FormRequest
             'status' => [
                 'required',
                 Rule::enum(IssueStatus::class),
-                Rule::notIn([IssueStatus::Deferred->value, IssueStatus::Cancelled->value]),
+                Rule::notIn([IssueStatus::Deferred->value, IssueStatus::Cancelled->value, IssueStatus::Waiting->value]),
             ],
         ];
     }

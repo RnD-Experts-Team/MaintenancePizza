@@ -7,6 +7,7 @@ enum IssueStatus: string
     case Pending = 'pending';
     case Assigned = 'assigned';
     case InProgress = 'in_progress';
+    case Waiting = 'waiting';
     case Complete = 'complete';
     case Deferred = 'deferred';
     case Cancelled = 'cancelled';
@@ -20,6 +21,7 @@ enum IssueStatus: string
             self::Pending => 'Pending',
             self::Assigned => 'Assigned',
             self::InProgress => 'In Progress',
+            self::Waiting => 'Waiting',
             self::Complete => 'Complete',
             self::Deferred => 'Deferred',
             self::Cancelled => 'Cancelled',
