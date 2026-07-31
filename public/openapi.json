@@ -1028,20 +1028,25 @@
             }
           },
           {
-            "name": "assigned_from",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "date"
-            }
+            "$ref": "#/components/parameters/FilterChangedStatuses"
           },
           {
-            "name": "assigned_to",
+            "name": "changed_from",
             "in": "query",
             "schema": {
               "type": "string",
               "format": "date"
-            }
+            },
+            "description": "With changed_statuses[]: only issues that changed to one of those statuses on/after this date"
+          },
+          {
+            "name": "changed_to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "With changed_statuses[]: only issues that changed to one of those statuses on/before this date"
           },
           {
             "name": "part_cost_single_gt",
@@ -1087,6 +1092,9 @@
           },
           {
             "$ref": "#/components/parameters/PerPage"
+          },
+          {
+            "$ref": "#/components/parameters/IncludeAnalytics"
           }
         ],
         "responses": {
@@ -1143,6 +1151,49 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/tickets/analytics": {
+      "get": {
+        "tags": [
+          "Tickets"
+        ],
+        "summary": "Global ticket/issue analytics (all stores)",
+        "operationId": "globalTicketAnalytics",
+        "description": "Aggregate metrics (issue status breakdown, time-in-status durations, weekly ticket average) over the same filtered ticket set the global index would list.",
+        "parameters": [
+          { "$ref": "#/components/parameters/FilterStores" },
+          { "$ref": "#/components/parameters/FilterStatuses" },
+          { "$ref": "#/components/parameters/FilterIssueIds" },
+          { "$ref": "#/components/parameters/FilterIssueStatuses" },
+          { "$ref": "#/components/parameters/FilterPriorities" },
+          { "$ref": "#/components/parameters/FilterTypes" },
+          { "$ref": "#/components/parameters/FilterTechnicianIds" },
+          { "$ref": "#/components/parameters/FilterCreatorIds" },
+          { "name": "created_from", "in": "query", "schema": { "type": "string", "format": "date" } },
+          { "name": "created_to", "in": "query", "schema": { "type": "string", "format": "date" } },
+          { "$ref": "#/components/parameters/FilterChangedStatuses" },
+          { "name": "changed_from", "in": "query", "schema": { "type": "string", "format": "date" } },
+          { "name": "changed_to", "in": "query", "schema": { "type": "string", "format": "date" } },
+          { "name": "part_cost_single_gt", "in": "query", "schema": { "type": "number" } },
+          { "name": "part_cost_total_gt", "in": "query", "schema": { "type": "number" } },
+          { "$ref": "#/components/parameters/Trashed" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aggregate analytics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketAnalyticsResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
           }
         }
       }
@@ -1252,6 +1303,27 @@
             "$ref": "#/components/parameters/FilterIssueStatuses"
           },
           {
+            "$ref": "#/components/parameters/FilterChangedStatuses"
+          },
+          {
+            "name": "changed_from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "With changed_statuses[]: only issues that changed to one of those statuses on/after this date"
+          },
+          {
+            "name": "changed_to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "With changed_statuses[]: only issues that changed to one of those statuses on/before this date"
+          },
+          {
             "$ref": "#/components/parameters/FilterPriorities"
           },
           {
@@ -1272,6 +1344,9 @@
           },
           {
             "$ref": "#/components/parameters/PerPage"
+          },
+          {
+            "$ref": "#/components/parameters/IncludeAnalytics"
           }
         ],
         "responses": {
@@ -1335,6 +1410,48 @@
           }
         },
         "description": "Creates a ticket with its initial issue lines. Use multipart/form-data when attaching files (notes[].files or top-level files[]); application/json is accepted for field-only payloads. Notes supplied at creation are text-only — attach files to notes afterward via POST …/notes."
+      }
+    },
+    "/stores/{store}/tickets/analytics": {
+      "get": {
+        "tags": [
+          "Tickets"
+        ],
+        "summary": "Store-scoped ticket/issue analytics",
+        "operationId": "storeTicketAnalytics",
+        "description": "Aggregate metrics (issue status breakdown, time-in-status durations, weekly ticket average) over the same filtered ticket set the store-scoped index would list.",
+        "parameters": [
+          { "$ref": "#/components/parameters/Store" },
+          { "$ref": "#/components/parameters/FilterStatuses" },
+          { "$ref": "#/components/parameters/FilterIssueIds" },
+          { "$ref": "#/components/parameters/FilterIssueStatuses" },
+          { "$ref": "#/components/parameters/FilterChangedStatuses" },
+          { "name": "changed_from", "in": "query", "schema": { "type": "string", "format": "date" } },
+          { "name": "changed_to", "in": "query", "schema": { "type": "string", "format": "date" } },
+          { "$ref": "#/components/parameters/FilterPriorities" },
+          { "$ref": "#/components/parameters/FilterTypes" },
+          { "$ref": "#/components/parameters/FilterTechnicianIds" },
+          { "name": "created_from", "in": "query", "schema": { "type": "string", "format": "date" } },
+          { "name": "created_to", "in": "query", "schema": { "type": "string", "format": "date" } },
+          { "name": "part_cost_single_gt", "in": "query", "schema": { "type": "number" } },
+          { "name": "part_cost_total_gt", "in": "query", "schema": { "type": "number" } },
+          { "$ref": "#/components/parameters/Trashed" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aggregate analytics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketAnalyticsResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
       }
     },
     "/stores/{store}/tickets/{ticket}": {
@@ -3880,7 +3997,7 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["pending", "assigned", "in_progress", "complete", "cancelled"]
+            "enum": ["pending", "assigned", "in_progress", "waiting", "complete", "cancelled"]
           }
         },
         "description": "Filter tickets by derived ticket status (multi-select, OR logic)"
@@ -3902,10 +4019,24 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["pending", "assigned", "in_progress", "complete", "deferred", "cancelled"]
+            "enum": ["pending", "assigned", "in_progress", "waiting", "complete", "deferred", "cancelled"]
           }
         },
         "description": "Tickets with at least one issue in any of these statuses (multi-select, OR logic)"
+      },
+      "FilterChangedStatuses": {
+        "name": "changed_statuses[]",
+        "in": "query",
+        "style": "form",
+        "explode": true,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["pending", "assigned", "in_progress", "waiting", "complete", "deferred", "cancelled"]
+          }
+        },
+        "description": "Tickets with at least one issue that changed TO any of these statuses (multi-select, OR logic). Combine with changed_from / changed_to to scope to a date range; either can be used alone."
       },
       "FilterPriorities": {
         "name": "priorities[]",
@@ -3950,6 +4081,12 @@
         "explode": true,
         "schema": { "type": "array", "items": { "type": "integer" } },
         "description": "Tickets filed by any of these user IDs (multi-select, OR logic)"
+      },
+      "IncludeAnalytics": {
+        "name": "include_analytics",
+        "in": "query",
+        "schema": { "type": "boolean", "default": false },
+        "description": "Also compute and return an 'analytics' block (issue status breakdown, duration averages, weekly average) alongside the paginated list, scoped by the same active filters. Off by default."
       }
     },
     "responses": {
@@ -5655,6 +5792,72 @@
           },
           "meta": {
             "type": "object"
+          },
+          "analytics": {
+            "$ref": "#/components/schemas/TicketAnalytics",
+            "description": "Present only when include_analytics=true was passed"
+          }
+        }
+      },
+      "TicketAnalytics": {
+        "type": "object",
+        "properties": {
+          "issues": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "integer",
+                "description": "Issues matching the active filters (i.e. 'new' issues when scoped via a date filter)"
+              },
+              "status_breakdown": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "enum": ["pending", "assigned", "in_progress", "waiting", "complete", "deferred", "cancelled"] },
+                    "label": { "type": "string" },
+                    "count": { "type": "integer" }
+                  }
+                },
+                "description": "All 7 IssueStatus values always present, zero-filled when absent. status_breakdown[status=complete].count is 'how many completed'."
+              }
+            }
+          },
+          "durations": {
+            "type": "object",
+            "description": "Averages in seconds/hours; null with sample_size 0 when no issue matches",
+            "properties": {
+              "pending_to_next_status": { "$ref": "#/components/schemas/DurationAverage" },
+              "time_to_complete_or_cancelled": { "$ref": "#/components/schemas/DurationAverage" }
+            }
+          },
+          "avg_tickets_per_week": {
+            "type": "object",
+            "description": "Always all-time (ignores created_from/to and changed_from/to; still respects every other active filter). Custom week runs Tuesday 00:00:00 through Monday 23:59:59.",
+            "properties": {
+              "value": { "type": "number", "nullable": true },
+              "total_tickets": { "type": "integer" },
+              "weeks_spanned": { "type": "integer", "nullable": true, "description": "Weeks between the earliest and latest matching ticket, inclusive; weeks with zero tickets still count" },
+              "span_start": { "type": "string", "format": "date", "nullable": true },
+              "span_end": { "type": "string", "format": "date", "nullable": true },
+              "week_starts_on": { "type": "string", "example": "tuesday" }
+            }
+          }
+        }
+      },
+      "DurationAverage": {
+        "type": "object",
+        "properties": {
+          "avg_seconds": { "type": "number", "nullable": true },
+          "avg_hours": { "type": "number", "nullable": true },
+          "sample_size": { "type": "integer" }
+        }
+      },
+      "TicketAnalyticsResource": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/TicketAnalytics"
           }
         }
       },
