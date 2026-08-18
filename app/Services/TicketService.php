@@ -50,16 +50,29 @@ class TicketService
      */
     public function index(Request $request, ?Store $store = null): LengthAwarePaginator
     {
-        $query = Ticket::query()->with($this->listWith)->withCount('ticketIssues');
-
-        if ($store) {
-            $query->where('store_id', $store->id);
-        }
+        $query = $this->baseQuery($store)->with($this->listWith)->withCount('ticketIssues');
 
         $this->applyFilters($query, $request, $store);
 
         return $query->paginate($request->integer('per_page', 15))
             ->through(fn(Ticket $t) => $this->present($t));
+    }
+
+    /**
+     * A ticket query scoped to $store when given. Shared by index() and
+     * TicketAnalyticsService so store-scoping is defined in exactly one place.
+     *
+     * @return Builder<Ticket>
+     */
+    public function baseQuery(?Store $store = null): Builder
+    {
+        $query = Ticket::query();
+
+        if ($store) {
+            $query->where('store_id', $store->id);
+        }
+
+        return $query;
     }
 
     /**
@@ -248,11 +261,12 @@ class TicketService
 
     /**
      * The full composable filter set. Each clause is a no-op unless its query
-     * parameter is present. Reads only query-string params.
+     * parameter is present. Reads only query-string params. Public so
+     * TicketAnalyticsService can scope its aggregates by the same filters.
      *
      * @param  Builder<Ticket>  $query
      */
-    private function applyFilters(Builder $query, Request $request, ?Store $store = null): void
+    public function applyFilters(Builder $query, Request $request, ?Store $store = null): void
     {
         // ?stores[]=03795-00001 — global index only (store-scoped index is already scoped)
         if (!$store) {
@@ -302,15 +316,26 @@ class TicketService
             $query->whereDate('created_at', '<=', $to);
         }
 
-        $assignedFrom = $request->query('assigned_from');
-        $assignedTo   = $request->query('assigned_to');
-        if ($assignedFrom || $assignedTo) {
-            $query->whereHas('ticketIssues.assignments', function (Builder $q) use ($assignedFrom, $assignedTo) {
-                if ($assignedFrom) {
-                    $q->whereDate('assigned_date', '>=', $assignedFrom);
+        // ?changed_statuses[]=assigned&changed_statuses[]=complete&changed_statuses[]=waiting
+        // &changed_from=2026-01-01&changed_to=2026-01-31
+        // Tickets with an issue that changed TO any of these statuses within the date range.
+        $changedStatusValues = array_filter((array) $request->query('changed_statuses', []));
+        $changedFrom = $request->query('changed_from');
+        $changedTo   = $request->query('changed_to');
+        if (!empty($changedStatusValues) || $changedFrom || $changedTo) {
+            $changedStatuses = array_values(array_filter(
+                array_map(fn($v) => IssueStatus::tryFrom((string) $v), $changedStatusValues)
+            ));
+
+            $query->whereHas('ticketIssues.statusChanges', function (Builder $q) use ($changedStatuses, $changedFrom, $changedTo) {
+                if (!empty($changedStatuses)) {
+                    $q->whereIn('to_status', array_map(fn(IssueStatus $s) => $s->value, $changedStatuses));
                 }
-                if ($assignedTo) {
-                    $q->whereDate('assigned_date', '<=', $assignedTo);
+                if ($changedFrom) {
+                    $q->whereDate('created_at', '>=', $changedFrom);
+                }
+                if ($changedTo) {
+                    $q->whereDate('created_at', '<=', $changedTo);
                 }
             });
         }

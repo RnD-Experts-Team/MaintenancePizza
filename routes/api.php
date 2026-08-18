@@ -79,6 +79,7 @@ Route::middleware('auth.token.store')->group(function () {
     |--------------------------------------------------------------------------
     */
     Route::get('tickets', [TicketController::class, 'globalIndex'])->name('tickets.global');
+    Route::get('tickets/analytics', [TicketController::class, 'globalAnalytics'])->name('tickets.analytics');
     Route::post('tickets', [TicketController::class, 'storeOther'])->name('tickets.store-other');
     Route::get('export/excel', ExportController::class)->name('export.excel')->withoutMiddleware('auth.token.store')->middleware('auth.secret.key');
 
@@ -91,6 +92,7 @@ Route::middleware('auth.token.store')->group(function () {
     */
     Route::prefix('stores/{store}')->scopeBindings()->group(function () {
         Route::get('tickets', [TicketController::class, 'index'])->name('stores.tickets.index');
+        Route::get('tickets/analytics', [TicketController::class, 'analytics'])->name('stores.tickets.analytics');
         Route::post('tickets', [TicketController::class, 'store'])->name('stores.tickets.store');
         Route::delete('tickets/{ticket}', [TicketController::class, 'destroy'])->name('stores.tickets.destroy');
         Route::post('tickets/{ticket}/restore', [TicketController::class, 'restore'])->withTrashed()->name('stores.tickets.restore');

@@ -16,6 +16,7 @@ use App\Exports\Sheets\PartsSheet;
 use App\Exports\Sheets\PartUsagesSheet;
 use App\Exports\Sheets\PayEntriesSheet;
 use App\Exports\Sheets\StoresSheet;
+use App\Exports\Sheets\TechnicianTicketIssuesSheet;
 use App\Exports\Sheets\TechniciansSheet;
 use App\Exports\Sheets\TicketIssuesSheet;
 use App\Exports\Sheets\TicketsSheet;
@@ -52,6 +53,7 @@ class TicketsWorkbookExport implements WithMultipleSheets
             new DailyPayLinesSheet,
             new CategoriesSheet,
             new TechniciansSheet,
+            new TechnicianTicketIssuesSheet,
             new IssuesSheet,
             new PartsSheet,
             new AttachmentsSheet,

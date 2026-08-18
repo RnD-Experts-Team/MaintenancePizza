@@ -6,6 +6,7 @@ use App\Http\Requests\CreateOtherTicketRequest;
 use App\Http\Requests\StoreTicketRequest;
 use App\Models\Store;
 use App\Models\Ticket;
+use App\Services\TicketAnalyticsService;
 use App\Services\TicketService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,16 +14,37 @@ use Illuminate\Http\Response;
 
 class TicketController extends Controller
 {
-    public function __construct(private TicketService $tickets) {}
+    public function __construct(
+        private TicketService $tickets,
+        private TicketAnalyticsService $analytics,
+    ) {}
 
     public function index(Request $request, Store $store)
     {
-        return $this->tickets->index($request, $store);
+        $paginator = $this->tickets->index($request, $store);
+
+        return $request->boolean('include_analytics')
+            ? array_merge($paginator->toArray(), ['analytics' => $this->analytics->summarize($request, $store)])
+            : $paginator;
     }
 
     public function globalIndex(Request $request)
     {
-        return $this->tickets->index($request);
+        $paginator = $this->tickets->index($request);
+
+        return $request->boolean('include_analytics')
+            ? array_merge($paginator->toArray(), ['analytics' => $this->analytics->summarize($request)])
+            : $paginator;
+    }
+
+    public function analytics(Request $request, Store $store): array
+    {
+        return ['data' => $this->analytics->summarize($request, $store)];
+    }
+
+    public function globalAnalytics(Request $request): array
+    {
+        return ['data' => $this->analytics->summarize($request)];
     }
 
     public function storeOther(CreateOtherTicketRequest $request): JsonResponse
