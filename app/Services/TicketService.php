@@ -303,6 +303,12 @@ class TicketService
             $query->whereHas('ticketIssues', fn(Builder $q) => $q->whereIn('priority', $priorities));
         }
 
+        // ?assigned_priorities[]=urgent&assigned_priorities[]=high
+        $assignedPriorities = array_filter((array) $request->query('assigned_priorities', []));
+        if (!empty($assignedPriorities)) {
+            $query->whereHas('ticketIssues', fn(Builder $q) => $q->whereIn('assigned_priority', $assignedPriorities));
+        }
+
         // ?types[]=normal&types[]=preventive_maintenance
         $types = array_filter((array) $request->query('types', []));
         if (!empty($types)) {

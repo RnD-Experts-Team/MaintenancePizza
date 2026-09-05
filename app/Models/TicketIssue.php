@@ -23,6 +23,7 @@ class TicketIssue extends Model
         'issue_id',
         'other_title',
         'priority',
+        'assigned_priority',
         'description',
         'status',
         'parent_id',
@@ -35,6 +36,7 @@ class TicketIssue extends Model
     {
         return [
             'priority' => Priority::class,
+            'assigned_priority' => Priority::class,
             'status' => IssueStatus::class,
         ];
     }

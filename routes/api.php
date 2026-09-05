@@ -110,12 +110,14 @@ Route::middleware('auth.token.store')->group(function () {
             // The "one look" lifecycle views.
             Route::get('issues', [TicketIssueController::class, 'index'])->name('tickets.issues.index');
             Route::get('issues/{ticketIssue}', [TicketIssueController::class, 'show'])->name('tickets.issues.show');
+            Route::patch('issues/{ticketIssue}', [TicketIssueController::class, 'update'])->name('tickets.issues.update');
 
             // Issue state transitions.
             Route::post('issues/status', [TicketIssueStatusController::class, 'store'])->name('tickets.issues.status');
             Route::post('issues/{ticketIssue}/defer', TicketIssueDeferralController::class)->name('tickets.issues.defer');
             Route::post('issues/{ticketIssue}/cancel', TicketIssueCancellationController::class)->name('tickets.issues.cancel');
             Route::post('issues/{ticketIssue}/wait', TicketIssueWaitingController::class)->name('tickets.issues.wait');
+            Route::post('issues/{ticketIssue}/assigned-priority', [TicketIssueController::class, 'assignPriority'])->name('tickets.issues.assigned-priority');
 
             // Generic notes & attachments on an individual issue.
             Route::post('issues/{ticketIssue}/notes', [NoteController::class, 'ticketIssue'])->name('tickets.issues.notes');

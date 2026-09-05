@@ -138,6 +138,33 @@ class TicketIssueService
     }
 
     /**
+     * Re-link an issue to a different catalog issue.
+     *
+     * @return array<string, mixed>
+     */
+    public function update(TicketIssue $ticketIssue, int $issueId): array
+    {
+        $ticketIssue->issue_id = $issueId;
+        $ticketIssue->save();
+
+        return $this->present($ticketIssue->fresh(['issue', 'creator']));
+    }
+
+    /**
+     * Set (or clear, with null) the staff-assigned priority. Distinct from and
+     * never overwrites the priority chosen at ticket creation.
+     *
+     * @return array<string, mixed>
+     */
+    public function assignPriority(TicketIssue $ticketIssue, ?string $priority): array
+    {
+        $ticketIssue->assigned_priority = $priority;
+        $ticketIssue->save();
+
+        return $this->present($ticketIssue->fresh(['issue', 'creator']));
+    }
+
+    /**
      * Cancel all non-cancelled issues on a ticket, making its derived status Cancelled.
      */
     public function cancelAll(Ticket $ticket, string $reason): void
@@ -252,6 +279,9 @@ class TicketIssueService
             'other_title' => $issue->other_title,
             'display_title' => $issue->displayTitle(),
             'priority' => ['value' => $issue->priority->value, 'label' => $issue->priority->label()],
+            'assigned_priority' => $issue->assigned_priority
+                ? ['value' => $issue->assigned_priority->value, 'label' => $issue->assigned_priority->label()]
+                : null,
             'description' => $issue->description,
             'status' => ['value' => $issue->status->value, 'label' => $issue->status->label()],
             'parent_id' => $issue->parent_id,
