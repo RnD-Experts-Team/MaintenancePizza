@@ -11,7 +11,9 @@ use App\Models\Issue;
 use App\Models\Part;
 use App\Models\PartUsage;
 use App\Models\PayEntry;
+use App\Models\StockMovement;
 use App\Models\Store;
+use App\Models\StorageLocation;
 use App\Models\Technician;
 use App\Models\Ticket;
 use App\Models\TicketIssue;
@@ -91,6 +93,16 @@ class NoteController extends Controller
     public function category(StoreNoteRequest $request, Category $category): JsonResponse
     {
         return $this->make($request, $category);
+    }
+
+    public function storageLocation(StoreNoteRequest $request, StorageLocation $storageLocation): JsonResponse
+    {
+        return $this->make($request, $storageLocation);
+    }
+
+    public function stockMovement(StoreNoteRequest $request, StockMovement $stockMovement): JsonResponse
+    {
+        return $this->make($request, $stockMovement);
     }
 
     public function part(StoreNoteRequest $request, Part $part): JsonResponse

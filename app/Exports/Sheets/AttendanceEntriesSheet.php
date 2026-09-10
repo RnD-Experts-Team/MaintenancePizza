@@ -18,7 +18,7 @@ class AttendanceEntriesSheet implements FromCollection, WithHeadings, WithMappin
 
     public function collection(): Collection
     {
-        return AttendanceEntry::with('ticketIssues')->withCount('attachments')->orderBy('id')->get();
+        return AttendanceEntry::with(['ticketIssues', 'dailyPayPayments'])->withCount('attachments')->orderBy('id')->get();
     }
 
     /**
@@ -28,7 +28,10 @@ class AttendanceEntriesSheet implements FromCollection, WithHeadings, WithMappin
     {
         return [
             'ID', 'Technician ID', 'Start Clock', 'End Clock', 'Start Break', 'End Break',
-            'Start Parts Run', 'End Parts Run', 'Mistaken', 'Ticket Issue IDs', 'Attachments', 'Created By', 'Created At',
+            'Start Parts Run', 'End Parts Run', 'Start Travel', 'End Travel',
+            'Work Hours', 'Travel Hours', 'Break Hours', 'Parts Run Hours', 'Duration Warnings',
+            'Payment Status', 'Paid On Pay Sheets',
+            'Mistaken', 'Ticket Issue IDs', 'Attachments', 'Created By', 'Created At',
         ];
     }
 
@@ -38,6 +41,8 @@ class AttendanceEntriesSheet implements FromCollection, WithHeadings, WithMappin
      */
     public function map($entry): array
     {
+        $durations = $entry->durations();
+
         return [
             $entry->id,
             $entry->technician_id,
@@ -47,6 +52,15 @@ class AttendanceEntriesSheet implements FromCollection, WithHeadings, WithMappin
             (string) $entry->end_break,
             (string) $entry->start_parts_run,
             (string) $entry->end_parts_run,
+            (string) $entry->start_travel,
+            (string) $entry->end_travel,
+            round($durations['work'] / 60, 2),
+            round($durations['travel'] / 60, 2),
+            round($durations['break'] / 60, 2),
+            round($durations['parts_run'] / 60, 2),
+            implode(', ', $durations['warnings']),
+            $entry->paymentStatus()?->label(),
+            $entry->dailyPayPayments->pluck('id')->implode(', '),
             $entry->mistaken ? 'yes' : 'no',
             $entry->ticketIssues->pluck('id')->implode(', '),
             $entry->attachments_count,

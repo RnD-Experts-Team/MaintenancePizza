@@ -9,10 +9,14 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 class Attachment extends Model
 {
     /** @use HasFactory<AttachmentFactory> */
-    use HasFactory;
+    // Soft deletes so a replaced attachment row survives alongside its file,
+    // keeping historical revision snapshots resolvable. attachments:prune is
+    // the only thing that ever unlinks a file.
+    use HasFactory, SoftDeletes;
 
     protected $fillable = ['path', 'original_name', 'mime_type', 'size'];
 

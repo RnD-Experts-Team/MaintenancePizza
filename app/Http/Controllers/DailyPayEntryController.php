@@ -7,6 +7,7 @@ use App\Models\DailyPayEntry;
 use App\Services\DailyPayEntryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 
 class DailyPayEntryController extends Controller
 {
@@ -33,10 +34,10 @@ class DailyPayEntryController extends Controller
 
     public function store(StoreDailyPayEntryRequest $request): JsonResponse
     {
-        [$lineFilesMap, $lineNoteFilesMap] = $this->extractLineFiles($request);
+        [$paymentFiles, $paymentNoteFiles, $lineFiles, $lineNoteFiles] = $this->extractFiles($request);
 
         return response()->json(
-            ['data' => $this->service->create($request->validated(), $lineFilesMap, $lineNoteFilesMap)],
+            ['data' => $this->service->create($request->validated(), $paymentFiles, $paymentNoteFiles, $lineFiles, $lineNoteFiles)],
             201
         );
     }
@@ -48,31 +49,47 @@ class DailyPayEntryController extends Controller
 
     public function edit(StoreDailyPayEntryRequest $request, DailyPayEntry $dailyPayEntry): JsonResponse
     {
-        [$lineFilesMap, $lineNoteFilesMap] = $this->extractLineFiles($request);
+        [$paymentFiles, $paymentNoteFiles, $lineFiles, $lineNoteFiles] = $this->extractFiles($request);
 
         return response()->json(
-            ['data' => $this->service->edit($dailyPayEntry, $request->validated(), $lineFilesMap, $lineNoteFilesMap)]
+            ['data' => $this->service->edit($dailyPayEntry, $request->validated(), $paymentFiles, $paymentNoteFiles, $lineFiles, $lineNoteFiles)]
         );
     }
 
     /**
-     * Extract per-line and per-line-per-note files from the multipart request.
+     * Pull every level's files out of the multipart request, keyed by their
+     * index in the payload.
      *
-     * @return array{array<int, array<int, \Illuminate\Http\UploadedFile>>, array<int, array<int, array<int, \Illuminate\Http\UploadedFile>>>}
+     * @return array{
+     *     array<int, array<int, UploadedFile>>,
+     *     array<int, array<int, array<int, UploadedFile>>>,
+     *     array<int, array<int, array<int, UploadedFile>>>,
+     *     array<int, array<int, array<int, array<int, UploadedFile>>>>
+     * }
      */
-    private function extractLineFiles(Request $request): array
+    private function extractFiles(Request $request): array
     {
-        $lineFilesMap     = [];
-        $lineNoteFilesMap = [];
+        $paymentFiles = [];
+        $paymentNoteFiles = [];
+        $lineFiles = [];
+        $lineNoteFiles = [];
 
-        foreach ($request->input('lines', []) as $i => $line) {
-            $lineFilesMap[$i] = (array) $request->file("lines.{$i}.files", []);
+        foreach ($request->input('payments', []) as $p => $payment) {
+            $paymentFiles[$p] = (array) $request->file("payments.{$p}.files", []);
 
-            foreach ($line['notes'] ?? [] as $ni => $_) {
-                $lineNoteFilesMap[$i][$ni] = (array) $request->file("lines.{$i}.notes.{$ni}.files", []);
+            foreach ($payment['notes'] ?? [] as $n => $_) {
+                $paymentNoteFiles[$p][$n] = (array) $request->file("payments.{$p}.notes.{$n}.files", []);
+            }
+
+            foreach ($payment['lines'] ?? [] as $l => $line) {
+                $lineFiles[$p][$l] = (array) $request->file("payments.{$p}.lines.{$l}.files", []);
+
+                foreach ($line['notes'] ?? [] as $n => $_) {
+                    $lineNoteFiles[$p][$l][$n] = (array) $request->file("payments.{$p}.lines.{$l}.notes.{$n}.files", []);
+                }
             }
         }
 
-        return [$lineFilesMap, $lineNoteFilesMap];
+        return [$paymentFiles, $paymentNoteFiles, $lineFiles, $lineNoteFiles];
     }
 }

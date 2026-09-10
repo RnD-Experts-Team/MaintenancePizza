@@ -3,7 +3,7 @@
   "info": {
     "title": "MaintenancePizza API",
     "version": "2.0.0",
-    "description": "Ticket system microservice for store maintenance. An authenticated user files a ticket describing the issues in a store; dispatchers then drive each issue through its lifecycle (diagnosis, technician assignment, attendance, parts, pay/driving, warranty) until completion.\n\nKey design notes:\n- All endpoints require a Sanctum bearer token (`Authorization: Bearer <token>`). There are no login/registration endpoints in this service — tokens are issued elsewhere.\n- Most endpoints are store-scoped under `/api/stores/{store}`, where `{store}` is the store NUMBER (e.g. `03795-00001`), not a numeric id.\n- The system is append-only: there are no update (PUT/PATCH) endpoints. Corrections are made by marking leaf records `mistaken` and creating new ones. Lifecycle changes are explicit POST actions.\n- A ticket's status is DERIVED from its issues and is never set directly.\n- Workflow records (diagnosis, attendance, parts, pay, warranty, assignment, technicians) attach to ONE OR MANY issues via `ticket_issue_ids`, enabling flexible grouping.\n- Every entity (tickets, issues, workflow records, catalog items, stores) accepts any number of polymorphic Notes and Attachments via dedicated POST endpoints.\n- Notes are stored with their author (`created_by`), optional `type`, and may carry their own file attachments.\n- Ticket closing notes are typed with FinalNoteType (`final_notes` or `what_we_learned`) and are appended via the `/final-note` endpoint.\n- Issues (and tickets by derivation) now support a `cancelled` status in addition to the existing statuses."
+    "description": "Ticket system microservice for store maintenance. An authenticated user files a ticket describing the issues in a store; dispatchers then drive each issue through its lifecycle (diagnosis, technician assignment, attendance, parts, pay/driving, warranty) until completion.\n\nKey design notes:\n- All endpoints require a Sanctum bearer token (`Authorization: Bearer <token>`). There are no login/registration endpoints in this service — tokens are issued elsewhere.\n- Most endpoints are store-scoped under `/api/stores/{store}`, where `{store}` is the store NUMBER (e.g. `03795-00001`), not a numeric id.\n- The system is append-only apart from one exception: `PATCH .../issues/{ticketIssue}` re-points an issue at a different catalog issue. Everything else is corrected by marking leaf records `mistaken` and creating new ones; lifecycle changes are explicit POST actions.\n- A ticket's status is DERIVED from its issues and is never set directly.\n- Workflow records (diagnosis, attendance, parts, pay, warranty, assignment, technicians) attach to ONE OR MANY issues via `ticket_issue_ids`, enabling flexible grouping.\n- Every entity (tickets, issues, workflow records, catalog items, stores) accepts any number of polymorphic Notes and Attachments via dedicated POST endpoints.\n- Notes are stored with their author (`created_by`), optional `type`, and may carry their own file attachments.\n- Ticket closing notes are typed with FinalNoteType (`final_notes` or `what_we_learned`) and are appended via the `/final-note` endpoint.\n- Issues (and tickets by derivation) now support a `cancelled` status in addition to the existing statuses."
   },
   "servers": [
     {
@@ -46,12 +46,16 @@
       "description": "Generic polymorphic notes and file attachments — the same POST shape is available on every entity (tickets, issues, all workflow records, stores, catalog items)"
     },
     {
+      "name": "Storage",
+      "description": "Parts inventory across one or more storage locations. Stock is an append-only ledger of movements: on-hand is SUM(quantity × direction) over every movement line, and a mistake is corrected by recording an equal-and-opposite reversal rather than by editing. Taking a part out of storage on a ticket writes a movement automatically."
+    },
+    {
       "name": "Export",
       "description": "Full data export"
     },
     {
       "name": "Daily Pay",
-      "description": "End-of-day payment records for technicians. One entry per submission covers any number of technician × store combinations (lines). Editing replaces the full entry while keeping a JSON snapshot of the prior state as revision history."
+      "description": "End-of-day payment records, in three levels: an entry is one date, it holds one payment per payee, and each payment holds one line per store. A payee is a Technician row — a company is simply a technician named after the company — so a single payment can cover several stores at once.\n\nEach payment gathers its own figures from records that already exist: the hours clocked against its issues, and the parts somebody other than us paid for. Those are FROZEN when the entry is saved, so a signed-off pay sheet does not change when a ticket is corrected later; POST .../recalculate re-pulls them on demand.\n\nEditing replaces the payments wholesale while keeping a JSON snapshot of the prior state as revision history."
     }
   ],
   "x-tagGroups": [
@@ -1003,6 +1007,12 @@
             "$ref": "#/components/parameters/FilterPriorities"
           },
           {
+            "$ref": "#/components/parameters/FilterAssignedPriorities"
+          },
+          {
+            "$ref": "#/components/parameters/FilterPaymentStatuses"
+          },
+          {
             "$ref": "#/components/parameters/FilterTypes"
           },
           {
@@ -1169,6 +1179,8 @@
           { "$ref": "#/components/parameters/FilterIssueIds" },
           { "$ref": "#/components/parameters/FilterIssueStatuses" },
           { "$ref": "#/components/parameters/FilterPriorities" },
+          { "$ref": "#/components/parameters/FilterAssignedPriorities" },
+          { "$ref": "#/components/parameters/FilterPaymentStatuses" },
           { "$ref": "#/components/parameters/FilterTypes" },
           { "$ref": "#/components/parameters/FilterTechnicianIds" },
           { "$ref": "#/components/parameters/FilterCreatorIds" },
@@ -1327,20 +1339,70 @@
             "$ref": "#/components/parameters/FilterPriorities"
           },
           {
+            "$ref": "#/components/parameters/FilterAssignedPriorities"
+          },
+          {
+            "$ref": "#/components/parameters/FilterPaymentStatuses"
+          },
+          {
             "$ref": "#/components/parameters/FilterTypes"
           },
           {
             "$ref": "#/components/parameters/FilterTechnicianIds"
           },
           {
+            "$ref": "#/components/parameters/FilterCreatorIds"
+          },
+          {
+            "name": "created_from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "created_to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "part_cost_single_gt",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            },
+            "description": "At least one issue whose summed (non-mistaken) part cost exceeds this"
+          },
+          {
             "name": "part_cost_total_gt",
             "in": "query",
             "schema": {
               "type": "number"
-            }
+            },
+            "description": "Whole-ticket part cost (non-mistaken) exceeds this. A part shared across several issues counts once."
           },
           {
             "$ref": "#/components/parameters/Trashed"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["created_at", "updated_at", "id"]
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["asc", "desc"]
+            }
           },
           {
             "$ref": "#/components/parameters/PerPage"
@@ -1429,8 +1491,11 @@
           { "name": "changed_from", "in": "query", "schema": { "type": "string", "format": "date" } },
           { "name": "changed_to", "in": "query", "schema": { "type": "string", "format": "date" } },
           { "$ref": "#/components/parameters/FilterPriorities" },
+          { "$ref": "#/components/parameters/FilterAssignedPriorities" },
+          { "$ref": "#/components/parameters/FilterPaymentStatuses" },
           { "$ref": "#/components/parameters/FilterTypes" },
           { "$ref": "#/components/parameters/FilterTechnicianIds" },
+          { "$ref": "#/components/parameters/FilterCreatorIds" },
           { "name": "created_from", "in": "query", "schema": { "type": "string", "format": "date" } },
           { "name": "created_to", "in": "query", "schema": { "type": "string", "format": "date" } },
           { "name": "part_cost_single_gt", "in": "query", "schema": { "type": "number" } },
@@ -1745,6 +1810,43 @@
       }
     },
     "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}": {
+      "patch": {
+        "tags": ["Issue Workflow"],
+        "summary": "Re-point an issue at a different catalog issue",
+        "operationId": "updateTicketIssue",
+        "description": "Corrects which catalog issue this ticket line refers to. The only update endpoint in the service.",
+        "parameters": [
+          { "$ref": "#/components/parameters/Store" },
+          { "$ref": "#/components/parameters/Ticket" },
+          { "$ref": "#/components/parameters/TicketIssue" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["issue_id"],
+                "properties": {
+                  "issue_id": { "type": "integer", "description": "Id of the catalog issue to point at" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated ticket issue",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TicketIssueResource" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      },
       "get": {
         "tags": [
           "Issue Workflow"
@@ -1853,6 +1955,85 @@
           "422": {
             "$ref": "#/components/responses/ValidationError"
           }
+        }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/wait": {
+      "post": {
+        "tags": ["Issue Workflow"],
+        "summary": "Put an issue into the waiting state — records the reason",
+        "operationId": "waitIssue",
+        "description": "Moves the issue to `waiting` (e.g. blocked on a part or on the store). The reason is stored in `status_changes`.",
+        "parameters": [
+          { "$ref": "#/components/parameters/Store" },
+          { "$ref": "#/components/parameters/Ticket" },
+          { "$ref": "#/components/parameters/TicketIssue" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["reason"],
+                "properties": { "reason": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated ticket issue",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TicketIssueResource" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/assigned-priority": {
+      "post": {
+        "tags": ["Issue Workflow"],
+        "summary": "Set (or clear) the dispatcher-assigned priority",
+        "operationId": "assignIssuePriority",
+        "description": "The dispatcher\u2019s own priority for the issue, kept separate from the priority it was filed at. Send null to clear it. Filterable via assigned_priorities[].",
+        "parameters": [
+          { "$ref": "#/components/parameters/Store" },
+          { "$ref": "#/components/parameters/Ticket" },
+          { "$ref": "#/components/parameters/TicketIssue" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "priority": {
+                    "type": "string",
+                    "nullable": true,
+                    "enum": ["urgent", "high", "medium", "low"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated ticket issue",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TicketIssueResource" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
         }
       }
     },
@@ -2602,7 +2783,7 @@
         ],
         "summary": "Add an attendance entry (multipart, optional files)",
         "operationId": "createAttendanceEntry",
-        "description": "Clock fields are unconstrained — any subset may be set. The technician must already be attached to at least one target issue.",
+        "description": "Clock fields are unconstrained — any subset may be set. The technician must already be attached to at least one target issue.\n\nThe issues may span tickets: at least one must belong to `{ticket}`, the rest may belong to any ticket. Use `POST /api/attendance-entries` when the visit does not sit under one ticket at all.",
         "parameters": [
           {
             "$ref": "#/components/parameters/Store"
@@ -2660,6 +2841,28 @@
                     "type": "string",
                     "format": "date-time",
                     "nullable": true
+                  },
+                  "start_travel": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  },
+                  "end_travel": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  },
+                  "notes[0][body]": {
+                    "type": "string",
+                    "description": "Notes filed with the entry itself, so a travel leg can record where it went and a parts run can say it was a trip back to storage, without a second request. Repeat the index for more notes."
+                  },
+                  "notes[0][type]": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "notes[0][files][]": {
+                    "type": "array",
+                    "items": { "type": "string", "format": "binary" }
                   },
                   "files[]": {
                     "type": "array",
@@ -2863,7 +3066,10 @@
                 "required": [
                   "ticket_issue_ids",
                   "part_id",
-                  "cost"
+                  "quantity",
+                  "unit_cost",
+                  "source",
+                  "paid_by"
                 ],
                 "properties": {
                   "ticket_issue_ids[]": {
@@ -2875,8 +3081,60 @@
                   "part_id": {
                     "type": "integer"
                   },
+                  "quantity": {
+                    "type": "number",
+                    "description": "How many were taken for the job. Must be greater than zero."
+                  },
+                  "unit_cost": {
+                    "type": "number",
+                    "description": "Price of one. The stored `cost` is computed server-side as quantity × unit_cost and is not accepted from the client."
+                  },
                   "cost": {
-                    "type": "number"
+                    "type": "number",
+                    "deprecated": true,
+                    "description": "Legacy: sending `cost` alone (no `unit_cost`) is still accepted and read as one unit at that price, purchased and paid by us. Send quantity + unit_cost instead."
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": ["purchased", "from_storage"],
+                    "description": "`from_storage` draws the parts out of `storage_location_id` and writes a stock movement. If the shelf does not hold enough, the whole request fails with 422 and no part usage is created."
+                  },
+                  "paid_by": {
+                    "type": "string",
+                    "enum": ["us", "technician"],
+                    "description": "Anything other than `us` is reimbursable, and is what a daily pay gathers up for whoever fronted the money."
+                  },
+                  "paid_by_technician_id": {
+                    "type": "integer",
+                    "nullable": true,
+                    "description": "Required when paid_by is `technician`."
+                  },
+                  "storage_location_id": {
+                    "type": "integer",
+                    "nullable": true,
+                    "description": "Required when source is `from_storage`: the shelf they came off."
+                  },
+                  "returned_quantity": {
+                    "type": "number",
+                    "nullable": true,
+                    "description": "Bought or drawn for the job but not used, and taken back to storage. Must not exceed quantity."
+                  },
+                  "returned_to_storage_location_id": {
+                    "type": "integer",
+                    "nullable": true,
+                    "description": "Required when returned_quantity is greater than zero: where the remainder went."
+                  },
+                  "notes[0][body]": {
+                    "type": "string",
+                    "description": "Where to record the vendor, receipt number and anything else about the purchase — there is no vendor column, because nothing aggregates by vendor. Repeat the index for more notes."
+                  },
+                  "notes[0][type]": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "notes[0][files][]": {
+                    "type": "array",
+                    "items": { "type": "string", "format": "binary" }
                   },
                   "files[]": {
                     "type": "array",
@@ -3708,6 +3966,353 @@
         }
       }
     },
+    "/storage-locations": {
+      "get": {
+        "tags": ["Storage"],
+        "summary": "List storage locations",
+        "operationId": "listStorageLocations",
+        "parameters": [
+          { "$ref": "#/components/parameters/Trashed" },
+          { "$ref": "#/components/parameters/PerPage" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated storage locations",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthenticated" }
+        }
+      },
+      "post": {
+        "tags": ["Storage"],
+        "summary": "Add a storage location",
+        "operationId": "createStorageLocation",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "code": { "type": "string", "nullable": true, "description": "Optional short code, unique among live locations" },
+                  "address": { "type": "string", "nullable": true }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Storage location created",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StorageLocationResource" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
+    },
+    "/storage-locations/{storageLocation}": {
+      "delete": {
+        "tags": ["Storage"],
+        "summary": "Retire a storage location (soft delete)",
+        "operationId": "deleteStorageLocation",
+        "description": "The location keeps its stock history and its balances stay readable — the ledger references it by id forever.",
+        "parameters": [{ "$ref": "#/components/parameters/StorageLocation" }],
+        "responses": {
+          "204": { "description": "Retired" },
+          "401": { "$ref": "#/components/responses/Unauthenticated" }
+        }
+      }
+    },
+    "/storage-locations/{storageLocation}/restore": {
+      "post": {
+        "tags": ["Storage"],
+        "summary": "Restore a retired storage location",
+        "operationId": "restoreStorageLocation",
+        "parameters": [{ "$ref": "#/components/parameters/StorageLocation" }],
+        "responses": {
+          "200": {
+            "description": "Restored",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StorageLocationResource" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthenticated" }
+        }
+      }
+    },
+    "/stock-movements": {
+      "get": {
+        "tags": ["Storage"],
+        "summary": "List stock movements (the ledger)",
+        "operationId": "listStockMovements",
+        "parameters": [
+          { "name": "types[]", "in": "query", "style": "form", "explode": true, "schema": { "type": "array", "items": { "type": "string", "enum": ["purchase", "draw", "return", "transfer_out", "transfer_in", "adjustment", "initial_count", "reversal"] } } },
+          { "name": "part_ids[]", "in": "query", "style": "form", "explode": true, "schema": { "type": "array", "items": { "type": "integer" } } },
+          { "name": "storage_location_ids[]", "in": "query", "style": "form", "explode": true, "schema": { "type": "array", "items": { "type": "integer" } } },
+          { "name": "paid_by[]", "in": "query", "style": "form", "explode": true, "schema": { "type": "array", "items": { "type": "string", "enum": ["us", "technician"] } } },
+          { "name": "paid_by_technician_ids[]", "in": "query", "style": "form", "explode": true, "schema": { "type": "array", "items": { "type": "integer" } } },
+          { "name": "moved_from", "in": "query", "schema": { "type": "string", "format": "date" } },
+          { "name": "moved_to", "in": "query", "schema": { "type": "string", "format": "date" } },
+          { "name": "sort", "in": "query", "schema": { "type": "string", "enum": ["moved_at", "created_at", "id"] } },
+          { "name": "dir", "in": "query", "schema": { "type": "string", "enum": ["asc", "desc"] } },
+          { "$ref": "#/components/parameters/PerPage" }
+        ],
+        "responses": {
+          "200": { "description": "Paginated movements", "content": { "application/json": { "schema": { "type": "object" } } } },
+          "401": { "$ref": "#/components/responses/Unauthenticated" }
+        }
+      },
+      "post": {
+        "tags": ["Storage"],
+        "summary": "Record a batch of stock moving (multipart, optional files)",
+        "operationId": "createStockMovement",
+        "description": "One movement is one batch: several parts, their amounts, where they are, and who paid. Most types imply their direction; `adjustment` moves either way, so each of its lines must state `direction` itself. A transfer is one movement with a -1 line at the source and a +1 line at the destination.\n\nTaking stock below zero is refused with 422 and nothing is written. `reversal` cannot be posted directly — use the `/mistaken` action, which writes it for you.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["moved_at", "type", "lines"],
+                "properties": {
+                  "moved_at": { "type": "string", "format": "date-time", "description": "When it physically happened" },
+                  "type": { "type": "string", "enum": ["purchase", "draw", "return", "transfer_out", "transfer_in", "adjustment", "initial_count"] },
+                  "storage_location_id": { "type": "integer", "nullable": true, "description": "The movement's own location; each line still names its own" },
+                  "paid_by": { "type": "string", "nullable": true, "enum": ["us", "technician"] },
+                  "paid_by_technician_id": { "type": "integer", "nullable": true, "description": "Required when paid_by is `technician`" },
+                  "body": { "type": "string", "nullable": true },
+                  "lines[0][part_id]": { "type": "integer" },
+                  "lines[0][storage_location_id]": { "type": "integer" },
+                  "lines[0][quantity]": { "type": "number", "description": "Always a positive magnitude; `direction` says which way it moves" },
+                  "lines[0][direction]": { "type": "integer", "enum": [-1, 1], "description": "Required only for types that move both ways (adjustment); otherwise taken from the type" },
+                  "lines[0][unit_cost]": { "type": "number", "nullable": true },
+                  "notes[0][body]": { "type": "string" },
+                  "notes[0][type]": { "type": "string", "nullable": true },
+                  "notes[0][files][]": { "type": "array", "items": { "type": "string", "format": "binary" } },
+                  "files[]": { "type": "array", "items": { "type": "string", "format": "binary" } }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Movement recorded",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StockMovementResource" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
+    },
+    "/stock-movements/{stockMovement}": {
+      "get": {
+        "tags": ["Storage"],
+        "summary": "Show one stock movement with its lines",
+        "operationId": "showStockMovement",
+        "parameters": [{ "$ref": "#/components/parameters/StockMovement" }],
+        "responses": {
+          "200": {
+            "description": "The movement",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StockMovementResource" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthenticated" }
+        }
+      }
+    },
+    "/stock-movements/{stockMovement}/mistaken": {
+      "post": {
+        "tags": ["Storage"],
+        "summary": "Correct a movement by recording its reversal",
+        "operationId": "reverseStockMovement",
+        "description": "Flags the movement and writes an equal-and-opposite `reversal`. The original row is never edited or removed — the ledger is append-only, and the flag itself has no effect on the arithmetic.\n\nA reversal is allowed to take a balance negative: reversing a return pushes stock down, and that stock may since have been consumed. Refusing would leave the mistake uncorrectable. `php artisan stock:reconcile` lists any negative pairs.",
+        "parameters": [{ "$ref": "#/components/parameters/StockMovement" }],
+        "responses": {
+          "200": {
+            "description": "The flagged original plus the reversal that was written",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/StockMovement" },
+                    "reversal": { "$ref": "#/components/schemas/StockMovement" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthenticated" }
+        }
+      }
+    },
+    "/stock-balances": {
+      "get": {
+        "tags": ["Storage"],
+        "summary": "What is on hand, per part per location",
+        "operationId": "listStockBalances",
+        "description": "A cache of SUM(quantity × direction) over the movement ledger, kept in step inside the same transaction as every movement. `php artisan stock:reconcile` recomputes it from the ledger and reports any drift.",
+        "parameters": [
+          { "name": "part_ids[]", "in": "query", "style": "form", "explode": true, "schema": { "type": "array", "items": { "type": "integer" } } },
+          { "name": "storage_location_ids[]", "in": "query", "style": "form", "explode": true, "schema": { "type": "array", "items": { "type": "integer" } } },
+          { "name": "non_zero", "in": "query", "schema": { "type": "boolean" }, "description": "Hide pairs that have netted back to nothing" },
+          { "$ref": "#/components/parameters/PerPage" }
+        ],
+        "responses": {
+          "200": { "description": "Paginated balances", "content": { "application/json": { "schema": { "type": "object" } } } },
+          "401": { "$ref": "#/components/responses/Unauthenticated" }
+        }
+      }
+    },
+    "/storage-locations/{storageLocation}/notes": {
+      "post": {
+        "tags": ["Notes & Attachments"],
+        "summary": "Add a note to a storage location",
+        "operationId": "addStorageLocationNote",
+        "parameters": [{ "$ref": "#/components/parameters/StorageLocation" }],
+        "requestBody": {
+          "required": true,
+          "content": { "multipart/form-data": { "schema": { "$ref": "#/components/schemas/NoteRequest" } } }
+        },
+        "responses": {
+          "201": { "description": "Note created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NoteResource" } } } },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
+    },
+    "/storage-locations/{storageLocation}/attachments": {
+      "post": {
+        "tags": ["Notes & Attachments"],
+        "summary": "Attach files to a storage location",
+        "operationId": "addStorageLocationAttachments",
+        "parameters": [{ "$ref": "#/components/parameters/StorageLocation" }],
+        "requestBody": {
+          "required": true,
+          "content": { "multipart/form-data": { "schema": { "$ref": "#/components/schemas/AttachmentRequest" } } }
+        },
+        "responses": {
+          "201": { "description": "Attachments created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AttachmentListResource" } } } },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
+    },
+    "/stock-movements/{stockMovement}/notes": {
+      "post": {
+        "tags": ["Notes & Attachments"],
+        "summary": "Add a note to a stock movement",
+        "operationId": "addStockMovementNote",
+        "parameters": [{ "$ref": "#/components/parameters/StockMovement" }],
+        "requestBody": {
+          "required": true,
+          "content": { "multipart/form-data": { "schema": { "$ref": "#/components/schemas/NoteRequest" } } }
+        },
+        "responses": {
+          "201": { "description": "Note created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NoteResource" } } } },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
+    },
+    "/stock-movements/{stockMovement}/attachments": {
+      "post": {
+        "tags": ["Notes & Attachments"],
+        "summary": "Attach files to a stock movement",
+        "operationId": "addStockMovementAttachments",
+        "parameters": [{ "$ref": "#/components/parameters/StockMovement" }],
+        "requestBody": {
+          "required": true,
+          "content": { "multipart/form-data": { "schema": { "$ref": "#/components/schemas/AttachmentRequest" } } }
+        },
+        "responses": {
+          "201": { "description": "Attachments created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AttachmentListResource" } } } },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
+    },
+    "/daily-pay-entries/{dailyPayEntry}/recalculate": {
+      "post": {
+        "tags": ["Daily Pay"],
+        "summary": "Re-gather the frozen hours and reimbursable parts",
+        "operationId": "recalculateDailyPayEntry",
+        "description": "Re-reads the attendance entries and reimbursable part usages behind every payment on this entry and rewrites the frozen figures from them.\n\nLines whose hours were supplied in the payload (`hours_overridden: true`) are left exactly as typed — only their `gathered` block is refreshed, so you can still see what the records say. Lines that were left to be gathered pick up the newer numbers.\n\nIdempotent: running it twice changes nothing the second time.",
+        "parameters": [
+          {
+            "name": "dailyPayEntry",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer" },
+            "description": "Daily pay entry id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The entry with its figures re-gathered",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DailyPayEntryResource" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/attendance-entries": {
+      "post": {
+        "tags": ["Issue Workflow"],
+        "summary": "Add an attendance entry spanning several tickets (multipart, optional files)",
+        "operationId": "createGlobalAttendanceEntry",
+        "description": "One visit, many tickets: a technician drives to a store once and works issues belonging to different tickets. Identical to the ticket-nested endpoint except that no parent ticket scopes the issues — they need only exist, and the technician must already be attached to at least one of them.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["ticket_issue_ids", "technician_id"],
+                "properties": {
+                  "ticket_issue_ids[]": {
+                    "type": "array",
+                    "items": { "type": "integer" },
+                    "description": "Issue ids from any number of tickets"
+                  },
+                  "technician_id": { "type": "integer" },
+                  "start_clock": { "type": "string", "format": "date-time", "nullable": true },
+                  "end_clock": { "type": "string", "format": "date-time", "nullable": true },
+                  "start_break": { "type": "string", "format": "date-time", "nullable": true },
+                  "end_break": { "type": "string", "format": "date-time", "nullable": true },
+                  "start_parts_run": { "type": "string", "format": "date-time", "nullable": true },
+                  "end_parts_run": { "type": "string", "format": "date-time", "nullable": true },
+                  "start_travel": { "type": "string", "format": "date-time", "nullable": true },
+                  "end_travel": { "type": "string", "format": "date-time", "nullable": true },
+                  "notes[0][body]": { "type": "string" },
+                  "notes[0][type]": { "type": "string", "nullable": true },
+                  "notes[0][files][]": { "type": "array", "items": { "type": "string", "format": "binary" } },
+                  "files[]": { "type": "array", "items": { "type": "string", "format": "binary" } }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Attendance entry created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AttendanceEntryResource" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
+    },
     "/daily-pay-entries": {
       "get": {
         "tags": ["Daily Pay"],
@@ -3959,6 +4564,20 @@
         },
         "description": "TicketIssue id"
       },
+      "StorageLocation": {
+        "name": "storageLocation",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "integer" },
+        "description": "Storage location id"
+      },
+      "StockMovement": {
+        "name": "stockMovement",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "integer" },
+        "description": "Stock movement id"
+      },
       "Trashed": {
         "name": "trashed",
         "in": "query",
@@ -4052,6 +4671,34 @@
         },
         "description": "Tickets with at least one issue at any of these priorities (multi-select, OR logic)"
       },
+      "FilterAssignedPriorities": {
+        "name": "assigned_priorities[]",
+        "in": "query",
+        "style": "form",
+        "explode": true,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["urgent", "high", "medium", "low"]
+          }
+        },
+        "description": "Tickets with at least one issue at any of these DISPATCHER-ASSIGNED priorities (multi-select, OR logic). Distinct from priorities[], which is the priority the reporter filed the issue at."
+      },
+      "FilterPaymentStatuses": {
+        "name": "payment_statuses[]",
+        "in": "query",
+        "style": "form",
+        "explode": true,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["unpaid", "paid", "not_payable"]
+          }
+        },
+        "description": "Whether a ticket’s work has been settled through a pay sheet (multi-select, OR logic). A payable is an attendance entry, or a part somebody other than us paid for; mistaken records never count. `unpaid` = at least one payable is still unclaimed, so use this to pull up everything still owed. `paid` = it has payables and every one of them is claimed. `not_payable` = it has no payables at all."
+      },
       "FilterTypes": {
         "name": "types[]",
         "in": "query",
@@ -4090,6 +4737,17 @@
       }
     },
     "responses": {
+      "NotFound": {
+        "description": "No such record, or it is out of scope for this store",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": { "message": { "type": "string" } }
+            }
+          }
+        }
+      },
       "Unauthenticated": {
         "description": "Missing or invalid bearer token",
         "content": {
@@ -4138,138 +4796,138 @@
     "schemas": {
       "DailyPayEntryInput": {
         "type": "object",
-        "required": ["date", "lines"],
+        "required": ["date", "payments"],
+        "description": "Sent as multipart/form-data with bracket-notation keys, e.g. payments[0][lines][0][store_id] and payments[0][lines][0][files][].",
         "properties": {
           "date": {
             "type": "string",
             "format": "date",
-            "description": "The workday date for this pay entry (YYYY-MM-DD).",
-            "example": "2026-06-10"
+            "description": "The workday this pay sheet covers (YYYY-MM-DD).",
+            "example": "2026-09-10"
           },
-          "lines": {
+          "expected_updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Edit only, and optional. Send back the updated_at you last read; if someone else has changed the entry since, the edit is refused with 409 instead of silently overwriting their figures."
+          },
+          "payments": {
             "type": "array",
             "minItems": 1,
-            "description": "One element per technician × store combination worked this day.",
+            "description": "One element per payee. A payee may appear only once per sheet — put all of their stores on the one payment.",
             "items": {
               "type": "object",
-              "required": ["technician_id", "store_id"],
+              "required": ["technician_id", "lines"],
               "properties": {
-                "technician_id": { "type": "integer", "description": "ID of the technician." },
-                "store_id": { "type": "integer", "description": "ID of the store the technician worked at." },
-                "total_working_hours": { "type": "number", "format": "float", "nullable": true, "minimum": 0 },
-                "gas": { "type": "number", "format": "float", "nullable": true, "minimum": 0 },
-                "invoices": { "type": "number", "format": "float", "nullable": true, "minimum": 0 },
-                "hourly_payment_rate": { "type": "number", "format": "float", "nullable": true, "minimum": 0 },
-                "money_owed": { "type": "number", "format": "float", "nullable": true, "minimum": 0 },
-                "travel_time": { "type": "number", "format": "float", "nullable": true, "minimum": 0 },
-                "total_break_time": { "type": "number", "format": "float", "nullable": true, "minimum": 0 },
-                "ticket_issue_ids": {
-                  "type": "array",
+                "technician_id": {
+                  "type": "integer",
+                  "description": "Who is being paid. A company is a Technician row named after the company."
+                },
+                "hourly_payment_rate": {
+                  "type": "number",
                   "nullable": true,
-                  "description": "Optional ticket issue IDs to link to this line. The technician must already be assigned to each issue.",
-                  "items": { "type": "integer" }
+                  "description": "Default rate for this payment's lines; a line may state its own."
+                },
+                "lump_sum": {
+                  "type": "number",
+                  "nullable": true,
+                  "description": "A flat amount INSTEAD OF hours × rate for the whole payment, not on top of it."
+                },
+                "gas": {
+                  "type": "number",
+                  "nullable": true,
+                  "description": "Fuel that is not attributable to one store. Per-store fuel goes on the line."
+                },
+                "money_owed": {
+                  "type": "number",
+                  "nullable": true,
+                  "description": "NOT the total. An optional extra amount we also owe them, added on top."
                 },
                 "notes": {
                   "type": "array",
-                  "nullable": true,
-                  "description": "Notes to attach to this line at creation time.",
                   "items": {
                     "type": "object",
                     "required": ["body"],
                     "properties": {
                       "body": { "type": "string" },
                       "type": { "type": "string", "nullable": true },
-                      "files[]": {
-                        "type": "array",
-                        "nullable": true,
-                        "description": "Files to attach to this note (multipart only — field name lines[N][notes][M][files][]).",
-                        "items": { "type": "string", "format": "binary" }
-                      }
+                      "files": { "type": "array", "items": { "type": "string", "format": "binary" } }
                     }
                   }
                 },
-                "files[]": {
+                "files": { "type": "array", "items": { "type": "string", "format": "binary" } },
+                "lines": {
                   "type": "array",
-                  "nullable": true,
-                  "description": "Files to attach directly to this line (multipart only — field name lines[N][files][]).",
-                  "items": { "type": "string", "format": "binary" }
+                  "minItems": 1,
+                  "description": "One element per store this payment covers.",
+                  "items": {
+                    "type": "object",
+                    "required": ["store_id"],
+                    "properties": {
+                      "store_id": { "type": "integer", "nullable": true, "description": "Required unless other_store is given." },
+                      "other_store": { "type": "string", "nullable": true, "description": "A location outside the replicated store list, named freely — the same escape hatch tickets have. Give a line either this or store_id." },
+                      "total_working_hours": {
+                        "type": "number",
+                        "nullable": true,
+                        "description": "Leave out to have it gathered from the attendance entries on this line's issues. Supply it to override, and recalculate will then leave this line's hours alone."
+                      },
+                      "travel_time": { "type": "number", "nullable": true, "description": "Paid at the hourly rate, like work time." },
+                      "total_break_time": { "type": "number", "nullable": true, "description": "Tracked but NOT paid." },
+                      "parts_run_time": { "type": "number", "nullable": true, "description": "Paid at the hourly rate." },
+                      "gas": { "type": "number", "nullable": true },
+                      "lump_sum": { "type": "number", "nullable": true, "description": "A flat amount for this store INSTEAD OF its hours × rate." },
+                      "hourly_payment_rate": { "type": "number", "nullable": true, "description": "Overrides the payment's rate for this store." },
+                      "money_owed": { "type": "number", "nullable": true },
+                      "ticket_issue_ids": {
+                        "type": "array",
+                        "items": { "type": "integer" },
+                        "description": "The work this line pays for. The payee must already be assigned to each issue. These links are what the gather reads to find the hours and the reimbursable parts."
+                      },
+                      "notes": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": ["body"],
+                          "properties": {
+                            "body": { "type": "string" },
+                            "type": { "type": "string", "nullable": true },
+                            "files": { "type": "array", "items": { "type": "string", "format": "binary" } }
+                          }
+                        }
+                      },
+                      "files": { "type": "array", "items": { "type": "string", "format": "binary" } }
+                    }
+                  }
                 }
               }
             }
           }
         }
       },
-      "DailyPayEntryResource": {
+      "DailyPayGathered": {
         "type": "object",
-        "description": "Full detail of a daily pay entry, including lines with notes/attachments/linked issues and the complete revision history.",
+        "description": "Figures pulled from the attendance and part-usage records behind this payment's issues, frozen at save time and refreshed by POST .../recalculate.",
         "properties": {
-          "id": { "type": "integer" },
-          "date": { "type": "string", "format": "date", "example": "2026-06-10" },
-          "lines": {
-            "type": "array",
-            "items": { "$ref": "#/components/schemas/DailyPayLineResource" }
-          },
-          "revisions": {
-            "type": "array",
-            "description": "History of all previous states, newest first. Each revision holds a full snapshot of the entry as it was before the edit.",
-            "items": { "$ref": "#/components/schemas/DailyPayEntryRevisionResource" }
-          },
-          "created_by": { "type": "integer", "nullable": true },
-          "created_at": { "type": "string", "format": "date-time" },
-          "updated_at": { "type": "string", "format": "date-time" }
-        }
-      },
-      "DailyPayEntrySummary": {
-        "type": "object",
-        "description": "Lightweight daily pay entry for list responses. Notes, attachments, and revision history are omitted — use the detail endpoint for those.",
-        "properties": {
-          "id": { "type": "integer" },
-          "date": { "type": "string", "format": "date" },
-          "lines": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "description": "Summary line — no notes or attachments.",
-              "properties": {
-                "id": { "type": "integer" },
-                "daily_pay_entry_id": { "type": "integer" },
-                "technician_id": { "type": "integer" },
-                "technician": { "type": "object", "nullable": true },
-                "store_id": { "type": "integer" },
-                "store": {
-                  "type": "object",
-                  "nullable": true,
-                  "properties": {
-                    "id": { "type": "integer" },
-                    "store_number": { "type": "string" }
-                  }
-                },
-                "total_working_hours": { "type": "string", "nullable": true },
-                "gas": { "type": "string", "nullable": true },
-                "invoices": { "type": "string", "nullable": true },
-                "hourly_payment_rate": { "type": "string", "nullable": true },
-                "money_owed": { "type": "string", "nullable": true },
-                "travel_time": { "type": "string", "nullable": true },
-                "total_break_time": { "type": "string", "nullable": true },
-                "created_by": { "type": "integer", "nullable": true },
-                "created_at": { "type": "string", "format": "date-time" },
-                "updated_at": { "type": "string", "format": "date-time" }
-              }
-            }
-          },
-          "created_by": { "type": "integer", "nullable": true },
-          "created_at": { "type": "string", "format": "date-time" },
-          "updated_at": { "type": "string", "format": "date-time" }
+          "work_hours": { "type": "string", "nullable": true, "description": "Net of breaks, parts runs and travel that fall inside the clock window" },
+          "travel_hours": { "type": "string", "nullable": true },
+          "break_hours": { "type": "string", "nullable": true, "description": "Tracked but not paid" },
+          "parts_run_hours": { "type": "string", "nullable": true },
+          "reimbursable_parts": { "type": "string", "nullable": true, "description": "Net cost of the parts somebody other than us paid for" },
+          "at": { "type": "string", "format": "date-time", "nullable": true },
+          "by": { "allOf": [{ "$ref": "#/components/schemas/User" }], "nullable": true }
         }
       },
       "DailyPayLineResource": {
         "type": "object",
+        "description": "One store's share of a payment.",
         "properties": {
           "id": { "type": "integer" },
           "daily_pay_entry_id": { "type": "integer" },
-          "technician_id": { "type": "integer" },
-          "technician": { "type": "object", "nullable": true, "description": "Technician object (includes category)." },
-          "store_id": { "type": "integer" },
+          "daily_pay_payment_id": { "type": "integer" },
+          "technician_id": { "type": "integer", "description": "Always the same as the payment's payee; denormalised so store/payee filters stay one join deep." },
+          "technician": { "allOf": [{ "$ref": "#/components/schemas/Technician" }], "nullable": true },
+          "store_id": { "type": "integer", "nullable": true },
+          "other_store": { "type": "string", "nullable": true },
           "store": {
             "type": "object",
             "nullable": true,
@@ -4278,144 +4936,122 @@
               "store_number": { "type": "string" }
             }
           },
-          "total_working_hours": { "type": "string", "nullable": true, "example": "8.50" },
-          "gas": { "type": "string", "nullable": true, "example": "25.00" },
-          "invoices": { "type": "string", "nullable": true, "example": "150.00" },
-          "hourly_payment_rate": { "type": "string", "nullable": true, "example": "18.0000" },
-          "money_owed": { "type": "string", "nullable": true, "example": "153.00" },
-          "travel_time": { "type": "string", "nullable": true, "example": "1.50" },
-          "total_break_time": { "type": "string", "nullable": true, "example": "0.50" },
-          "ticket_issues": {
-            "type": "array",
+          "total_working_hours": { "type": "string", "nullable": true },
+          "travel_time": { "type": "string", "nullable": true },
+          "total_break_time": { "type": "string", "nullable": true },
+          "parts_run_time": { "type": "string", "nullable": true },
+          "hours_overridden": {
+            "type": "boolean",
+            "description": "True when the hours above were supplied rather than gathered. recalculate leaves such a line's hours untouched."
+          },
+          "gas": { "type": "string", "nullable": true },
+          "lump_sum": { "type": "string", "nullable": true },
+          "hourly_payment_rate": { "type": "string", "nullable": true },
+          "money_owed": { "type": "string", "nullable": true },
+          "gathered": { "$ref": "#/components/schemas/DailyPayGathered" },
+          "line_total": {
+            "type": "string",
             "nullable": true,
-            "description": "Full linked ticket issue details with all relations.",
+            "description": "What this store cost: labour (or its lump sum) + gas + money owed + the parts attributed to it."
+          },
+          "ticket_issues": { "type": "array", "nullable": true, "items": { "type": "object" } },
+          "notes": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/Note" } },
+          "attachments": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/Attachment" } },
+          "created_by": { "type": "integer", "nullable": true },
+          "creator": { "allOf": [{ "$ref": "#/components/schemas/User" }], "nullable": true },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "DailyPayPaymentResource": {
+        "type": "object",
+        "description": "One payment to one payee, covering however many stores.",
+        "properties": {
+          "id": { "type": "integer" },
+          "daily_pay_entry_id": { "type": "integer" },
+          "technician_id": { "type": "integer" },
+          "technician": { "allOf": [{ "$ref": "#/components/schemas/Technician" }], "nullable": true },
+          "hourly_payment_rate": { "type": "string", "nullable": true },
+          "lump_sum": { "type": "string", "nullable": true },
+          "gas": { "type": "string", "nullable": true },
+          "money_owed": { "type": "string", "nullable": true, "description": "NOT the total — an optional extra we also owe them." },
+          "gathered": { "$ref": "#/components/schemas/DailyPayGathered" },
+          "lines_total": { "type": "string", "nullable": true, "description": "Sum of the line totals. A per-store roll-up for display; total_amount is the payable figure." },
+          "total_amount": {
+            "type": "string",
+            "nullable": true,
+            "description": "The payable figure: labour (or the payment's lump sum) + line gas and money owed + payment gas and money owed + the reimbursable parts, counted once at payment level."
+          },
+          "aggregation_warnings": {
+            "type": "array",
+            "description": "What the gather could not make sense of. Nothing here blocks the pay sheet; a person decides. Codes include overlapping_entries, entry_outside_date, part_usage_spans_stores, already_claimed_same_date, claimed_on_other_entry, and the attendance data warnings (incomplete_pair, inverted_pair, implausible_pair).",
             "items": {
               "type": "object",
               "properties": {
-                "id": { "type": "integer" },
-                "ticket_id": { "type": "integer" },
-                "ticket": {
-                  "type": "object",
-                  "nullable": true,
-                  "properties": {
-                    "id": { "type": "integer" },
-                    "store_id": { "type": "integer" },
-                    "store": {
-                      "type": "object",
-                      "nullable": true,
-                      "properties": {
-                        "id": { "type": "integer" },
-                        "store_number": { "type": "string" }
-                      }
-                    },
-                    "created_by": { "type": "integer", "nullable": true },
-                    "creator": {
-                      "type": "object",
-                      "nullable": true,
-                      "properties": {
-                        "id": { "type": "integer" },
-                        "name": { "type": "string" },
-                        "email": { "type": "string" }
-                      }
-                    }
-                  }
-                },
-                "issue_id": { "type": "integer", "nullable": true },
-                "issue": {
-                  "type": "object",
-                  "nullable": true,
-                  "properties": {
-                    "id": { "type": "integer" },
-                    "title": { "type": "string" },
-                    "description": { "type": "string", "nullable": true },
-                    "created_by": { "type": "integer", "nullable": true },
-                    "creator": {
-                      "type": "object",
-                      "nullable": true,
-                      "properties": {
-                        "id": { "type": "integer" },
-                        "name": { "type": "string" },
-                        "email": { "type": "string" }
-                      }
-                    }
-                  }
-                },
-                "other_title": { "type": "string", "nullable": true },
-                "priority": { "type": "string" },
-                "description": { "type": "string", "nullable": true },
-                "status": { "type": "string" },
-                "technicians": {
-                  "type": "array",
-                  "nullable": true,
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": { "type": "integer" },
-                      "name": { "type": "string" },
-                      "created_by": { "type": "integer", "nullable": true },
-                      "creator": {
-                        "type": "object",
-                        "nullable": true,
-                        "properties": {
-                          "id": { "type": "integer" },
-                          "name": { "type": "string" },
-                          "email": { "type": "string" }
-                        }
-                      }
-                    }
-                  }
-                },
-                "created_by": { "type": "integer", "nullable": true },
-                "creator": {
-                  "type": "object",
-                  "nullable": true,
-                  "properties": {
-                    "id": { "type": "integer" },
-                    "name": { "type": "string" },
-                    "email": { "type": "string" }
-                  }
-                },
-                "created_at": { "type": "string", "format": "date-time" },
-                "updated_at": { "type": "string", "format": "date-time" }
+                "code": { "type": "string" },
+                "context": { "type": "object" }
               }
             }
           },
-          "notes": {
-            "type": "array",
-            "nullable": true,
-            "items": { "$ref": "#/components/schemas/Note" }
-          },
-          "attachments": {
-            "type": "array",
-            "nullable": true,
-            "items": { "$ref": "#/components/schemas/Attachment" }
-          },
+          "lines": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/DailyPayLineResource" } },
+          "notes": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/Note" } },
+          "attachments": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/Attachment" } },
           "created_by": { "type": "integer", "nullable": true },
-          "creator": {
+          "creator": { "allOf": [{ "$ref": "#/components/schemas/User" }], "nullable": true },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "DailyPayEntryResource": {
+        "type": "object",
+        "properties": {
+          "data": {
             "type": "object",
-            "nullable": true,
             "properties": {
               "id": { "type": "integer" },
-              "name": { "type": "string" },
-              "email": { "type": "string" }
+              "date": { "type": "string", "format": "date" },
+              "payments": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/DailyPayPaymentResource" } },
+              "total_amount": { "type": "string", "nullable": true, "description": "Sum of every payment's total_amount." },
+              "revisions": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/DailyPayEntryRevisionResource" } },
+              "created_by": { "type": "integer", "nullable": true },
+              "creator": { "allOf": [{ "$ref": "#/components/schemas/User" }], "nullable": true },
+              "created_at": { "type": "string", "format": "date-time" },
+              "updated_at": { "type": "string", "format": "date-time" }
             }
-          },
+          }
+        }
+      },
+      "DailyPayEntrySummary": {
+        "type": "object",
+        "description": "List view: payments and their money, without lines, notes, attachments or revisions.",
+        "properties": {
+          "id": { "type": "integer" },
+          "date": { "type": "string", "format": "date" },
+          "payments": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/DailyPayPaymentResource" } },
+          "total_amount": { "type": "string", "nullable": true },
+          "created_by": { "type": "integer", "nullable": true },
+          "creator": { "allOf": [{ "$ref": "#/components/schemas/User" }], "nullable": true },
           "created_at": { "type": "string", "format": "date-time" },
           "updated_at": { "type": "string", "format": "date-time" }
         }
       },
       "DailyPayEntryRevisionResource": {
         "type": "object",
-        "description": "A snapshot of the entry's full state immediately before an edit was made.",
+        "description": "A snapshot of the entry's full state immediately before an edit.",
         "properties": {
           "id": { "type": "integer" },
           "daily_pay_entry_id": { "type": "integer" },
           "snapshot": {
             "type": "object",
-            "description": "Full DailyPayEntryResource as it existed before this edit, stored as JSON."
+            "description": "The entry as it stood before this edit, stored as JSON. Read schema_version before rendering it."
           },
-          "edited_by": { "type": "integer", "nullable": true, "description": "ID of the user who performed the edit." },
-          "created_at": { "type": "string", "format": "date-time", "description": "When the edit occurred." }
+          "schema_version": {
+            "type": "integer",
+            "enum": [1, 2],
+            "description": "1 = the old two-level shape {date, lines: [...]}, written before payments existed. 2 = {date, payments: [{..., lines: [...]}]}. Snapshots are never rewritten, so both shapes exist in history."
+          },
+          "edited_by": { "type": "integer", "nullable": true },
+          "created_at": { "type": "string", "format": "date-time" }
         }
       },
       "Priority": {
@@ -5133,6 +5769,53 @@
             "format": "date-time",
             "nullable": true
           },
+          "payment": {
+            "allOf": [{ "$ref": "#/components/schemas/PaymentState" }],
+            "nullable": true,
+            "description": "Whether these hours have been settled through a pay sheet. Null when the claims were not loaded."
+          },
+          "start_travel": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Start of a travel leg (e.g. depot to store, or store to store)"
+          },
+          "end_travel": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "durations": {
+            "type": "object",
+            "description": "Derived from the clock pairs, never stored. `work` is net: break, parts-run and travel are merged and subtracted, but only the portion falling inside the clock window. The other three are reported at full recorded length. Bad data (a half-set pair, an end before its start, a pair over 24h) contributes zero or is clamped, and is reported in `warnings` rather than raising an error.",
+            "properties": {
+              "minutes": {
+                "type": "object",
+                "description": "Authoritative figures, in whole minutes",
+                "properties": {
+                  "work": { "type": "integer" },
+                  "travel": { "type": "integer" },
+                  "break": { "type": "integer" },
+                  "parts_run": { "type": "integer" }
+                }
+              },
+              "hours": {
+                "type": "object",
+                "description": "The same figures rounded to 2dp for display",
+                "properties": {
+                  "work": { "type": "number" },
+                  "travel": { "type": "number" },
+                  "break": { "type": "number" },
+                  "parts_run": { "type": "number" }
+                }
+              },
+              "warnings": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "e.g. incomplete_pair:work, inverted_pair:travel, implausible_pair:work"
+              }
+            }
+          },
           "start_parts_run": {
             "type": "string",
             "format": "date-time",
@@ -5189,6 +5872,171 @@
           }
         }
       },
+      "PaymentStatus": {
+        "type": "object",
+        "description": "Whether a record that costs somebody money has been settled through a daily pay sheet. Being on a sheet IS being paid — there is no separate \"money sent\" step. Derived on read from the pay sheets themselves, so it can never disagree with them.",
+        "properties": {
+          "value": {
+            "type": "string",
+            "enum": ["unpaid", "paid", "not_payable"],
+            "description": "`unpaid` — owed, not yet on a pay sheet. `paid` — covered by one. `not_payable` — nothing for anyone to be paid back: a part we bought ourselves, or a record marked mistaken."
+          },
+          "label": { "type": "string" }
+        }
+      },
+      "PaymentClaim": {
+        "type": "object",
+        "description": "One payment that has counted this record.",
+        "properties": {
+          "daily_pay_payment_id": { "type": "integer" },
+          "daily_pay_entry_id": { "type": "integer" },
+          "daily_pay_line_id": { "type": "integer", "nullable": true, "description": "The store line it was attributed to, or null when it could not be pinned to one store." },
+          "date": { "type": "string", "format": "date", "nullable": true },
+          "technician_id": { "type": "integer" },
+          "technician": { "allOf": [{ "$ref": "#/components/schemas/Technician" }], "nullable": true },
+          "amount": { "type": "string", "description": "Part usages only: what was reimbursed for this receipt." },
+          "minutes": {
+            "type": "object",
+            "description": "Attendance entries only: the minutes this payment counted.",
+            "properties": {
+              "work": { "type": "integer" },
+              "travel": { "type": "integer" },
+              "break": { "type": "integer" },
+              "parts_run": { "type": "integer" }
+            }
+          }
+        }
+      },
+      "PaymentState": {
+        "type": "object",
+        "description": "A record’s payment position: its status, and which payments settled it.",
+        "properties": {
+          "status": { "$ref": "#/components/schemas/PaymentStatus" },
+          "payments": { "type": "array", "items": { "$ref": "#/components/schemas/PaymentClaim" } }
+        }
+      },
+      "PaginationLinks": {
+        "type": "object",
+        "description": "Standard Laravel paginator links",
+        "properties": {
+          "first": { "type": "string", "nullable": true },
+          "last": { "type": "string", "nullable": true },
+          "prev": { "type": "string", "nullable": true },
+          "next": { "type": "string", "nullable": true }
+        }
+      },
+      "PaginationMeta": {
+        "type": "object",
+        "description": "Standard Laravel paginator meta",
+        "properties": {
+          "current_page": { "type": "integer" },
+          "from": { "type": "integer", "nullable": true },
+          "last_page": { "type": "integer" },
+          "path": { "type": "string" },
+          "per_page": { "type": "integer" },
+          "to": { "type": "integer", "nullable": true },
+          "total": { "type": "integer" },
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "url": { "type": "string", "nullable": true },
+                "label": { "type": "string" },
+                "active": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      },
+      "StorageLocation": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string" },
+          "code": { "type": "string", "nullable": true },
+          "address": { "type": "string", "nullable": true },
+          "notes": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/Note" } },
+          "attachments": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/Attachment" } },
+          "created_by": { "type": "integer", "nullable": true },
+          "creator": { "allOf": [{ "$ref": "#/components/schemas/User" }], "nullable": true },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" },
+          "deleted_at": { "type": "string", "format": "date-time", "nullable": true }
+        }
+      },
+      "StorageLocationResource": {
+        "type": "object",
+        "properties": { "data": { "$ref": "#/components/schemas/StorageLocation" } }
+      },
+      "StockMovementLine": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "part_id": { "type": "integer" },
+          "part": { "allOf": [{ "$ref": "#/components/schemas/Part" }], "nullable": true },
+          "storage_location_id": { "type": "integer" },
+          "storage_location": { "allOf": [{ "$ref": "#/components/schemas/StorageLocation" }], "nullable": true },
+          "quantity": { "type": "string", "description": "Always a positive magnitude" },
+          "direction": { "type": "integer", "enum": [-1, 1], "description": "-1 out of the location, +1 into it" },
+          "signed_quantity": { "type": "string", "description": "quantity × direction — what this line contributes to the balance" },
+          "unit_cost": { "type": "string", "nullable": true },
+          "total_cost": { "type": "string", "nullable": true }
+        }
+      },
+      "StockMovement": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "moved_at": { "type": "string", "format": "date-time" },
+          "type": {
+            "type": "object",
+            "properties": {
+              "value": { "type": "string", "enum": ["purchase", "draw", "return", "transfer_out", "transfer_in", "adjustment", "initial_count", "reversal"] },
+              "label": { "type": "string" }
+            }
+          },
+          "storage_location_id": { "type": "integer", "nullable": true },
+          "storage_location": { "allOf": [{ "$ref": "#/components/schemas/StorageLocation" }], "nullable": true },
+          "paid_by": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "value": { "type": "string", "enum": ["us", "technician"] },
+              "label": { "type": "string" }
+            }
+          },
+          "paid_by_technician_id": { "type": "integer", "nullable": true },
+          "paid_by_technician": { "allOf": [{ "$ref": "#/components/schemas/Technician" }], "nullable": true },
+          "body": { "type": "string", "nullable": true },
+          "part_usage_id": { "type": "integer", "nullable": true, "description": "Set when this movement was generated by a part usage rather than recorded by hand" },
+          "reverses_stock_movement_id": { "type": "integer", "nullable": true },
+          "mistaken": { "type": "boolean", "description": "Display only — flagged movements still count toward the balance, because the reversal is what corrects it" },
+          "lines": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/StockMovementLine" } },
+          "total_cost": { "type": "string", "nullable": true },
+          "notes": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/Note" } },
+          "attachments": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/Attachment" } },
+          "created_by": { "type": "integer", "nullable": true },
+          "creator": { "allOf": [{ "$ref": "#/components/schemas/User" }], "nullable": true },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "StockMovementResource": {
+        "type": "object",
+        "properties": { "data": { "$ref": "#/components/schemas/StockMovement" } }
+      },
+      "StockBalance": {
+        "type": "object",
+        "properties": {
+          "part_id": { "type": "integer" },
+          "part": { "allOf": [{ "$ref": "#/components/schemas/Part" }], "nullable": true },
+          "storage_location_id": { "type": "integer" },
+          "storage_location": { "allOf": [{ "$ref": "#/components/schemas/StorageLocation" }], "nullable": true },
+          "quantity": { "type": "string", "description": "May be negative when a reversal was applied after the stock had been consumed" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
       "PartUsage": {
         "type": "object",
         "properties": {
@@ -5206,12 +6054,74 @@
             ],
             "nullable": true
           },
+          "quantity": {
+            "type": "string",
+            "description": "Decimal string (2 places)"
+          },
+          "unit_cost": {
+            "type": "string",
+            "description": "Decimal string (4 places)"
+          },
           "cost": {
             "type": "string",
-            "description": "Decimal string (2 places), e.g. \"49.99\""
+            "description": "GROSS total outlay = quantity × unit_cost, as a decimal string (2 places), e.g. \"49.99\". This is the figure the part_cost_single_gt / part_cost_total_gt ticket filters sum. Use net_cost for the after-returns figure."
+          },
+          "net_quantity": {
+            "type": "string",
+            "description": "quantity − returned_quantity: how many were actually consumed"
+          },
+          "net_cost": {
+            "type": "string",
+            "description": "What the payer is really out of pocket once returns are taken off. This, not `cost`, is what a daily pay reimburses."
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "value": { "type": "string", "enum": ["purchased", "from_storage"] },
+              "label": { "type": "string" }
+            }
+          },
+          "paid_by": {
+            "type": "object",
+            "properties": {
+              "value": { "type": "string", "enum": ["us", "technician"] },
+              "label": { "type": "string" }
+            }
+          },
+          "reimbursable": {
+            "type": "boolean",
+            "description": "True when someone other than us paid and is owed the money back"
+          },
+          "paid_by_technician_id": { "type": "integer", "nullable": true },
+          "paid_by_technician": {
+            "allOf": [{ "$ref": "#/components/schemas/Technician" }],
+            "nullable": true
+          },
+          "storage_location_id": { "type": "integer", "nullable": true },
+          "storage_location": {
+            "allOf": [{ "$ref": "#/components/schemas/StorageLocation" }],
+            "nullable": true
+          },
+          "returned_quantity": { "type": "string" },
+          "returned_to_storage_location_id": { "type": "integer", "nullable": true },
+          "returned_to_storage_location": {
+            "allOf": [{ "$ref": "#/components/schemas/StorageLocation" }],
+            "nullable": true
+          },
+          "stock_movement_ids": {
+            "type": "array",
+            "nullable": true,
+            "items": { "type": "integer" },
+            "description": "The movements this usage generated in the stock ledger, if any"
+          },
+          "payment": {
+            "allOf": [{ "$ref": "#/components/schemas/PaymentState" }],
+            "nullable": true,
+            "description": "Whether whoever paid for this has had it back through a pay sheet. A part we bought ourselves reads as not_payable — there is nobody to reimburse."
           },
           "mistaken": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Flagging a usage as a mistake puts any stock it moved back, by writing reversal movements. The originals are left exactly as recorded."
           },
           "attachments": {
             "type": "array",
@@ -5577,6 +6487,20 @@
           },
           "status": {
             "$ref": "#/components/schemas/IssueStatus"
+          },
+          "payment": {
+            "type": "object",
+            "nullable": true,
+            "description": "Whether everything this issue costs anybody is on a pay sheet yet. Anything still owed dominates, so the issue reads as unpaid until the last of its payables is settled. Null when the records it reads were not loaded.",
+            "properties": {
+              "status": { "$ref": "#/components/schemas/PaymentStatus" },
+              "daily_pay_line_ids": {
+                "type": "array",
+                "nullable": true,
+                "items": { "type": "integer" },
+                "description": "The pay lines that cover this issue."
+              }
+            }
           },
           "parent_id": {
             "type": "integer",

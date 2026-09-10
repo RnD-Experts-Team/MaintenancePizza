@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AttendanceEntry;
+use App\Models\DailyPayPayment;
 use App\Models\Diagnosis;
 use App\Models\PartUsage;
 use App\Models\PayEntry;
@@ -26,6 +27,8 @@ class WorkflowRecordService
         'end_break',
         'start_parts_run',
         'end_parts_run',
+        'start_travel',
+        'end_travel',
     ];
 
     private const PAY_FIELDS = [
@@ -42,6 +45,8 @@ class WorkflowRecordService
         private AttachmentService $attachments,
         private CatalogService $catalog,
         private NoteService $notes,
+        private StockService $stock,
+        private StorageLocationService $storageLocations,
     ) {
     }
 
@@ -51,6 +56,34 @@ class WorkflowRecordService
      * @var list<string>
      */
     private const NOTE_LOADS = ['creator', 'attachments.creator', 'notes.creator', 'notes.attachments.creator'];
+
+    /**
+     * Everything presentAttendance() reads, beyond the technician and issues.
+     * The claims are what the payment status is derived from.
+     *
+     * @var list<string>
+     */
+    private const ATTENDANCE_LOADS = [
+        'dailyPayPayments.entry',
+        'dailyPayPayments.technician',
+        ...self::NOTE_LOADS,
+    ];
+
+    /**
+     * Everything presentPartUsage() reads, beyond the ticket issues.
+     *
+     * @var list<string>
+     */
+    private const PART_USAGE_LOADS = [
+        'part',
+        'dailyPayPayments.entry',
+        'dailyPayPayments.technician',
+        'paidByTechnician',
+        'storageLocation',
+        'returnedToStorageLocation',
+        'stockMovements',
+        ...self::NOTE_LOADS,
+    ];
 
     // ---------------------------------------------------------------- Diagnosis
 
@@ -88,13 +121,17 @@ class WorkflowRecordService
     // --------------------------------------------------------------- Attendance
 
     /**
-     * @param  array<string, mixed>  $data  Includes technician_id, ticket_issue_ids, and clock fields.
+     * The issues may belong to more than one ticket: a technician drives out
+     * once and works several tickets at the same store.
+     *
+     * @param  array<string, mixed>  $data  Includes technician_id, ticket_issue_ids, clock fields and optional notes.
      * @param  array<int, UploadedFile>  $files
+     * @param  array<int, array<int, UploadedFile>>  $noteFiles  noteIndex → files
      * @return array<string, mixed>
      */
-    public function createAttendance(array $data, array $files): array
+    public function createAttendance(array $data, array $files, array $noteFiles = []): array
     {
-        $entry = DB::transaction(function () use ($data, $files) {
+        $entry = DB::transaction(function () use ($data, $files, $noteFiles) {
             $entry = new AttendanceEntry(array_merge(
                 ['technician_id' => $data['technician_id']],
                 array_intersect_key($data, array_flip(self::CLOCKS)),
@@ -105,10 +142,14 @@ class WorkflowRecordService
             $entry->ticketIssues()->attach($data['ticket_issue_ids']);
             $this->attachments->store($entry, $files);
 
+            foreach ($data['notes'] ?? [] as $i => $note) {
+                $this->notes->store($entry, $note['body'], $note['type'] ?? null, $noteFiles[$i] ?? []);
+            }
+
             return $entry;
         });
 
-        return $this->presentAttendance($entry->load(['technician', 'ticketIssues', ...self::NOTE_LOADS]));
+        return $this->presentAttendance($entry->load(['technician', 'ticketIssues', ...self::ATTENDANCE_LOADS]));
     }
 
     /**
@@ -118,40 +159,81 @@ class WorkflowRecordService
     {
         $entry->update(['mistaken' => true]);
 
-        return $this->presentAttendance($entry->load(['technician', ...self::NOTE_LOADS]));
+        return $this->presentAttendance($entry->load(['technician', ...self::ATTENDANCE_LOADS]));
     }
 
     // -------------------------------------------------------------- Part usage
 
     /**
-     * @param  array<int>  $ticketIssueIds
+     * $data carries ticket_issue_ids, part_id, quantity, unit_cost, source,
+     * paid_by and the optional storage/return fields.
+     *
+     * `cost` is computed here, once, as quantity * unit_cost, and is the GROSS
+     * outlay — TicketService's part_cost_* filters sum this column, so it must
+     * never become net-of-returns. Round once at write; never re-derive on
+     * read, or a presenter will disagree with the stored value.
+     *
+     * Drawing from storage moves stock inside this same transaction, so a draw
+     * with nothing on the shelf rolls the part usage back with it: the caller
+     * gets a 422 and no row is created.
+     *
+     * @param  array<string, mixed>  $data
      * @param  array<int, UploadedFile>  $files
+     * @param  array<int, array<int, UploadedFile>>  $noteFiles  noteIndex → files
      * @return array<string, mixed>
      */
-    public function createPartUsage(array $ticketIssueIds, int $partId, float|string $cost, array $files): array
+    public function createPartUsage(array $data, array $files, array $noteFiles = []): array
     {
-        $usage = DB::transaction(function () use ($ticketIssueIds, $partId, $cost, $files) {
-            $usage = new PartUsage(['part_id' => $partId, 'cost' => $cost]);
+        $usage = DB::transaction(function () use ($data, $files, $noteFiles) {
+            $quantity = (string) $data['quantity'];
+            $unitCost = (string) $data['unit_cost'];
+
+            $usage = new PartUsage([
+                'part_id' => $data['part_id'],
+                'quantity' => $quantity,
+                'unit_cost' => $unitCost,
+                'cost' => bcmul($quantity, $unitCost, 2),
+                'source' => $data['source'],
+                'paid_by' => $data['paid_by'],
+                'paid_by_technician_id' => $data['paid_by_technician_id'] ?? null,
+                'storage_location_id' => $data['storage_location_id'] ?? null,
+                'returned_quantity' => $data['returned_quantity'] ?? 0,
+                'returned_to_storage_location_id' => $data['returned_to_storage_location_id'] ?? null,
+            ]);
             $usage->created_by = Auth::id();
             $usage->save();
 
-            $usage->ticketIssues()->attach($ticketIssueIds);
+            $usage->ticketIssues()->attach($data['ticket_issue_ids']);
             $this->attachments->store($usage, $files);
+
+            foreach ($data['notes'] ?? [] as $i => $note) {
+                $this->notes->store($usage, $note['body'], $note['type'] ?? null, $noteFiles[$i] ?? []);
+            }
+
+            $this->stock->drawForPartUsage($usage);
+            $this->stock->returnForPartUsage($usage);
 
             return $usage;
         });
 
-        return $this->presentPartUsage($usage->load(['part', 'ticketIssues', ...self::NOTE_LOADS]));
+        return $this->presentPartUsage($usage->load([...self::PART_USAGE_LOADS, 'ticketIssues']));
     }
 
     /**
+     * Flagging a usage as a mistake puts any stock it moved back — by writing
+     * the equal-and-opposite movements, never by editing or deleting the
+     * originals. The ledger is append-only.
+     *
      * @return array<string, mixed>
      */
     public function markPartUsageMistaken(PartUsage $usage): array
     {
-        $usage->update(['mistaken' => true]);
+        DB::transaction(function () use ($usage) {
+            $usage->update(['mistaken' => true]);
+            $this->stock->reverseForPartUsage($usage);
+        });
 
-        return $this->presentPartUsage($usage->load(['part', ...self::NOTE_LOADS]));
+        return $this->presentPartUsage($usage->load(self::PART_USAGE_LOADS));
     }
 
     // --------------------------------------------------------------- Pay entry
@@ -261,6 +343,13 @@ class WorkflowRecordService
             'end_break' => $entry->end_break,
             'start_parts_run' => $entry->start_parts_run,
             'end_parts_run' => $entry->end_parts_run,
+            'start_travel' => $entry->start_travel,
+            'end_travel' => $entry->end_travel,
+            // Derived, never stored. Minutes are authoritative; hours are the
+            // same figure rounded once for display.
+            'durations' => $this->presentDurations($entry),
+            // Whether these hours have been settled through a pay sheet.
+            'payment' => $this->presentPaymentStatus($entry),
             'mistaken' => $entry->mistaken,
             'attachments' => $this->presentAttachments($entry),
             'notes' => $this->notes->presentMany($entry),
@@ -285,7 +374,41 @@ class WorkflowRecordService
             'part' => $usage->relationLoaded('part') && $usage->part
                 ? $this->catalog->presentPart($usage->part)
                 : null,
+            'quantity' => $usage->quantity,
+            'unit_cost' => $usage->unit_cost,
+            // GROSS outlay (quantity * unit_cost). net_cost is what the payer
+            // is actually out of pocket once returns are taken off; only that
+            // one is reimbursed.
             'cost' => $usage->cost,
+            'net_quantity' => $usage->netQuantity(),
+            'net_cost' => $usage->netCost(),
+            'source' => [
+                'value' => $usage->source->value,
+                'label' => $usage->source->label(),
+            ],
+            'paid_by' => [
+                'value' => $usage->paid_by->value,
+                'label' => $usage->paid_by->label(),
+            ],
+            'reimbursable' => $usage->isReimbursable(),
+            'paid_by_technician_id' => $usage->paid_by_technician_id,
+            'paid_by_technician' => $usage->relationLoaded('paidByTechnician') && $usage->paidByTechnician
+                ? $this->catalog->presentTechnician($usage->paidByTechnician)
+                : null,
+            'storage_location_id' => $usage->storage_location_id,
+            'storage_location' => $usage->relationLoaded('storageLocation') && $usage->storageLocation
+                ? $this->storageLocations->present($usage->storageLocation)
+                : null,
+            'returned_quantity' => $usage->returned_quantity,
+            'returned_to_storage_location_id' => $usage->returned_to_storage_location_id,
+            'returned_to_storage_location' => $usage->relationLoaded('returnedToStorageLocation') && $usage->returnedToStorageLocation
+                ? $this->storageLocations->present($usage->returnedToStorageLocation)
+                : null,
+            'stock_movement_ids' => $usage->relationLoaded('stockMovements')
+                ? $usage->stockMovements->pluck('id')->all()
+                : null,
+            // Whether whoever paid has had it back through a pay sheet.
+            'payment' => $this->presentPaymentStatus($usage),
             'mistaken' => $usage->mistaken,
             'attachments' => $this->presentAttachments($usage),
             'notes' => $this->notes->presentMany($usage),
@@ -349,6 +472,81 @@ class WorkflowRecordService
                 : null,
             'created_at' => $warranty->created_at,
             'updated_at' => $warranty->updated_at,
+        ];
+    }
+
+    /**
+     * Whether this record has been settled through a pay sheet, and which
+     * payments did it. Being on a sheet IS being paid.
+     *
+     * Derived from the pay sheets themselves, so it can never disagree with
+     * them. Null when the claims are not loaded, like every other relation.
+     *
+     * @param  AttendanceEntry|PartUsage  $record
+     * @return array<string, mixed>|null
+     */
+    private function presentPaymentStatus($record): ?array
+    {
+        $status = $record->paymentStatus();
+
+        if ($status === null) {
+            return null;
+        }
+
+        $payments = $record->relationLoaded('dailyPayPayments')
+            ? $record->dailyPayPayments->map(function (DailyPayPayment $payment) use ($record) {
+                $pivot = $payment->pivot;
+
+                $presented = [
+                    'daily_pay_payment_id' => $payment->id,
+                    'daily_pay_entry_id' => $payment->daily_pay_entry_id,
+                    'daily_pay_line_id' => $pivot->daily_pay_line_id,
+                    'date' => $payment->relationLoaded('entry') && $payment->entry
+                        ? $payment->entry->date->toDateString()
+                        : null,
+                    'technician_id' => $payment->technician_id,
+                    'technician' => $payment->relationLoaded('technician') && $payment->technician
+                        ? $this->catalog->presentTechnician($payment->technician)
+                        : null,
+                ];
+
+                // A reimbursed receipt carries the money it was allowed; hours
+                // carry the minutes that were counted.
+                return $record instanceof PartUsage
+                    // Pivot columns carry no casts, so the money is formatted
+                    // here to match every other decimal the API emits.
+                    ? $presented + ['amount' => number_format((float) $pivot->amount, 2, '.', '')]
+                    : $presented + ['minutes' => [
+                        'work' => (int) $pivot->work_minutes,
+                        'travel' => (int) $pivot->travel_minutes,
+                        'break' => (int) $pivot->break_minutes,
+                        'parts_run' => (int) $pivot->parts_run_minutes,
+                    ]];
+            })->all()
+            : [];
+
+        return [
+            'status' => ['value' => $status->value, 'label' => $status->label()],
+            'payments' => $payments,
+        ];
+    }
+
+    /**
+     * Both units of each attendance bucket, plus whatever durations() could
+     * not make sense of. Nothing here is stored — see AttendanceEntry::durations().
+     *
+     * @return array<string, mixed>
+     */
+    private function presentDurations(AttendanceEntry $entry): array
+    {
+        $d = $entry->durations();
+        $warnings = $d['warnings'];
+        unset($d['warnings']);
+
+        return [
+            'minutes' => $d,
+            'hours' => array_map(fn(int $m) => round($m / 60, 2), $d),
+            'warnings' => $warnings,
         ];
     }
 

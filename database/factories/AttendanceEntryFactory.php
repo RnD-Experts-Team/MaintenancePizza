@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\AttendanceEntry;
+use App\Models\Technician;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -11,14 +12,19 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 class AttendanceEntryFactory extends Factory
 {
     /**
-     * Define the model's default state.
-     *
      * @return array<string, mixed>
      */
     public function definition(): array
     {
         return [
-            //
+            'technician_id' => Technician::factory(),
+            'start_clock' => null,
+            'end_clock' => null,
+            'start_break' => null,
+            'end_break' => null,
+            'start_parts_run' => null,
+            'end_parts_run' => null,
+            'mistaken' => false,
         ];
     }
 }

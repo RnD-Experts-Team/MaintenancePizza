@@ -2,14 +2,16 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\ValidatesAttendanceEntry;
 use App\Services\TicketIssueService;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Support\Facades\DB;
 
 class StoreAttendanceEntryRequest extends FormRequest
 {
+    use ValidatesAttendanceEntry;
+
     public function authorize(): bool
     {
         return true;
@@ -20,46 +22,22 @@ class StoreAttendanceEntryRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [
-            'ticket_issue_ids' => ['required', 'array', 'min:1'],
-            'ticket_issue_ids.*' => ['integer'],
-            'technician_id' => ['required', 'integer', 'exists:technicians,id'],
-            'start_clock' => ['nullable', 'date'],
-            'end_clock' => ['nullable', 'date'],
-            'start_break' => ['nullable', 'date'],
-            'end_break' => ['nullable', 'date'],
-            'start_parts_run' => ['nullable', 'date'],
-            'end_parts_run' => ['nullable', 'date'],
-            'files' => ['nullable', 'array'],
-            'files.*' => ['file', 'max:10240'],
-        ];
+        return $this->attendanceRules();
     }
 
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
             $issueIds = (array) $this->input('ticket_issue_ids', []);
+            $issues = app(TicketIssueService::class);
 
-            app(TicketIssueService::class)
-                ->validateIssuesBelongToTicket($validator, $this->route('ticket'), $issueIds);
+            // One visit can cover issues on several tickets, so the rule is
+            // "touches this ticket", not "belongs entirely to it". Every id
+            // must still be a real issue.
+            $issues->validateAtLeastOneIssueBelongsToTicket($validator, $this->route('ticket'), $issueIds);
+            $issues->validateIssuesExist($validator, $issueIds);
 
-            $technicianId = $this->input('technician_id');
-            if (! $technicianId || empty($issueIds)) {
-                return;
-            }
-
-            // The attending technician must be assigned to at least one target issue.
-            $attached = DB::table('technician_ticket_issue')
-                ->where('technician_id', $technicianId)
-                ->whereIn('ticket_issue_id', $issueIds)
-                ->exists();
-
-            if (! $attached) {
-                $validator->errors()->add(
-                    'technician_id',
-                    'The technician must be assigned to at least one of the selected issues first.'
-                );
-            }
+            $this->validateTechnicianIsOnAnIssue($validator);
         });
     }
 }

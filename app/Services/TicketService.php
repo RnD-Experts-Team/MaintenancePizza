@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Enums\IssueStatus;
+use App\Enums\PartUsagePayer;
+use App\Enums\PaymentStatus;
 use App\Enums\TicketStatus;
 use App\Enums\TicketType;
 use App\Models\Store;
@@ -389,6 +391,15 @@ class TicketService
             $query->whereIn('created_by', $creatorIds);
         }
 
+        // ?payment_statuses[]=unpaid&payment_statuses[]=paid (OR logic)
+        $paymentStatusValues = array_filter((array) $request->query('payment_statuses', []));
+        $paymentStatuses = array_values(array_filter(
+            array_map(fn($v) => PaymentStatus::tryFrom((string) $v), $paymentStatusValues)
+        ));
+        if (!empty($paymentStatuses)) {
+            $this->filterByPaymentStatuses($query, $paymentStatuses);
+        }
+
         match ($request->query('trashed')) {
             'with'  => $query->withTrashed(),
             'only'  => $query->onlyTrashed(),
@@ -400,6 +411,67 @@ class TicketService
             : 'created_at';
         $dir = strtolower((string) $request->query('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
         $query->orderBy($sort, $dir);
+    }
+
+    /**
+     * Filter by whether a ticket's work has been settled through a pay sheet.
+     *
+     * A "payable" is an attendance entry, or a part usage somebody other than
+     * us paid for; mistaken records are never payable. A payable counts as paid
+     * once a daily pay payment has claimed it.
+     *
+     *   unpaid       at least one payable is still unclaimed
+     *   paid         has payables, and every one of them is claimed
+     *   not_payable  has no payables at all
+     *
+     * Mirrors PaymentStatus::rollUp(), which is what the per-record status uses,
+     * so the filter and the badge always agree.
+     *
+     * @param  Builder<Ticket>  $query
+     * @param  array<int, PaymentStatus>  $statuses
+     */
+    private function filterByPaymentStatuses(Builder $query, array $statuses): void
+    {
+        $query->where(function (Builder $outer) use ($statuses) {
+            foreach ($statuses as $status) {
+                $outer->orWhere(fn(Builder $q) => match ($status) {
+                    PaymentStatus::Unpaid => $q->whereHas('ticketIssues', fn(Builder $i) => $this->whereHasPayable($i, claimed: false)),
+                    PaymentStatus::Paid => $q
+                        ->whereHas('ticketIssues', fn(Builder $i) => $this->whereHasPayable($i, claimed: true))
+                        ->whereDoesntHave('ticketIssues', fn(Builder $i) => $this->whereHasPayable($i, claimed: false)),
+                    PaymentStatus::NotPayable => $q
+                        ->whereDoesntHave('ticketIssues', fn(Builder $i) => $this->whereHasPayable($i, claimed: true))
+                        ->whereDoesntHave('ticketIssues', fn(Builder $i) => $this->whereHasPayable($i, claimed: false)),
+                });
+            }
+        });
+    }
+
+    /**
+     * Constrain an issue query to those carrying a payable that either has been
+     * claimed by a payment, or has not.
+     *
+     * @param  Builder<TicketIssue>  $query
+     */
+    private function whereHasPayable(Builder $query, bool $claimed): void
+    {
+        $exists = $claimed ? 'whereExists' : 'whereNotExists';
+
+        $query->where(function (Builder $inner) use ($exists) {
+            $inner
+                ->whereHas('attendanceEntries', fn(Builder $a) => $a
+                    ->where('attendance_entries.mistaken', false)
+                    ->{$exists}(fn(QueryBuilder $c) => $c
+                        ->from('daily_pay_payment_attendance_entry as claim')
+                        ->whereColumn('claim.attendance_entry_id', 'attendance_entries.id')))
+                ->orWhereHas('partUsages', fn(Builder $p) => $p
+                    ->where('part_usages.mistaken', false)
+                    // Parts we bought ourselves are nobody's to be paid back.
+                    ->where('part_usages.paid_by', '!=', PartUsagePayer::Us->value)
+                    ->{$exists}(fn(QueryBuilder $c) => $c
+                        ->from('daily_pay_payment_part_usage as claim')
+                        ->whereColumn('claim.part_usage_id', 'part_usages.id')));
+        });
     }
 
     /**

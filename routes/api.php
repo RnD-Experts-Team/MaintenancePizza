@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AssignmentController;
 use App\Http\Controllers\DailyPayEntryController;
+use App\Http\Controllers\DailyPayEntryRecalculationController;
 use App\Http\Controllers\AssignmentDelayController;
 use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\AttendanceEntryController;
@@ -11,6 +12,9 @@ use App\Http\Controllers\ExportController;
 use App\Http\Controllers\NoteController;
 use App\Http\Controllers\PartUsageController;
 use App\Http\Controllers\PayEntryController;
+use App\Http\Controllers\StockBalanceController;
+use App\Http\Controllers\StockMovementController;
+use App\Http\Controllers\StorageLocationController;
 use App\Http\Controllers\TechnicianAssignmentController;
 use App\Http\Controllers\TicketCancellationController;
 use App\Http\Controllers\TicketController;
@@ -65,6 +69,38 @@ Route::middleware('auth.token.store')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
+    | Storage. Locations are a controlled catalog; movements are an append-only
+    | ledger (corrections are reversals, never edits) and stock-balances is the
+    | cached SUM(quantity * direction) over that ledger.
+    |--------------------------------------------------------------------------
+    */
+    Route::get('storage-locations', [StorageLocationController::class, 'index'])->name('storage-locations.index');
+    Route::post('storage-locations', [StorageLocationController::class, 'store'])->name('storage-locations.store');
+    Route::delete('storage-locations/{storageLocation}', [StorageLocationController::class, 'destroy'])->name('storage-locations.destroy');
+    Route::post('storage-locations/{storageLocation}/restore', [StorageLocationController::class, 'restore'])->withTrashed()->name('storage-locations.restore');
+    Route::post('storage-locations/{storageLocation}/notes', [NoteController::class, 'storageLocation'])->name('storage-locations.notes');
+    Route::post('storage-locations/{storageLocation}/attachments', [AttachmentController::class, 'storageLocation'])->name('storage-locations.attachments');
+
+    Route::get('stock-movements', [StockMovementController::class, 'index'])->name('stock-movements.index');
+    Route::post('stock-movements', [StockMovementController::class, 'store'])->name('stock-movements.store');
+    Route::get('stock-movements/{stockMovement}', [StockMovementController::class, 'show'])->name('stock-movements.show');
+    Route::post('stock-movements/{stockMovement}/mistaken', [StockMovementController::class, 'mistaken'])->name('stock-movements.mistaken');
+    Route::post('stock-movements/{stockMovement}/notes', [NoteController::class, 'stockMovement'])->name('stock-movements.notes');
+    Route::post('stock-movements/{stockMovement}/attachments', [AttachmentController::class, 'stockMovement'])->name('stock-movements.attachments');
+
+    Route::get('stock-balances', StockBalanceController::class)->name('stock-balances.index');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Cross-ticket attendance. One visit can cover issues on several tickets,
+    | so this entry point is not scoped to any of them. The ticket-nested
+    | route below stays for the ordinary single-ticket case.
+    |--------------------------------------------------------------------------
+    */
+    Route::post('attendance-entries', [AttendanceEntryController::class, 'storeGlobal'])->name('attendance.store-global');
+
+    /*
+    |--------------------------------------------------------------------------
     | Daily Pay Entries (global, not store-scoped)
     |--------------------------------------------------------------------------
     */
@@ -72,6 +108,7 @@ Route::middleware('auth.token.store')->group(function () {
     Route::post('daily-pay-entries', [DailyPayEntryController::class, 'store'])->name('daily-pay-entries.store');
     Route::get('daily-pay-entries/{dailyPayEntry}', [DailyPayEntryController::class, 'show'])->name('daily-pay-entries.show');
     Route::post('daily-pay-entries/{dailyPayEntry}/edit', [DailyPayEntryController::class, 'edit'])->name('daily-pay-entries.edit');
+    Route::post('daily-pay-entries/{dailyPayEntry}/recalculate', DailyPayEntryRecalculationController::class)->name('daily-pay-entries.recalculate');
 
     /*
     |--------------------------------------------------------------------------
