@@ -51,6 +51,8 @@ Route::middleware('auth.token.store')->group(function () {
     Route::post('parts', [CatalogController::class, 'partsStore'])->name('parts.store');
     Route::delete('parts/{part}', [CatalogController::class, 'partsDestroy'])->name('parts.destroy');
     Route::post('parts/{part}/restore', [CatalogController::class, 'partsRestore'])->withTrashed()->name('parts.restore');
+    // What we have paid for this part, and when.
+    Route::get('parts/{part}/price-history', [CatalogController::class, 'partsPriceHistory'])->name('parts.price-history');
 
     /*
     |--------------------------------------------------------------------------
@@ -109,6 +111,8 @@ Route::middleware('auth.token.store')->group(function () {
     Route::get('daily-pay-entries/{dailyPayEntry}', [DailyPayEntryController::class, 'show'])->name('daily-pay-entries.show');
     Route::post('daily-pay-entries/{dailyPayEntry}/edit', [DailyPayEntryController::class, 'edit'])->name('daily-pay-entries.edit');
     Route::post('daily-pay-entries/{dailyPayEntry}/recalculate', DailyPayEntryRecalculationController::class)->name('daily-pay-entries.recalculate');
+    // Recorded but never claimed by a payment: what we still owe, per payee.
+    Route::get('unpaid-work', [DailyPayEntryController::class, 'unpaidWork'])->name('unpaid-work');
 
     /*
     |--------------------------------------------------------------------------
@@ -118,6 +122,10 @@ Route::middleware('auth.token.store')->group(function () {
     Route::get('tickets', [TicketController::class, 'globalIndex'])->name('tickets.global');
     Route::get('tickets/analytics', [TicketController::class, 'globalAnalytics'])->name('tickets.analytics');
     Route::post('tickets', [TicketController::class, 'storeOther'])->name('tickets.store-other');
+    // Unscoped read. Declared AFTER tickets/analytics so the literal segment
+    // still wins over {ticket}. The store-scoped twin stays the canonical route;
+    // this one exists because an other_store ticket has no store to bind to.
+    Route::get('tickets/{ticket}/issues', [TicketIssueController::class, 'globalIndex'])->name('tickets.issues.global');
     Route::get('export/excel', ExportController::class)->name('export.excel')->withoutMiddleware('auth.token.store')->middleware('auth.secret.key');
 
     /*

@@ -6,6 +6,7 @@ use App\Models\DailyPayEntry;
 use App\Models\DailyPayEntryRevision;
 use App\Models\DailyPayLine;
 use App\Models\DailyPayPayment;
+use App\Models\Technician;
 use App\Models\TicketIssue;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -625,4 +626,113 @@ class DailyPayEntryService
             'updated_at' => $issue->updated_at,
         ];
     }
+
+    /**
+     * Work recorded but never claimed by a payment.
+     *
+     * Being on a pay sheet IS being paid here -- there is no separate money-sent
+     * step -- so an unclaimed record is money still owed. That was derivable per
+     * record and per issue and nowhere rolled up, so "what do we owe Ahmad"
+     * meant opening tickets until you were satisfied you had found them all.
+     *
+     * "Unclaimed" is the ABSENCE of a row in the two claim tables, not a status
+     * column -- there is no status column, and adding one would be a second
+     * source of truth for the same fact.
+     *
+     * Counts VISITS rather than hours on purpose: turning clock pairs into hours
+     * is AttendanceEntry::durations(), and a second implementation of that
+     * arithmetic in SQL would drift from the first. The gather is what turns
+     * these into money.
+     *
+     * Two aggregate queries regardless of how many technicians or records exist.
+     *
+     * @param  array<string, mixed>  $filters  technician_ids[], from, to
+     * @return array<string, mixed>
+     */
+    public function unpaidWork(array $filters = []): array
+    {
+        $technicianIds = array_filter((array) ($filters['technician_ids'] ?? []));
+        $from = $filters['from'] ?? null;
+        $to = $filters['to'] ?? null;
+
+        $hours = DB::table('attendance_entries as ae')
+            ->selectRaw('ae.technician_id')
+            ->selectRaw('COUNT(*) as entry_count')
+            ->selectRaw('MIN(ae.start_clock) as earliest')
+            ->selectRaw('MAX(ae.start_clock) as latest')
+            ->where('ae.mistaken', false)
+            // Never clocked in: nothing to pay for, and it would otherwise sit
+            // here forever as an entry that can never be settled.
+            ->whereNotNull('ae.start_clock')
+            ->whereNotExists(fn ($q) => $q
+                ->select(DB::raw(1))
+                ->from('daily_pay_payment_attendance_entry as c')
+                ->whereColumn('c.attendance_entry_id', 'ae.id'))
+            ->when($technicianIds !== [], fn ($q) => $q->whereIn('ae.technician_id', $technicianIds))
+            ->when($from, fn ($q) => $q->where('ae.start_clock', '>=', $from))
+            ->when($to, fn ($q) => $q->where('ae.start_clock', '<=', $to))
+            ->groupBy('ae.technician_id')
+            ->get()
+            ->keyBy('technician_id');
+
+        // Only usages somebody ELSE paid for are owed back -- paid_by = us is
+        // our own money and was never a debt.
+        $parts = DB::table('part_usages as pu')
+            ->selectRaw('pu.paid_by_technician_id as technician_id')
+            ->selectRaw('COUNT(*) as usage_count')
+            // Net of returns: what they are actually out of pocket, which is
+            // what the pay sheet reimburses.
+            ->selectRaw('SUM((pu.quantity - pu.returned_quantity) * pu.unit_cost) as amount')
+            ->where('pu.mistaken', false)
+            ->where('pu.paid_by', '!=', 'us')
+            ->whereNotNull('pu.paid_by_technician_id')
+            ->whereNotExists(fn ($q) => $q
+                ->select(DB::raw(1))
+                ->from('daily_pay_payment_part_usage as c')
+                ->whereColumn('c.part_usage_id', 'pu.id'))
+            ->when($technicianIds !== [], fn ($q) => $q->whereIn('pu.paid_by_technician_id', $technicianIds))
+            ->when($from, fn ($q) => $q->where('pu.created_at', '>=', $from))
+            ->when($to, fn ($q) => $q->where('pu.created_at', '<=', $to))
+            ->groupBy('pu.paid_by_technician_id')
+            ->get()
+            ->keyBy('technician_id');
+
+        $ids = collect($hours->keys())->merge($parts->keys())->unique()->filter()->values();
+        $technicians = Technician::withTrashed()->whereIn('id', $ids)->get()->keyBy('id');
+
+        $rows = $ids->map(function ($id) use ($hours, $parts, $technicians) {
+            $h = $hours->get($id);
+            $p = $parts->get($id);
+            $technician = $technicians->get($id);
+
+            return [
+                'technician_id' => (int) $id,
+                'technician' => $technician
+                    ? ['id' => $technician->id, 'name' => $technician->name]
+                    : null,
+                'unpaid_visits' => (int) ($h->entry_count ?? 0),
+                'earliest_visit' => $h->earliest ?? null,
+                'latest_visit' => $h->latest ?? null,
+                'unpaid_part_count' => (int) ($p->usage_count ?? 0),
+                'unpaid_part_amount' => number_format((float) ($p->amount ?? 0), 2, '.', ''),
+            ];
+        })
+        ->sortByDesc(fn (array $row) => $row['unpaid_visits'])
+        ->values()
+        ->all();
+
+        return [
+            'technicians' => $rows,
+            'totals' => [
+                'technicians_owed' => count($rows),
+                'unpaid_visits' => array_sum(array_column($rows, 'unpaid_visits')),
+                'unpaid_part_count' => array_sum(array_column($rows, 'unpaid_part_count')),
+                'unpaid_part_amount' => number_format(
+                    array_sum(array_map('floatval', array_column($rows, 'unpaid_part_amount'))),
+                    2, '.', ''
+                ),
+            ],
+        ];
+    }
+
 }

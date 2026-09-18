@@ -8,10 +8,14 @@ use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\TicketIssue;
 use App\Services\TicketIssueService;
+use App\Services\TicketService;
 
 class TicketIssueController extends Controller
 {
-    public function __construct(private TicketIssueService $issues) {}
+    public function __construct(
+        private TicketIssueService $issues,
+        private TicketService $tickets,
+    ) {}
 
     /**
      * List every issue of a ticket with its full workflow history.
@@ -19,6 +23,30 @@ class TicketIssueController extends Controller
     public function index(Store $store, Ticket $ticket)
     {
         return ['data' => $this->issues->index($ticket)];
+    }
+
+    /**
+     * The same listing, reached without a {store} segment.
+     *
+     * Not a convenience: a ticket created through POST /tickets carries
+     * other_store and a null store_id, so it can never bind inside the
+     * /stores/{store}/... group. Without this route those tickets can be
+     * created and then never read back.
+     */
+    public function globalIndex(Ticket $ticket)
+    {
+        // Ships the ticket alongside its issues, which the store-scoped twin
+        // does not need to: that route already told the caller which store it
+        // was, in the URL. Here there is no store segment by design, and a
+        // caller reading a ticket standalone still has to know where it is and
+        // -- for every write that follows -- its store_number, since that is
+        // the route key the rest of the API binds on.
+        $ticket->loadMissing('store', 'creator');
+
+        return [
+            'data' => $this->issues->index($ticket),
+            'ticket' => $this->tickets->present($ticket),
+        ];
     }
 
     /**

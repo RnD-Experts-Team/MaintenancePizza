@@ -92,4 +92,16 @@ class DailyPayEntryController extends Controller
 
         return [$paymentFiles, $paymentNoteFiles, $lineFiles, $lineNoteFiles];
     }
+
+    /**
+     * What has been recorded but never put on a pay sheet -- what we still owe,
+     * and whether anything fell through the cracks.
+     */
+    public function unpaidWork(Request $request): JsonResponse
+    {
+        return response()->json([
+            'data' => $this->service->unpaidWork($request->only(['technician_ids', 'from', 'to'])),
+        ]);
+    }
+
 }

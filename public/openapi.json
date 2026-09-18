@@ -992,6 +992,15 @@
         "description": "Lists tickets across every store. Supports the full filter set.",
         "parameters": [
           {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Free text across the ticket id (exact), the store number, the ticket's other_store, and its issues' other_title, description and catalog issue title. ANDs with every other filter.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "$ref": "#/components/parameters/FilterStores"
           },
           {
@@ -1032,6 +1041,26 @@
           {
             "name": "created_to",
             "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "assigned_to",
+            "in": "query",
+            "required": false,
+            "description": "Tickets carrying an issue whose (non-mistaken) assignment is dated on or before this day.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "assigned_from",
+            "in": "query",
+            "required": false,
+            "description": "Tickets carrying an issue whose (non-mistaken) assignment is dated on or after this day. Answers \"what is scheduled\", which created_from cannot.",
             "schema": {
               "type": "string",
               "format": "date"
@@ -1165,6 +1194,47 @@
         }
       }
     },
+    "/tickets/{ticket}/issues": {
+      "get": {
+        "tags": [
+          "Issue Workflow"
+        ],
+        "summary": "List all issues on a ticket, without a store segment",
+        "operationId": "listTicketIssuesGlobal",
+        "description": "Identical payload to the store-scoped route. It exists because a ticket created through POST /tickets carries other_store and a null store_id, so it can never bind inside /stores/{store}/..., and would otherwise be creatable but unreadable. Prefer the store-scoped route when you have a store. Also returns the ticket itself (including its store and store_number), because with no store segment in the URL there is no other way for a standalone reader to learn where the ticket is.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Ticket"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Issues with full history, plus the ticket",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TicketIssue"
+                      }
+                    },
+                    "ticket": {
+                      "$ref": "#/components/schemas/Ticket"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
     "/tickets/analytics": {
       "get": {
         "tags": [
@@ -1174,24 +1244,88 @@
         "operationId": "globalTicketAnalytics",
         "description": "Aggregate metrics (issue status breakdown, time-in-status durations, weekly ticket average) over the same filtered ticket set the global index would list.",
         "parameters": [
-          { "$ref": "#/components/parameters/FilterStores" },
-          { "$ref": "#/components/parameters/FilterStatuses" },
-          { "$ref": "#/components/parameters/FilterIssueIds" },
-          { "$ref": "#/components/parameters/FilterIssueStatuses" },
-          { "$ref": "#/components/parameters/FilterPriorities" },
-          { "$ref": "#/components/parameters/FilterAssignedPriorities" },
-          { "$ref": "#/components/parameters/FilterPaymentStatuses" },
-          { "$ref": "#/components/parameters/FilterTypes" },
-          { "$ref": "#/components/parameters/FilterTechnicianIds" },
-          { "$ref": "#/components/parameters/FilterCreatorIds" },
-          { "name": "created_from", "in": "query", "schema": { "type": "string", "format": "date" } },
-          { "name": "created_to", "in": "query", "schema": { "type": "string", "format": "date" } },
-          { "$ref": "#/components/parameters/FilterChangedStatuses" },
-          { "name": "changed_from", "in": "query", "schema": { "type": "string", "format": "date" } },
-          { "name": "changed_to", "in": "query", "schema": { "type": "string", "format": "date" } },
-          { "name": "part_cost_single_gt", "in": "query", "schema": { "type": "number" } },
-          { "name": "part_cost_total_gt", "in": "query", "schema": { "type": "number" } },
-          { "$ref": "#/components/parameters/Trashed" }
+          {
+            "$ref": "#/components/parameters/FilterStores"
+          },
+          {
+            "$ref": "#/components/parameters/FilterStatuses"
+          },
+          {
+            "$ref": "#/components/parameters/FilterIssueIds"
+          },
+          {
+            "$ref": "#/components/parameters/FilterIssueStatuses"
+          },
+          {
+            "$ref": "#/components/parameters/FilterPriorities"
+          },
+          {
+            "$ref": "#/components/parameters/FilterAssignedPriorities"
+          },
+          {
+            "$ref": "#/components/parameters/FilterPaymentStatuses"
+          },
+          {
+            "$ref": "#/components/parameters/FilterTypes"
+          },
+          {
+            "$ref": "#/components/parameters/FilterTechnicianIds"
+          },
+          {
+            "$ref": "#/components/parameters/FilterCreatorIds"
+          },
+          {
+            "name": "created_from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "created_to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FilterChangedStatuses"
+          },
+          {
+            "name": "changed_from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "changed_to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "part_cost_single_gt",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "part_cost_total_gt",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Trashed"
+          }
         ],
         "responses": {
           "200": {
@@ -1303,6 +1437,15 @@
         "operationId": "storeTicketIndex",
         "parameters": [
           {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Free text across the ticket id (exact), the store number, the ticket's other_store, and its issues' other_title, description and catalog issue title. ANDs with every other filter.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "$ref": "#/components/parameters/Store"
           },
           {
@@ -1370,6 +1513,26 @@
             }
           },
           {
+            "name": "assigned_to",
+            "in": "query",
+            "required": false,
+            "description": "Tickets carrying an issue whose (non-mistaken) assignment is dated on or before this day.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "assigned_from",
+            "in": "query",
+            "required": false,
+            "description": "Tickets carrying an issue whose (non-mistaken) assignment is dated on or after this day. Answers \"what is scheduled\", which created_from cannot.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
             "name": "part_cost_single_gt",
             "in": "query",
             "schema": {
@@ -1393,7 +1556,11 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "enum": ["created_at", "updated_at", "id"]
+              "enum": [
+                "created_at",
+                "updated_at",
+                "id"
+              ]
             }
           },
           {
@@ -1401,7 +1568,10 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "enum": ["asc", "desc"]
+              "enum": [
+                "asc",
+                "desc"
+              ]
             }
           },
           {
@@ -1483,24 +1653,88 @@
         "operationId": "storeTicketAnalytics",
         "description": "Aggregate metrics (issue status breakdown, time-in-status durations, weekly ticket average) over the same filtered ticket set the store-scoped index would list.",
         "parameters": [
-          { "$ref": "#/components/parameters/Store" },
-          { "$ref": "#/components/parameters/FilterStatuses" },
-          { "$ref": "#/components/parameters/FilterIssueIds" },
-          { "$ref": "#/components/parameters/FilterIssueStatuses" },
-          { "$ref": "#/components/parameters/FilterChangedStatuses" },
-          { "name": "changed_from", "in": "query", "schema": { "type": "string", "format": "date" } },
-          { "name": "changed_to", "in": "query", "schema": { "type": "string", "format": "date" } },
-          { "$ref": "#/components/parameters/FilterPriorities" },
-          { "$ref": "#/components/parameters/FilterAssignedPriorities" },
-          { "$ref": "#/components/parameters/FilterPaymentStatuses" },
-          { "$ref": "#/components/parameters/FilterTypes" },
-          { "$ref": "#/components/parameters/FilterTechnicianIds" },
-          { "$ref": "#/components/parameters/FilterCreatorIds" },
-          { "name": "created_from", "in": "query", "schema": { "type": "string", "format": "date" } },
-          { "name": "created_to", "in": "query", "schema": { "type": "string", "format": "date" } },
-          { "name": "part_cost_single_gt", "in": "query", "schema": { "type": "number" } },
-          { "name": "part_cost_total_gt", "in": "query", "schema": { "type": "number" } },
-          { "$ref": "#/components/parameters/Trashed" }
+          {
+            "$ref": "#/components/parameters/Store"
+          },
+          {
+            "$ref": "#/components/parameters/FilterStatuses"
+          },
+          {
+            "$ref": "#/components/parameters/FilterIssueIds"
+          },
+          {
+            "$ref": "#/components/parameters/FilterIssueStatuses"
+          },
+          {
+            "$ref": "#/components/parameters/FilterChangedStatuses"
+          },
+          {
+            "name": "changed_from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "changed_to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FilterPriorities"
+          },
+          {
+            "$ref": "#/components/parameters/FilterAssignedPriorities"
+          },
+          {
+            "$ref": "#/components/parameters/FilterPaymentStatuses"
+          },
+          {
+            "$ref": "#/components/parameters/FilterTypes"
+          },
+          {
+            "$ref": "#/components/parameters/FilterTechnicianIds"
+          },
+          {
+            "$ref": "#/components/parameters/FilterCreatorIds"
+          },
+          {
+            "name": "created_from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "created_to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "part_cost_single_gt",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "part_cost_total_gt",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Trashed"
+          }
         ],
         "responses": {
           "200": {
@@ -1811,14 +2045,22 @@
     },
     "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}": {
       "patch": {
-        "tags": ["Issue Workflow"],
+        "tags": [
+          "Issue Workflow"
+        ],
         "summary": "Re-point an issue at a different catalog issue",
         "operationId": "updateTicketIssue",
         "description": "Corrects which catalog issue this ticket line refers to. The only update endpoint in the service.",
         "parameters": [
-          { "$ref": "#/components/parameters/Store" },
-          { "$ref": "#/components/parameters/Ticket" },
-          { "$ref": "#/components/parameters/TicketIssue" }
+          {
+            "$ref": "#/components/parameters/Store"
+          },
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "$ref": "#/components/parameters/TicketIssue"
+          }
         ],
         "requestBody": {
           "required": true,
@@ -1826,9 +2068,14 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["issue_id"],
+                "required": [
+                  "issue_id"
+                ],
                 "properties": {
-                  "issue_id": { "type": "integer", "description": "Id of the catalog issue to point at" }
+                  "issue_id": {
+                    "type": "integer",
+                    "description": "Id of the catalog issue to point at"
+                  }
                 }
               }
             }
@@ -1839,12 +2086,18 @@
             "description": "The updated ticket issue",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/TicketIssueResource" }
+                "schema": {
+                  "$ref": "#/components/schemas/TicketIssueResource"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthenticated" },
-          "422": { "$ref": "#/components/responses/ValidationError" }
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
         }
       },
       "get": {
@@ -1960,51 +2213,22 @@
     },
     "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/wait": {
       "post": {
-        "tags": ["Issue Workflow"],
+        "tags": [
+          "Issue Workflow"
+        ],
         "summary": "Put an issue into the waiting state — records the reason",
         "operationId": "waitIssue",
         "description": "Moves the issue to `waiting` (e.g. blocked on a part or on the store). The reason is stored in `status_changes`.",
         "parameters": [
-          { "$ref": "#/components/parameters/Store" },
-          { "$ref": "#/components/parameters/Ticket" },
-          { "$ref": "#/components/parameters/TicketIssue" }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["reason"],
-                "properties": { "reason": { "type": "string" } }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "The updated ticket issue",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/TicketIssueResource" }
-              }
-            }
+          {
+            "$ref": "#/components/parameters/Store"
           },
-          "401": { "$ref": "#/components/responses/Unauthenticated" },
-          "422": { "$ref": "#/components/responses/ValidationError" }
-        }
-      }
-    },
-    "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/assigned-priority": {
-      "post": {
-        "tags": ["Issue Workflow"],
-        "summary": "Set (or clear) the dispatcher-assigned priority",
-        "operationId": "assignIssuePriority",
-        "description": "The dispatcher\u2019s own priority for the issue, kept separate from the priority it was filed at. Send null to clear it. Filterable via assigned_priorities[].",
-        "parameters": [
-          { "$ref": "#/components/parameters/Store" },
-          { "$ref": "#/components/parameters/Ticket" },
-          { "$ref": "#/components/parameters/TicketIssue" }
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "$ref": "#/components/parameters/TicketIssue"
+          }
         ],
         "requestBody": {
           "required": true,
@@ -2012,11 +2236,12 @@
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "reason"
+                ],
                 "properties": {
-                  "priority": {
-                    "type": "string",
-                    "nullable": true,
-                    "enum": ["urgent", "high", "medium", "low"]
+                  "reason": {
+                    "type": "string"
                   }
                 }
               }
@@ -2028,12 +2253,79 @@
             "description": "The updated ticket issue",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/TicketIssueResource" }
+                "schema": {
+                  "$ref": "#/components/schemas/TicketIssueResource"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthenticated" },
-          "422": { "$ref": "#/components/responses/ValidationError" }
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/assigned-priority": {
+      "post": {
+        "tags": [
+          "Issue Workflow"
+        ],
+        "summary": "Set (or clear) the dispatcher-assigned priority",
+        "operationId": "assignIssuePriority",
+        "description": "The dispatcher’s own priority for the issue, kept separate from the priority it was filed at. Send null to clear it. Filterable via assigned_priorities[].",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Store"
+          },
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "$ref": "#/components/parameters/TicketIssue"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "priority": {
+                    "type": "string",
+                    "nullable": true,
+                    "enum": [
+                      "urgent",
+                      "high",
+                      "medium",
+                      "low"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated ticket issue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketIssueResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
         }
       }
     },
@@ -2862,7 +3154,10 @@
                   },
                   "notes[0][files][]": {
                     "type": "array",
-                    "items": { "type": "string", "format": "binary" }
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
                   },
                   "files[]": {
                     "type": "array",
@@ -3096,12 +3391,18 @@
                   },
                   "source": {
                     "type": "string",
-                    "enum": ["purchased", "from_storage"],
+                    "enum": [
+                      "purchased",
+                      "from_storage"
+                    ],
                     "description": "`from_storage` draws the parts out of `storage_location_id` and writes a stock movement. If the shelf does not hold enough, the whole request fails with 422 and no part usage is created."
                   },
                   "paid_by": {
                     "type": "string",
-                    "enum": ["us", "technician"],
+                    "enum": [
+                      "us",
+                      "technician"
+                    ],
                     "description": "Anything other than `us` is reimbursable, and is what a daily pay gathers up for whoever fronted the money."
                   },
                   "paid_by_technician_id": {
@@ -3134,7 +3435,10 @@
                   },
                   "notes[0][files][]": {
                     "type": "array",
-                    "items": { "type": "string", "format": "binary" }
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
                   },
                   "files[]": {
                     "type": "array",
@@ -3968,23 +4272,39 @@
     },
     "/storage-locations": {
       "get": {
-        "tags": ["Storage"],
+        "tags": [
+          "Storage"
+        ],
         "summary": "List storage locations",
         "operationId": "listStorageLocations",
         "parameters": [
-          { "$ref": "#/components/parameters/Trashed" },
-          { "$ref": "#/components/parameters/PerPage" }
+          {
+            "$ref": "#/components/parameters/Trashed"
+          },
+          {
+            "$ref": "#/components/parameters/PerPage"
+          }
         ],
         "responses": {
           "200": {
             "description": "Paginated storage locations",
-            "content": { "application/json": { "schema": { "type": "object" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
-          "401": { "$ref": "#/components/responses/Unauthenticated" }
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
         }
       },
       "post": {
-        "tags": ["Storage"],
+        "tags": [
+          "Storage"
+        ],
         "summary": "Add a storage location",
         "operationId": "createStorageLocation",
         "requestBody": {
@@ -3993,11 +4313,22 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["name"],
+                "required": [
+                  "name"
+                ],
                 "properties": {
-                  "name": { "type": "string" },
-                  "code": { "type": "string", "nullable": true, "description": "Optional short code, unique among live locations" },
-                  "address": { "type": "string", "nullable": true }
+                  "name": {
+                    "type": "string"
+                  },
+                  "code": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Optional short code, unique among live locations"
+                  },
+                  "address": {
+                    "type": "string",
+                    "nullable": true
+                  }
                 }
               }
             }
@@ -4006,65 +4337,220 @@
         "responses": {
           "201": {
             "description": "Storage location created",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StorageLocationResource" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageLocationResource"
+                }
+              }
+            }
           },
-          "401": { "$ref": "#/components/responses/Unauthenticated" },
-          "422": { "$ref": "#/components/responses/ValidationError" }
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
         }
       }
     },
     "/storage-locations/{storageLocation}": {
       "delete": {
-        "tags": ["Storage"],
+        "tags": [
+          "Storage"
+        ],
         "summary": "Retire a storage location (soft delete)",
         "operationId": "deleteStorageLocation",
         "description": "The location keeps its stock history and its balances stay readable — the ledger references it by id forever.",
-        "parameters": [{ "$ref": "#/components/parameters/StorageLocation" }],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StorageLocation"
+          }
+        ],
         "responses": {
-          "204": { "description": "Retired" },
-          "401": { "$ref": "#/components/responses/Unauthenticated" }
+          "204": {
+            "description": "Retired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
         }
       }
     },
     "/storage-locations/{storageLocation}/restore": {
       "post": {
-        "tags": ["Storage"],
+        "tags": [
+          "Storage"
+        ],
         "summary": "Restore a retired storage location",
         "operationId": "restoreStorageLocation",
-        "parameters": [{ "$ref": "#/components/parameters/StorageLocation" }],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StorageLocation"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Restored",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StorageLocationResource" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageLocationResource"
+                }
+              }
+            }
           },
-          "401": { "$ref": "#/components/responses/Unauthenticated" }
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
         }
       }
     },
     "/stock-movements": {
       "get": {
-        "tags": ["Storage"],
+        "tags": [
+          "Storage"
+        ],
         "summary": "List stock movements (the ledger)",
         "operationId": "listStockMovements",
         "parameters": [
-          { "name": "types[]", "in": "query", "style": "form", "explode": true, "schema": { "type": "array", "items": { "type": "string", "enum": ["purchase", "draw", "return", "transfer_out", "transfer_in", "adjustment", "initial_count", "reversal"] } } },
-          { "name": "part_ids[]", "in": "query", "style": "form", "explode": true, "schema": { "type": "array", "items": { "type": "integer" } } },
-          { "name": "storage_location_ids[]", "in": "query", "style": "form", "explode": true, "schema": { "type": "array", "items": { "type": "integer" } } },
-          { "name": "paid_by[]", "in": "query", "style": "form", "explode": true, "schema": { "type": "array", "items": { "type": "string", "enum": ["us", "technician"] } } },
-          { "name": "paid_by_technician_ids[]", "in": "query", "style": "form", "explode": true, "schema": { "type": "array", "items": { "type": "integer" } } },
-          { "name": "moved_from", "in": "query", "schema": { "type": "string", "format": "date" } },
-          { "name": "moved_to", "in": "query", "schema": { "type": "string", "format": "date" } },
-          { "name": "sort", "in": "query", "schema": { "type": "string", "enum": ["moved_at", "created_at", "id"] } },
-          { "name": "dir", "in": "query", "schema": { "type": "string", "enum": ["asc", "desc"] } },
-          { "$ref": "#/components/parameters/PerPage" }
+          {
+            "name": "types[]",
+            "in": "query",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "purchase",
+                  "draw",
+                  "return",
+                  "transfer_out",
+                  "transfer_in",
+                  "adjustment",
+                  "initial_count",
+                  "reversal"
+                ]
+              }
+            }
+          },
+          {
+            "name": "part_ids[]",
+            "in": "query",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            }
+          },
+          {
+            "name": "storage_location_ids[]",
+            "in": "query",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            }
+          },
+          {
+            "name": "paid_by[]",
+            "in": "query",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "us",
+                  "technician"
+                ]
+              }
+            }
+          },
+          {
+            "name": "paid_by_technician_ids[]",
+            "in": "query",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            }
+          },
+          {
+            "name": "moved_from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "moved_to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "moved_at",
+                "created_at",
+                "id"
+              ]
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PerPage"
+          }
         ],
         "responses": {
-          "200": { "description": "Paginated movements", "content": { "application/json": { "schema": { "type": "object" } } } },
-          "401": { "$ref": "#/components/responses/Unauthenticated" }
+          "200": {
+            "description": "Paginated movements",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
         }
       },
       "post": {
-        "tags": ["Storage"],
+        "tags": [
+          "Storage"
+        ],
         "summary": "Record a batch of stock moving (multipart, optional files)",
         "operationId": "createStockMovement",
         "description": "One movement is one batch: several parts, their amounts, where they are, and who paid. Most types imply their direction; `adjustment` moves either way, so each of its lines must state `direction` itself. A transfer is one movement with a -1 line at the source and a +1 line at the destination.\n\nTaking stock below zero is refused with 422 and nothing is written. `reversal` cannot be posted directly — use the `/mistaken` action, which writes it for you.",
@@ -4074,23 +4560,94 @@
             "multipart/form-data": {
               "schema": {
                 "type": "object",
-                "required": ["moved_at", "type", "lines"],
+                "required": [
+                  "moved_at",
+                  "type",
+                  "lines"
+                ],
                 "properties": {
-                  "moved_at": { "type": "string", "format": "date-time", "description": "When it physically happened" },
-                  "type": { "type": "string", "enum": ["purchase", "draw", "return", "transfer_out", "transfer_in", "adjustment", "initial_count"] },
-                  "storage_location_id": { "type": "integer", "nullable": true, "description": "The movement's own location; each line still names its own" },
-                  "paid_by": { "type": "string", "nullable": true, "enum": ["us", "technician"] },
-                  "paid_by_technician_id": { "type": "integer", "nullable": true, "description": "Required when paid_by is `technician`" },
-                  "body": { "type": "string", "nullable": true },
-                  "lines[0][part_id]": { "type": "integer" },
-                  "lines[0][storage_location_id]": { "type": "integer" },
-                  "lines[0][quantity]": { "type": "number", "description": "Always a positive magnitude; `direction` says which way it moves" },
-                  "lines[0][direction]": { "type": "integer", "enum": [-1, 1], "description": "Required only for types that move both ways (adjustment); otherwise taken from the type" },
-                  "lines[0][unit_cost]": { "type": "number", "nullable": true },
-                  "notes[0][body]": { "type": "string" },
-                  "notes[0][type]": { "type": "string", "nullable": true },
-                  "notes[0][files][]": { "type": "array", "items": { "type": "string", "format": "binary" } },
-                  "files[]": { "type": "array", "items": { "type": "string", "format": "binary" } }
+                  "moved_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "When it physically happened"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "purchase",
+                      "draw",
+                      "return",
+                      "transfer_out",
+                      "transfer_in",
+                      "adjustment",
+                      "initial_count"
+                    ]
+                  },
+                  "storage_location_id": {
+                    "type": "integer",
+                    "nullable": true,
+                    "description": "The movement's own location; each line still names its own"
+                  },
+                  "paid_by": {
+                    "type": "string",
+                    "nullable": true,
+                    "enum": [
+                      "us",
+                      "technician"
+                    ]
+                  },
+                  "paid_by_technician_id": {
+                    "type": "integer",
+                    "nullable": true,
+                    "description": "Required when paid_by is `technician`"
+                  },
+                  "body": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "lines[0][part_id]": {
+                    "type": "integer"
+                  },
+                  "lines[0][storage_location_id]": {
+                    "type": "integer"
+                  },
+                  "lines[0][quantity]": {
+                    "type": "number",
+                    "description": "Always a positive magnitude; `direction` says which way it moves"
+                  },
+                  "lines[0][direction]": {
+                    "type": "integer",
+                    "enum": [
+                      -1,
+                      1
+                    ],
+                    "description": "Required only for types that move both ways (adjustment); otherwise taken from the type"
+                  },
+                  "lines[0][unit_cost]": {
+                    "type": "number",
+                    "nullable": true
+                  },
+                  "notes[0][body]": {
+                    "type": "string"
+                  },
+                  "notes[0][type]": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "notes[0][files][]": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  },
+                  "files[]": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  }
                 }
               }
             }
@@ -4099,35 +4656,65 @@
         "responses": {
           "201": {
             "description": "Movement recorded",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StockMovementResource" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockMovementResource"
+                }
+              }
+            }
           },
-          "401": { "$ref": "#/components/responses/Unauthenticated" },
-          "422": { "$ref": "#/components/responses/ValidationError" }
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
         }
       }
     },
     "/stock-movements/{stockMovement}": {
       "get": {
-        "tags": ["Storage"],
+        "tags": [
+          "Storage"
+        ],
         "summary": "Show one stock movement with its lines",
         "operationId": "showStockMovement",
-        "parameters": [{ "$ref": "#/components/parameters/StockMovement" }],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StockMovement"
+          }
+        ],
         "responses": {
           "200": {
             "description": "The movement",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StockMovementResource" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockMovementResource"
+                }
+              }
+            }
           },
-          "401": { "$ref": "#/components/responses/Unauthenticated" }
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
         }
       }
     },
     "/stock-movements/{stockMovement}/mistaken": {
       "post": {
-        "tags": ["Storage"],
+        "tags": [
+          "Storage"
+        ],
         "summary": "Correct a movement by recording its reversal",
         "operationId": "reverseStockMovement",
         "description": "Flags the movement and writes an equal-and-opposite `reversal`. The original row is never edited or removed — the ledger is append-only, and the flag itself has no effect on the arithmetic.\n\nA reversal is allowed to take a balance negative: reversing a return pushes stock down, and that stock may since have been consumed. Refusing would leave the mistake uncorrectable. `php artisan stock:reconcile` lists any negative pairs.",
-        "parameters": [{ "$ref": "#/components/parameters/StockMovement" }],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StockMovement"
+          }
+        ],
         "responses": {
           "200": {
             "description": "The flagged original plus the reversal that was written",
@@ -4136,106 +4723,270 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "data": { "$ref": "#/components/schemas/StockMovement" },
-                    "reversal": { "$ref": "#/components/schemas/StockMovement" }
+                    "data": {
+                      "$ref": "#/components/schemas/StockMovement"
+                    },
+                    "reversal": {
+                      "$ref": "#/components/schemas/StockMovement"
+                    }
                   }
                 }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthenticated" }
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
         }
       }
     },
     "/stock-balances": {
       "get": {
-        "tags": ["Storage"],
+        "tags": [
+          "Storage"
+        ],
         "summary": "What is on hand, per part per location",
         "operationId": "listStockBalances",
         "description": "A cache of SUM(quantity × direction) over the movement ledger, kept in step inside the same transaction as every movement. `php artisan stock:reconcile` recomputes it from the ledger and reports any drift.",
         "parameters": [
-          { "name": "part_ids[]", "in": "query", "style": "form", "explode": true, "schema": { "type": "array", "items": { "type": "integer" } } },
-          { "name": "storage_location_ids[]", "in": "query", "style": "form", "explode": true, "schema": { "type": "array", "items": { "type": "integer" } } },
-          { "name": "non_zero", "in": "query", "schema": { "type": "boolean" }, "description": "Hide pairs that have netted back to nothing" },
-          { "$ref": "#/components/parameters/PerPage" }
+          {
+            "name": "group_by",
+            "in": "query",
+            "required": false,
+            "description": "Set to \"part\" for one row per part with the cross-location total quantity, its location_count, and the per-location breakdown. Omit for the default one-row-per-(part, location) listing. non_zero then applies to the total rather than to each pair.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "part"
+              ]
+            }
+          },
+          {
+            "name": "part_ids[]",
+            "in": "query",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            }
+          },
+          {
+            "name": "storage_location_ids[]",
+            "in": "query",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            }
+          },
+          {
+            "name": "non_zero",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Hide pairs that have netted back to nothing"
+          },
+          {
+            "$ref": "#/components/parameters/PerPage"
+          }
         ],
         "responses": {
-          "200": { "description": "Paginated balances", "content": { "application/json": { "schema": { "type": "object" } } } },
-          "401": { "$ref": "#/components/responses/Unauthenticated" }
+          "200": {
+            "description": "Paginated balances",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
         }
       }
     },
     "/storage-locations/{storageLocation}/notes": {
       "post": {
-        "tags": ["Notes & Attachments"],
+        "tags": [
+          "Notes & Attachments"
+        ],
         "summary": "Add a note to a storage location",
         "operationId": "addStorageLocationNote",
-        "parameters": [{ "$ref": "#/components/parameters/StorageLocation" }],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StorageLocation"
+          }
+        ],
         "requestBody": {
           "required": true,
-          "content": { "multipart/form-data": { "schema": { "$ref": "#/components/schemas/NoteRequest" } } }
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteRequest"
+              }
+            }
+          }
         },
         "responses": {
-          "201": { "description": "Note created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NoteResource" } } } },
-          "401": { "$ref": "#/components/responses/Unauthenticated" },
-          "422": { "$ref": "#/components/responses/ValidationError" }
+          "201": {
+            "description": "Note created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
         }
       }
     },
     "/storage-locations/{storageLocation}/attachments": {
       "post": {
-        "tags": ["Notes & Attachments"],
+        "tags": [
+          "Notes & Attachments"
+        ],
         "summary": "Attach files to a storage location",
         "operationId": "addStorageLocationAttachments",
-        "parameters": [{ "$ref": "#/components/parameters/StorageLocation" }],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StorageLocation"
+          }
+        ],
         "requestBody": {
           "required": true,
-          "content": { "multipart/form-data": { "schema": { "$ref": "#/components/schemas/AttachmentRequest" } } }
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachmentRequest"
+              }
+            }
+          }
         },
         "responses": {
-          "201": { "description": "Attachments created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AttachmentListResource" } } } },
-          "401": { "$ref": "#/components/responses/Unauthenticated" },
-          "422": { "$ref": "#/components/responses/ValidationError" }
+          "201": {
+            "description": "Attachments created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentListResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
         }
       }
     },
     "/stock-movements/{stockMovement}/notes": {
       "post": {
-        "tags": ["Notes & Attachments"],
+        "tags": [
+          "Notes & Attachments"
+        ],
         "summary": "Add a note to a stock movement",
         "operationId": "addStockMovementNote",
-        "parameters": [{ "$ref": "#/components/parameters/StockMovement" }],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StockMovement"
+          }
+        ],
         "requestBody": {
           "required": true,
-          "content": { "multipart/form-data": { "schema": { "$ref": "#/components/schemas/NoteRequest" } } }
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteRequest"
+              }
+            }
+          }
         },
         "responses": {
-          "201": { "description": "Note created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NoteResource" } } } },
-          "401": { "$ref": "#/components/responses/Unauthenticated" },
-          "422": { "$ref": "#/components/responses/ValidationError" }
+          "201": {
+            "description": "Note created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
         }
       }
     },
     "/stock-movements/{stockMovement}/attachments": {
       "post": {
-        "tags": ["Notes & Attachments"],
+        "tags": [
+          "Notes & Attachments"
+        ],
         "summary": "Attach files to a stock movement",
         "operationId": "addStockMovementAttachments",
-        "parameters": [{ "$ref": "#/components/parameters/StockMovement" }],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StockMovement"
+          }
+        ],
         "requestBody": {
           "required": true,
-          "content": { "multipart/form-data": { "schema": { "$ref": "#/components/schemas/AttachmentRequest" } } }
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachmentRequest"
+              }
+            }
+          }
         },
         "responses": {
-          "201": { "description": "Attachments created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AttachmentListResource" } } } },
-          "401": { "$ref": "#/components/responses/Unauthenticated" },
-          "422": { "$ref": "#/components/responses/ValidationError" }
+          "201": {
+            "description": "Attachments created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentListResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
         }
       }
     },
     "/daily-pay-entries/{dailyPayEntry}/recalculate": {
       "post": {
-        "tags": ["Daily Pay"],
+        "tags": [
+          "Daily Pay"
+        ],
         "summary": "Re-gather the frozen hours and reimbursable parts",
         "operationId": "recalculateDailyPayEntry",
         "description": "Re-reads the attendance entries and reimbursable part usages behind every payment on this entry and rewrites the frozen figures from them.\n\nLines whose hours were supplied in the payload (`hours_overridden: true`) are left exactly as typed — only their `gathered` block is refreshed, so you can still see what the records say. Lines that were left to be gathered pick up the newer numbers.\n\nIdempotent: running it twice changes nothing the second time.",
@@ -4244,7 +4995,9 @@
             "name": "dailyPayEntry",
             "in": "path",
             "required": true,
-            "schema": { "type": "integer" },
+            "schema": {
+              "type": "integer"
+            },
             "description": "Daily pay entry id"
           }
         ],
@@ -4253,18 +5006,26 @@
             "description": "The entry with its figures re-gathered",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/DailyPayEntryResource" }
+                "schema": {
+                  "$ref": "#/components/schemas/DailyPayEntryResource"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthenticated" },
-          "404": { "$ref": "#/components/responses/NotFound" }
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
         }
       }
     },
     "/attendance-entries": {
       "post": {
-        "tags": ["Issue Workflow"],
+        "tags": [
+          "Issue Workflow"
+        ],
         "summary": "Add an attendance entry spanning several tickets (multipart, optional files)",
         "operationId": "createGlobalAttendanceEntry",
         "description": "One visit, many tickets: a technician drives to a store once and works issues belonging to different tickets. Identical to the ticket-nested endpoint except that no parent ticket scopes the issues — they need only exist, and the technician must already be attached to at least one of them.",
@@ -4274,26 +5035,82 @@
             "multipart/form-data": {
               "schema": {
                 "type": "object",
-                "required": ["ticket_issue_ids", "technician_id"],
+                "required": [
+                  "ticket_issue_ids",
+                  "technician_id"
+                ],
                 "properties": {
                   "ticket_issue_ids[]": {
                     "type": "array",
-                    "items": { "type": "integer" },
+                    "items": {
+                      "type": "integer"
+                    },
                     "description": "Issue ids from any number of tickets"
                   },
-                  "technician_id": { "type": "integer" },
-                  "start_clock": { "type": "string", "format": "date-time", "nullable": true },
-                  "end_clock": { "type": "string", "format": "date-time", "nullable": true },
-                  "start_break": { "type": "string", "format": "date-time", "nullable": true },
-                  "end_break": { "type": "string", "format": "date-time", "nullable": true },
-                  "start_parts_run": { "type": "string", "format": "date-time", "nullable": true },
-                  "end_parts_run": { "type": "string", "format": "date-time", "nullable": true },
-                  "start_travel": { "type": "string", "format": "date-time", "nullable": true },
-                  "end_travel": { "type": "string", "format": "date-time", "nullable": true },
-                  "notes[0][body]": { "type": "string" },
-                  "notes[0][type]": { "type": "string", "nullable": true },
-                  "notes[0][files][]": { "type": "array", "items": { "type": "string", "format": "binary" } },
-                  "files[]": { "type": "array", "items": { "type": "string", "format": "binary" } }
+                  "technician_id": {
+                    "type": "integer"
+                  },
+                  "start_clock": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  },
+                  "end_clock": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  },
+                  "start_break": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  },
+                  "end_break": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  },
+                  "start_parts_run": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  },
+                  "end_parts_run": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  },
+                  "start_travel": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  },
+                  "end_travel": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  },
+                  "notes[0][body]": {
+                    "type": "string"
+                  },
+                  "notes[0][type]": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "notes[0][files][]": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  },
+                  "files[]": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  }
                 }
               }
             }
@@ -4304,18 +5121,26 @@
             "description": "Attendance entry created",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/AttendanceEntryResource" }
+                "schema": {
+                  "$ref": "#/components/schemas/AttendanceEntryResource"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthenticated" },
-          "422": { "$ref": "#/components/responses/ValidationError" }
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
         }
       }
     },
     "/daily-pay-entries": {
       "get": {
-        "tags": ["Daily Pay"],
+        "tags": [
+          "Daily Pay"
+        ],
         "summary": "List daily pay entries",
         "description": "Paginated list of daily pay entries with optional filters. Each item is a summary (no notes, attachments, or revision history — use the detail endpoint for those).",
         "parameters": [
@@ -4323,7 +5148,12 @@
             "name": "technician_ids[]",
             "in": "query",
             "description": "Filter to entries that include a line for at least one of these technician IDs (multi-select).",
-            "schema": { "type": "array", "items": { "type": "integer" } },
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
             "style": "form",
             "explode": true
           },
@@ -4331,7 +5161,12 @@
             "name": "store_ids[]",
             "in": "query",
             "description": "Filter to entries that include a line for at least one of these store IDs (multi-select).",
-            "schema": { "type": "array", "items": { "type": "integer" } },
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
             "style": "form",
             "explode": true
           },
@@ -4339,25 +5174,39 @@
             "name": "date",
             "in": "query",
             "description": "Exact workday date (YYYY-MM-DD).",
-            "schema": { "type": "string", "format": "date" }
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
           },
           {
             "name": "date_from",
             "in": "query",
             "description": "Workday date range start (inclusive, YYYY-MM-DD).",
-            "schema": { "type": "string", "format": "date" }
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
           },
           {
             "name": "date_to",
             "in": "query",
             "description": "Workday date range end (inclusive, YYYY-MM-DD).",
-            "schema": { "type": "string", "format": "date" }
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
           },
           {
             "name": "filled_by[]",
             "in": "query",
             "description": "Filter by the user IDs who submitted the entry (multi-select, OR logic).",
-            "schema": { "type": "array", "items": { "type": "integer" } },
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
             "style": "form",
             "explode": true
           },
@@ -4365,31 +5214,54 @@
             "name": "created_from",
             "in": "query",
             "description": "Entry creation timestamp range start (ISO 8601).",
-            "schema": { "type": "string", "format": "date-time" }
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
           },
           {
             "name": "created_to",
             "in": "query",
             "description": "Entry creation timestamp range end (ISO 8601).",
-            "schema": { "type": "string", "format": "date-time" }
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
           },
           {
             "name": "sort",
             "in": "query",
             "description": "Sort column.",
-            "schema": { "type": "string", "enum": ["date", "created_at"], "default": "created_at" }
+            "schema": {
+              "type": "string",
+              "enum": [
+                "date",
+                "created_at"
+              ],
+              "default": "created_at"
+            }
           },
           {
             "name": "dir",
             "in": "query",
             "description": "Sort direction.",
-            "schema": { "type": "string", "enum": ["asc", "desc"], "default": "desc" }
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "default": "desc"
+            }
           },
           {
             "name": "per_page",
             "in": "query",
             "description": "Items per page (default 15).",
-            "schema": { "type": "integer", "default": 15 }
+            "schema": {
+              "type": "integer",
+              "default": 15
+            }
           }
         ],
         "responses": {
@@ -4402,30 +5274,44 @@
                   "properties": {
                     "data": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/DailyPayEntrySummary" }
+                      "items": {
+                        "$ref": "#/components/schemas/DailyPayEntrySummary"
+                      }
                     },
-                    "links": { "$ref": "#/components/schemas/PaginationLinks" },
-                    "meta": { "$ref": "#/components/schemas/PaginationMeta" }
+                    "links": {
+                      "$ref": "#/components/schemas/PaginationLinks"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PaginationMeta"
+                    }
                   }
                 }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthenticated" }
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
         }
       },
       "post": {
-        "tags": ["Daily Pay"],
+        "tags": [
+          "Daily Pay"
+        ],
         "summary": "Create a daily pay entry",
         "description": "Creates a new end-of-day payment entry. Each `lines[]` element represents one technician working at one store. A technician who worked at multiple stores appears as multiple lines. Notes and file attachments can be included inline per line.\n\n**Multipart form-data required** when uploading files. Field names use bracket notation: `lines[0][files][]`, `lines[0][notes][0][files][]`.",
         "requestBody": {
           "required": true,
           "content": {
             "multipart/form-data": {
-              "schema": { "$ref": "#/components/schemas/DailyPayEntryInput" }
+              "schema": {
+                "$ref": "#/components/schemas/DailyPayEntryInput"
+              }
             },
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/DailyPayEntryInput" }
+              "schema": {
+                "$ref": "#/components/schemas/DailyPayEntryInput"
+              }
             }
           }
         },
@@ -4437,20 +5323,28 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "data": { "$ref": "#/components/schemas/DailyPayEntryResource" }
+                    "data": {
+                      "$ref": "#/components/schemas/DailyPayEntryResource"
+                    }
                   }
                 }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthenticated" },
-          "422": { "$ref": "#/components/responses/ValidationError" }
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
         }
       }
     },
     "/daily-pay-entries/{dailyPayEntry}": {
       "get": {
-        "tags": ["Daily Pay"],
+        "tags": [
+          "Daily Pay"
+        ],
         "summary": "Get a daily pay entry",
         "description": "Returns the full detail of a daily pay entry including all lines (with notes, attachments, and linked ticket issue IDs) and the complete revision history (snapshots of all previous states with who edited and when).",
         "parameters": [
@@ -4459,7 +5353,9 @@
             "in": "path",
             "required": true,
             "description": "DailyPayEntry ID",
-            "schema": { "type": "integer" }
+            "schema": {
+              "type": "integer"
+            }
           }
         ],
         "responses": {
@@ -4470,20 +5366,28 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "data": { "$ref": "#/components/schemas/DailyPayEntryResource" }
+                    "data": {
+                      "$ref": "#/components/schemas/DailyPayEntryResource"
+                    }
                   }
                 }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthenticated" },
-          "404": { "$ref": "#/components/responses/NotFound" }
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
         }
       }
     },
     "/daily-pay-entries/{dailyPayEntry}/edit": {
       "post": {
-        "tags": ["Daily Pay"],
+        "tags": [
+          "Daily Pay"
+        ],
         "summary": "Edit a daily pay entry",
         "description": "Replaces the full content of an existing daily pay entry. Before replacing, the current state is snapshot as a revision record (accessible in the `revisions` array). The same payload shape as create is accepted.\n\nThis is a **full replace** — all existing lines are dropped and recreated from the new payload. Any notes or attachments on old lines will not appear on the new lines unless re-submitted.\n\n**Multipart form-data required** when uploading files.",
         "parameters": [
@@ -4492,17 +5396,23 @@
             "in": "path",
             "required": true,
             "description": "DailyPayEntry ID",
-            "schema": { "type": "integer" }
+            "schema": {
+              "type": "integer"
+            }
           }
         ],
         "requestBody": {
           "required": true,
           "content": {
             "multipart/form-data": {
-              "schema": { "$ref": "#/components/schemas/DailyPayEntryInput" }
+              "schema": {
+                "$ref": "#/components/schemas/DailyPayEntryInput"
+              }
             },
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/DailyPayEntryInput" }
+              "schema": {
+                "$ref": "#/components/schemas/DailyPayEntryInput"
+              }
             }
           }
         },
@@ -4514,15 +5424,138 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "data": { "$ref": "#/components/schemas/DailyPayEntryResource" }
+                    "data": {
+                      "$ref": "#/components/schemas/DailyPayEntryResource"
+                    }
                   }
                 }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthenticated" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "422": { "$ref": "#/components/responses/ValidationError" }
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/unpaid-work": {
+      "get": {
+        "tags": [
+          "Daily Pay"
+        ],
+        "summary": "Work recorded but never put on a pay sheet",
+        "operationId": "unpaidWork",
+        "description": "Being on a pay sheet IS being paid in this system -- there is no separate money-sent step -- so anything unclaimed by a payment is money still owed. Counts VISITS rather than hours on purpose: turning clock pairs into hours is AttendanceEntry::durations(), and a second implementation of that arithmetic in SQL would drift from the first. The pay sheet's own gather is what turns these into money. Part amounts are net of returns -- what the payer is actually out of pocket -- and only usages someone other than us paid for are counted.",
+        "parameters": [
+          {
+            "name": "technician_ids[]",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Per payee, plus totals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "technicians": {
+                          "type": "array",
+                          "items": {
+                            "type": "object"
+                          }
+                        },
+                        "totals": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/parts/{part}/price-history": {
+      "get": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "What we have paid for this part, and when",
+        "operationId": "partsPriceHistory",
+        "description": "The honest answer to \"what does this part cost us\" once the price has moved: not one number, but the actual purchases. Bought 12 at 35 in June, 8 at 40 in September. Derived from the movement ledger on read -- nothing is stored, so there is no second copy to drift. Note that value figures elsewhere in this API are computed the same way, which means a BACKDATED receipt changes what earlier issues are deemed to have cost: the figures always reflect the ledger as it stands now.",
+        "parameters": [
+          {
+            "name": "part",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The lots, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
         }
       }
     }
@@ -4568,14 +5601,18 @@
         "name": "storageLocation",
         "in": "path",
         "required": true,
-        "schema": { "type": "integer" },
+        "schema": {
+          "type": "integer"
+        },
         "description": "Storage location id"
       },
       "StockMovement": {
         "name": "stockMovement",
         "in": "path",
         "required": true,
-        "schema": { "type": "integer" },
+        "schema": {
+          "type": "integer"
+        },
         "description": "Stock movement id"
       },
       "Trashed": {
@@ -4604,7 +5641,12 @@
         "in": "query",
         "style": "form",
         "explode": true,
-        "schema": { "type": "array", "items": { "type": "string" } },
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "description": "Global index only: limit to tickets for these store numbers (multi-select, OR logic)"
       },
       "FilterStatuses": {
@@ -4616,7 +5658,14 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["pending", "assigned", "in_progress", "waiting", "complete", "cancelled"]
+            "enum": [
+              "pending",
+              "assigned",
+              "in_progress",
+              "waiting",
+              "complete",
+              "cancelled"
+            ]
           }
         },
         "description": "Filter tickets by derived ticket status (multi-select, OR logic)"
@@ -4626,7 +5675,12 @@
         "in": "query",
         "style": "form",
         "explode": true,
-        "schema": { "type": "array", "items": { "type": "integer" } },
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
         "description": "Tickets containing any of these catalog issue IDs (multi-select, OR logic)"
       },
       "FilterIssueStatuses": {
@@ -4638,7 +5692,15 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["pending", "assigned", "in_progress", "waiting", "complete", "deferred", "cancelled"]
+            "enum": [
+              "pending",
+              "assigned",
+              "in_progress",
+              "waiting",
+              "complete",
+              "deferred",
+              "cancelled"
+            ]
           }
         },
         "description": "Tickets with at least one issue in any of these statuses (multi-select, OR logic)"
@@ -4652,7 +5714,15 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["pending", "assigned", "in_progress", "waiting", "complete", "deferred", "cancelled"]
+            "enum": [
+              "pending",
+              "assigned",
+              "in_progress",
+              "waiting",
+              "complete",
+              "deferred",
+              "cancelled"
+            ]
           }
         },
         "description": "Tickets with at least one issue that changed TO any of these statuses (multi-select, OR logic). Combine with changed_from / changed_to to scope to a date range; either can be used alone."
@@ -4666,7 +5736,12 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["urgent", "high", "medium", "low"]
+            "enum": [
+              "urgent",
+              "high",
+              "medium",
+              "low"
+            ]
           }
         },
         "description": "Tickets with at least one issue at any of these priorities (multi-select, OR logic)"
@@ -4680,7 +5755,12 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["urgent", "high", "medium", "low"]
+            "enum": [
+              "urgent",
+              "high",
+              "medium",
+              "low"
+            ]
           }
         },
         "description": "Tickets with at least one issue at any of these DISPATCHER-ASSIGNED priorities (multi-select, OR logic). Distinct from priorities[], which is the priority the reporter filed the issue at."
@@ -4694,7 +5774,11 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["unpaid", "paid", "not_payable"]
+            "enum": [
+              "unpaid",
+              "paid",
+              "not_payable"
+            ]
           }
         },
         "description": "Whether a ticket’s work has been settled through a pay sheet (multi-select, OR logic). A payable is an attendance entry, or a part somebody other than us paid for; mistaken records never count. `unpaid` = at least one payable is still unclaimed, so use this to pull up everything still owed. `paid` = it has payables and every one of them is claimed. `not_payable` = it has no payables at all."
@@ -4708,7 +5792,10 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["normal", "preventive_maintenance"]
+            "enum": [
+              "normal",
+              "preventive_maintenance"
+            ]
           }
         },
         "description": "Filter by ticket type (multi-select, OR logic)"
@@ -4718,7 +5805,12 @@
         "in": "query",
         "style": "form",
         "explode": true,
-        "schema": { "type": "array", "items": { "type": "integer" } },
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
         "description": "Tickets assigned to any of these technician IDs (multi-select, OR logic)"
       },
       "FilterCreatorIds": {
@@ -4726,13 +5818,21 @@
         "in": "query",
         "style": "form",
         "explode": true,
-        "schema": { "type": "array", "items": { "type": "integer" } },
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
         "description": "Tickets filed by any of these user IDs (multi-select, OR logic)"
       },
       "IncludeAnalytics": {
         "name": "include_analytics",
         "in": "query",
-        "schema": { "type": "boolean", "default": false },
+        "schema": {
+          "type": "boolean",
+          "default": false
+        },
         "description": "Also compute and return an 'analytics' block (issue status breakdown, duration averages, weekly average) alongside the paginated list, scoped by the same active filters. Off by default."
       }
     },
@@ -4743,7 +5843,11 @@
           "application/json": {
             "schema": {
               "type": "object",
-              "properties": { "message": { "type": "string" } }
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              }
             }
           }
         }
@@ -4796,7 +5900,10 @@
     "schemas": {
       "DailyPayEntryInput": {
         "type": "object",
-        "required": ["date", "payments"],
+        "required": [
+          "date",
+          "payments"
+        ],
         "description": "Sent as multipart/form-data with bracket-notation keys, e.g. payments[0][lines][0][store_id] and payments[0][lines][0][files][].",
         "properties": {
           "date": {
@@ -4817,7 +5924,10 @@
             "description": "One element per payee. A payee may appear only once per sheet — put all of their stores on the one payment.",
             "items": {
               "type": "object",
-              "required": ["technician_id", "lines"],
+              "required": [
+                "technician_id",
+                "lines"
+              ],
               "properties": {
                 "technician_id": {
                   "type": "integer",
@@ -4847,55 +5957,131 @@
                   "type": "array",
                   "items": {
                     "type": "object",
-                    "required": ["body"],
+                    "required": [
+                      "body"
+                    ],
                     "properties": {
-                      "body": { "type": "string" },
-                      "type": { "type": "string", "nullable": true },
-                      "files": { "type": "array", "items": { "type": "string", "format": "binary" } }
+                      "body": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "files": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "format": "binary"
+                        }
+                      }
                     }
                   }
                 },
-                "files": { "type": "array", "items": { "type": "string", "format": "binary" } },
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
                 "lines": {
                   "type": "array",
                   "minItems": 1,
                   "description": "One element per store this payment covers.",
                   "items": {
                     "type": "object",
-                    "required": ["store_id"],
+                    "required": [
+                      "store_id"
+                    ],
                     "properties": {
-                      "store_id": { "type": "integer", "nullable": true, "description": "Required unless other_store is given." },
-                      "other_store": { "type": "string", "nullable": true, "description": "A location outside the replicated store list, named freely — the same escape hatch tickets have. Give a line either this or store_id." },
+                      "store_id": {
+                        "type": "integer",
+                        "nullable": true,
+                        "description": "Required unless other_store is given."
+                      },
+                      "other_store": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "A location outside the replicated store list, named freely — the same escape hatch tickets have. Give a line either this or store_id."
+                      },
                       "total_working_hours": {
                         "type": "number",
                         "nullable": true,
                         "description": "Leave out to have it gathered from the attendance entries on this line's issues. Supply it to override, and recalculate will then leave this line's hours alone."
                       },
-                      "travel_time": { "type": "number", "nullable": true, "description": "Paid at the hourly rate, like work time." },
-                      "total_break_time": { "type": "number", "nullable": true, "description": "Tracked but NOT paid." },
-                      "parts_run_time": { "type": "number", "nullable": true, "description": "Paid at the hourly rate." },
-                      "gas": { "type": "number", "nullable": true },
-                      "lump_sum": { "type": "number", "nullable": true, "description": "A flat amount for this store INSTEAD OF its hours × rate." },
-                      "hourly_payment_rate": { "type": "number", "nullable": true, "description": "Overrides the payment's rate for this store." },
-                      "money_owed": { "type": "number", "nullable": true },
+                      "travel_time": {
+                        "type": "number",
+                        "nullable": true,
+                        "description": "Paid at the hourly rate, like work time."
+                      },
+                      "total_break_time": {
+                        "type": "number",
+                        "nullable": true,
+                        "description": "Tracked but NOT paid."
+                      },
+                      "parts_run_time": {
+                        "type": "number",
+                        "nullable": true,
+                        "description": "Paid at the hourly rate."
+                      },
+                      "gas": {
+                        "type": "number",
+                        "nullable": true
+                      },
+                      "lump_sum": {
+                        "type": "number",
+                        "nullable": true,
+                        "description": "A flat amount for this store INSTEAD OF its hours × rate."
+                      },
+                      "hourly_payment_rate": {
+                        "type": "number",
+                        "nullable": true,
+                        "description": "Overrides the payment's rate for this store."
+                      },
+                      "money_owed": {
+                        "type": "number",
+                        "nullable": true
+                      },
                       "ticket_issue_ids": {
                         "type": "array",
-                        "items": { "type": "integer" },
+                        "items": {
+                          "type": "integer"
+                        },
                         "description": "The work this line pays for. The payee must already be assigned to each issue. These links are what the gather reads to find the hours and the reimbursable parts."
                       },
                       "notes": {
                         "type": "array",
                         "items": {
                           "type": "object",
-                          "required": ["body"],
+                          "required": [
+                            "body"
+                          ],
                           "properties": {
-                            "body": { "type": "string" },
-                            "type": { "type": "string", "nullable": true },
-                            "files": { "type": "array", "items": { "type": "string", "format": "binary" } }
+                            "body": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "files": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "format": "binary"
+                              }
+                            }
                           }
                         }
                       },
-                      "files": { "type": "array", "items": { "type": "string", "format": "binary" } }
+                      "files": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "format": "binary"
+                        }
+                      }
                     }
                   }
                 }
@@ -4908,75 +6094,222 @@
         "type": "object",
         "description": "Figures pulled from the attendance and part-usage records behind this payment's issues, frozen at save time and refreshed by POST .../recalculate.",
         "properties": {
-          "work_hours": { "type": "string", "nullable": true, "description": "Net of breaks, parts runs and travel that fall inside the clock window" },
-          "travel_hours": { "type": "string", "nullable": true },
-          "break_hours": { "type": "string", "nullable": true, "description": "Tracked but not paid" },
-          "parts_run_hours": { "type": "string", "nullable": true },
-          "reimbursable_parts": { "type": "string", "nullable": true, "description": "Net cost of the parts somebody other than us paid for" },
-          "at": { "type": "string", "format": "date-time", "nullable": true },
-          "by": { "allOf": [{ "$ref": "#/components/schemas/User" }], "nullable": true }
+          "work_hours": {
+            "type": "string",
+            "nullable": true,
+            "description": "Net of breaks, parts runs and travel that fall inside the clock window"
+          },
+          "travel_hours": {
+            "type": "string",
+            "nullable": true
+          },
+          "break_hours": {
+            "type": "string",
+            "nullable": true,
+            "description": "Tracked but not paid"
+          },
+          "parts_run_hours": {
+            "type": "string",
+            "nullable": true
+          },
+          "reimbursable_parts": {
+            "type": "string",
+            "nullable": true,
+            "description": "Net cost of the parts somebody other than us paid for"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "by": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/User"
+              }
+            ],
+            "nullable": true
+          }
         }
       },
       "DailyPayLineResource": {
         "type": "object",
         "description": "One store's share of a payment.",
         "properties": {
-          "id": { "type": "integer" },
-          "daily_pay_entry_id": { "type": "integer" },
-          "daily_pay_payment_id": { "type": "integer" },
-          "technician_id": { "type": "integer", "description": "Always the same as the payment's payee; denormalised so store/payee filters stay one join deep." },
-          "technician": { "allOf": [{ "$ref": "#/components/schemas/Technician" }], "nullable": true },
-          "store_id": { "type": "integer", "nullable": true },
-          "other_store": { "type": "string", "nullable": true },
+          "id": {
+            "type": "integer"
+          },
+          "daily_pay_entry_id": {
+            "type": "integer"
+          },
+          "daily_pay_payment_id": {
+            "type": "integer"
+          },
+          "technician_id": {
+            "type": "integer",
+            "description": "Always the same as the payment's payee; denormalised so store/payee filters stay one join deep."
+          },
+          "technician": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Technician"
+              }
+            ],
+            "nullable": true
+          },
+          "store_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "other_store": {
+            "type": "string",
+            "nullable": true
+          },
           "store": {
             "type": "object",
             "nullable": true,
             "properties": {
-              "id": { "type": "integer" },
-              "store_number": { "type": "string" }
+              "id": {
+                "type": "integer"
+              },
+              "store_number": {
+                "type": "string"
+              }
             }
           },
-          "total_working_hours": { "type": "string", "nullable": true },
-          "travel_time": { "type": "string", "nullable": true },
-          "total_break_time": { "type": "string", "nullable": true },
-          "parts_run_time": { "type": "string", "nullable": true },
+          "total_working_hours": {
+            "type": "string",
+            "nullable": true
+          },
+          "travel_time": {
+            "type": "string",
+            "nullable": true
+          },
+          "total_break_time": {
+            "type": "string",
+            "nullable": true
+          },
+          "parts_run_time": {
+            "type": "string",
+            "nullable": true
+          },
           "hours_overridden": {
             "type": "boolean",
             "description": "True when the hours above were supplied rather than gathered. recalculate leaves such a line's hours untouched."
           },
-          "gas": { "type": "string", "nullable": true },
-          "lump_sum": { "type": "string", "nullable": true },
-          "hourly_payment_rate": { "type": "string", "nullable": true },
-          "money_owed": { "type": "string", "nullable": true },
-          "gathered": { "$ref": "#/components/schemas/DailyPayGathered" },
+          "gas": {
+            "type": "string",
+            "nullable": true
+          },
+          "lump_sum": {
+            "type": "string",
+            "nullable": true
+          },
+          "hourly_payment_rate": {
+            "type": "string",
+            "nullable": true
+          },
+          "money_owed": {
+            "type": "string",
+            "nullable": true
+          },
+          "gathered": {
+            "$ref": "#/components/schemas/DailyPayGathered"
+          },
           "line_total": {
             "type": "string",
             "nullable": true,
             "description": "What this store cost: labour (or its lump sum) + gas + money owed + the parts attributed to it."
           },
-          "ticket_issues": { "type": "array", "nullable": true, "items": { "type": "object" } },
-          "notes": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/Note" } },
-          "attachments": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/Attachment" } },
-          "created_by": { "type": "integer", "nullable": true },
-          "creator": { "allOf": [{ "$ref": "#/components/schemas/User" }], "nullable": true },
-          "created_at": { "type": "string", "format": "date-time" },
-          "updated_at": { "type": "string", "format": "date-time" }
+          "ticket_issues": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "object"
+            }
+          },
+          "notes": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/Note"
+            }
+          },
+          "attachments": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/Attachment"
+            }
+          },
+          "created_by": {
+            "type": "integer",
+            "nullable": true
+          },
+          "creator": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/User"
+              }
+            ],
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "DailyPayPaymentResource": {
         "type": "object",
         "description": "One payment to one payee, covering however many stores.",
         "properties": {
-          "id": { "type": "integer" },
-          "daily_pay_entry_id": { "type": "integer" },
-          "technician_id": { "type": "integer" },
-          "technician": { "allOf": [{ "$ref": "#/components/schemas/Technician" }], "nullable": true },
-          "hourly_payment_rate": { "type": "string", "nullable": true },
-          "lump_sum": { "type": "string", "nullable": true },
-          "gas": { "type": "string", "nullable": true },
-          "money_owed": { "type": "string", "nullable": true, "description": "NOT the total — an optional extra we also owe them." },
-          "gathered": { "$ref": "#/components/schemas/DailyPayGathered" },
-          "lines_total": { "type": "string", "nullable": true, "description": "Sum of the line totals. A per-store roll-up for display; total_amount is the payable figure." },
+          "id": {
+            "type": "integer"
+          },
+          "daily_pay_entry_id": {
+            "type": "integer"
+          },
+          "technician_id": {
+            "type": "integer"
+          },
+          "technician": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Technician"
+              }
+            ],
+            "nullable": true
+          },
+          "hourly_payment_rate": {
+            "type": "string",
+            "nullable": true
+          },
+          "lump_sum": {
+            "type": "string",
+            "nullable": true
+          },
+          "gas": {
+            "type": "string",
+            "nullable": true
+          },
+          "money_owed": {
+            "type": "string",
+            "nullable": true,
+            "description": "NOT the total — an optional extra we also owe them."
+          },
+          "gathered": {
+            "$ref": "#/components/schemas/DailyPayGathered"
+          },
+          "lines_total": {
+            "type": "string",
+            "nullable": true,
+            "description": "Sum of the line totals. A per-store roll-up for display; total_amount is the payable figure."
+          },
           "total_amount": {
             "type": "string",
             "nullable": true,
@@ -4988,18 +6321,56 @@
             "items": {
               "type": "object",
               "properties": {
-                "code": { "type": "string" },
-                "context": { "type": "object" }
+                "code": {
+                  "type": "string"
+                },
+                "context": {
+                  "type": "object"
+                }
               }
             }
           },
-          "lines": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/DailyPayLineResource" } },
-          "notes": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/Note" } },
-          "attachments": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/Attachment" } },
-          "created_by": { "type": "integer", "nullable": true },
-          "creator": { "allOf": [{ "$ref": "#/components/schemas/User" }], "nullable": true },
-          "created_at": { "type": "string", "format": "date-time" },
-          "updated_at": { "type": "string", "format": "date-time" }
+          "lines": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/DailyPayLineResource"
+            }
+          },
+          "notes": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/Note"
+            }
+          },
+          "attachments": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/Attachment"
+            }
+          },
+          "created_by": {
+            "type": "integer",
+            "nullable": true
+          },
+          "creator": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/User"
+              }
+            ],
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "DailyPayEntryResource": {
@@ -5008,15 +6379,52 @@
           "data": {
             "type": "object",
             "properties": {
-              "id": { "type": "integer" },
-              "date": { "type": "string", "format": "date" },
-              "payments": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/DailyPayPaymentResource" } },
-              "total_amount": { "type": "string", "nullable": true, "description": "Sum of every payment's total_amount." },
-              "revisions": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/DailyPayEntryRevisionResource" } },
-              "created_by": { "type": "integer", "nullable": true },
-              "creator": { "allOf": [{ "$ref": "#/components/schemas/User" }], "nullable": true },
-              "created_at": { "type": "string", "format": "date-time" },
-              "updated_at": { "type": "string", "format": "date-time" }
+              "id": {
+                "type": "integer"
+              },
+              "date": {
+                "type": "string",
+                "format": "date"
+              },
+              "payments": {
+                "type": "array",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/DailyPayPaymentResource"
+                }
+              },
+              "total_amount": {
+                "type": "string",
+                "nullable": true,
+                "description": "Sum of every payment's total_amount."
+              },
+              "revisions": {
+                "type": "array",
+                "nullable": true,
+                "items": {
+                  "$ref": "#/components/schemas/DailyPayEntryRevisionResource"
+                }
+              },
+              "created_by": {
+                "type": "integer",
+                "nullable": true
+              },
+              "creator": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/User"
+                  }
+                ],
+                "nullable": true
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time"
+              }
             }
           }
         }
@@ -5025,33 +6433,76 @@
         "type": "object",
         "description": "List view: payments and their money, without lines, notes, attachments or revisions.",
         "properties": {
-          "id": { "type": "integer" },
-          "date": { "type": "string", "format": "date" },
-          "payments": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/DailyPayPaymentResource" } },
-          "total_amount": { "type": "string", "nullable": true },
-          "created_by": { "type": "integer", "nullable": true },
-          "creator": { "allOf": [{ "$ref": "#/components/schemas/User" }], "nullable": true },
-          "created_at": { "type": "string", "format": "date-time" },
-          "updated_at": { "type": "string", "format": "date-time" }
+          "id": {
+            "type": "integer"
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "payments": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/DailyPayPaymentResource"
+            }
+          },
+          "total_amount": {
+            "type": "string",
+            "nullable": true
+          },
+          "created_by": {
+            "type": "integer",
+            "nullable": true
+          },
+          "creator": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/User"
+              }
+            ],
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "DailyPayEntryRevisionResource": {
         "type": "object",
         "description": "A snapshot of the entry's full state immediately before an edit.",
         "properties": {
-          "id": { "type": "integer" },
-          "daily_pay_entry_id": { "type": "integer" },
+          "id": {
+            "type": "integer"
+          },
+          "daily_pay_entry_id": {
+            "type": "integer"
+          },
           "snapshot": {
             "type": "object",
             "description": "The entry as it stood before this edit, stored as JSON. Read schema_version before rendering it."
           },
           "schema_version": {
             "type": "integer",
-            "enum": [1, 2],
+            "enum": [
+              1,
+              2
+            ],
             "description": "1 = the old two-level shape {date, lines: [...]}, written before payments existed. 2 = {date, payments: [{..., lines: [...]}]}. Snapshots are never rewritten, so both shapes exist in history."
           },
-          "edited_by": { "type": "integer", "nullable": true },
-          "created_at": { "type": "string", "format": "date-time" }
+          "edited_by": {
+            "type": "integer",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "Priority": {
@@ -5770,7 +7221,11 @@
             "nullable": true
           },
           "payment": {
-            "allOf": [{ "$ref": "#/components/schemas/PaymentState" }],
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaymentState"
+              }
+            ],
             "nullable": true,
             "description": "Whether these hours have been settled through a pay sheet. Null when the claims were not loaded."
           },
@@ -5793,25 +7248,43 @@
                 "type": "object",
                 "description": "Authoritative figures, in whole minutes",
                 "properties": {
-                  "work": { "type": "integer" },
-                  "travel": { "type": "integer" },
-                  "break": { "type": "integer" },
-                  "parts_run": { "type": "integer" }
+                  "work": {
+                    "type": "integer"
+                  },
+                  "travel": {
+                    "type": "integer"
+                  },
+                  "break": {
+                    "type": "integer"
+                  },
+                  "parts_run": {
+                    "type": "integer"
+                  }
                 }
               },
               "hours": {
                 "type": "object",
                 "description": "The same figures rounded to 2dp for display",
                 "properties": {
-                  "work": { "type": "number" },
-                  "travel": { "type": "number" },
-                  "break": { "type": "number" },
-                  "parts_run": { "type": "number" }
+                  "work": {
+                    "type": "number"
+                  },
+                  "travel": {
+                    "type": "number"
+                  },
+                  "break": {
+                    "type": "number"
+                  },
+                  "parts_run": {
+                    "type": "number"
+                  }
                 }
               },
               "warnings": {
                 "type": "array",
-                "items": { "type": "string" },
+                "items": {
+                  "type": "string"
+                },
                 "description": "e.g. incomplete_pair:work, inverted_pair:travel, implausible_pair:work"
               }
             }
@@ -5878,31 +7351,69 @@
         "properties": {
           "value": {
             "type": "string",
-            "enum": ["unpaid", "paid", "not_payable"],
+            "enum": [
+              "unpaid",
+              "paid",
+              "not_payable"
+            ],
             "description": "`unpaid` — owed, not yet on a pay sheet. `paid` — covered by one. `not_payable` — nothing for anyone to be paid back: a part we bought ourselves, or a record marked mistaken."
           },
-          "label": { "type": "string" }
+          "label": {
+            "type": "string"
+          }
         }
       },
       "PaymentClaim": {
         "type": "object",
         "description": "One payment that has counted this record.",
         "properties": {
-          "daily_pay_payment_id": { "type": "integer" },
-          "daily_pay_entry_id": { "type": "integer" },
-          "daily_pay_line_id": { "type": "integer", "nullable": true, "description": "The store line it was attributed to, or null when it could not be pinned to one store." },
-          "date": { "type": "string", "format": "date", "nullable": true },
-          "technician_id": { "type": "integer" },
-          "technician": { "allOf": [{ "$ref": "#/components/schemas/Technician" }], "nullable": true },
-          "amount": { "type": "string", "description": "Part usages only: what was reimbursed for this receipt." },
+          "daily_pay_payment_id": {
+            "type": "integer"
+          },
+          "daily_pay_entry_id": {
+            "type": "integer"
+          },
+          "daily_pay_line_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "The store line it was attributed to, or null when it could not be pinned to one store."
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "technician_id": {
+            "type": "integer"
+          },
+          "technician": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Technician"
+              }
+            ],
+            "nullable": true
+          },
+          "amount": {
+            "type": "string",
+            "description": "Part usages only: what was reimbursed for this receipt."
+          },
           "minutes": {
             "type": "object",
             "description": "Attendance entries only: the minutes this payment counted.",
             "properties": {
-              "work": { "type": "integer" },
-              "travel": { "type": "integer" },
-              "break": { "type": "integer" },
-              "parts_run": { "type": "integer" }
+              "work": {
+                "type": "integer"
+              },
+              "travel": {
+                "type": "integer"
+              },
+              "break": {
+                "type": "integer"
+              },
+              "parts_run": {
+                "type": "integer"
+              }
             }
           }
         }
@@ -5911,39 +7422,81 @@
         "type": "object",
         "description": "A record’s payment position: its status, and which payments settled it.",
         "properties": {
-          "status": { "$ref": "#/components/schemas/PaymentStatus" },
-          "payments": { "type": "array", "items": { "$ref": "#/components/schemas/PaymentClaim" } }
+          "status": {
+            "$ref": "#/components/schemas/PaymentStatus"
+          },
+          "payments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaymentClaim"
+            }
+          }
         }
       },
       "PaginationLinks": {
         "type": "object",
         "description": "Standard Laravel paginator links",
         "properties": {
-          "first": { "type": "string", "nullable": true },
-          "last": { "type": "string", "nullable": true },
-          "prev": { "type": "string", "nullable": true },
-          "next": { "type": "string", "nullable": true }
+          "first": {
+            "type": "string",
+            "nullable": true
+          },
+          "last": {
+            "type": "string",
+            "nullable": true
+          },
+          "prev": {
+            "type": "string",
+            "nullable": true
+          },
+          "next": {
+            "type": "string",
+            "nullable": true
+          }
         }
       },
       "PaginationMeta": {
         "type": "object",
         "description": "Standard Laravel paginator meta",
         "properties": {
-          "current_page": { "type": "integer" },
-          "from": { "type": "integer", "nullable": true },
-          "last_page": { "type": "integer" },
-          "path": { "type": "string" },
-          "per_page": { "type": "integer" },
-          "to": { "type": "integer", "nullable": true },
-          "total": { "type": "integer" },
+          "current_page": {
+            "type": "integer"
+          },
+          "from": {
+            "type": "integer",
+            "nullable": true
+          },
+          "last_page": {
+            "type": "integer"
+          },
+          "path": {
+            "type": "string"
+          },
+          "per_page": {
+            "type": "integer"
+          },
+          "to": {
+            "type": "integer",
+            "nullable": true
+          },
+          "total": {
+            "type": "integer"
+          },
           "links": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "url": { "type": "string", "nullable": true },
-                "label": { "type": "string" },
-                "active": { "type": "boolean" }
+                "url": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "label": {
+                  "type": "string"
+                },
+                "active": {
+                  "type": "boolean"
+                }
               }
             }
           }
@@ -5952,89 +7505,299 @@
       "StorageLocation": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer" },
-          "name": { "type": "string" },
-          "code": { "type": "string", "nullable": true },
-          "address": { "type": "string", "nullable": true },
-          "notes": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/Note" } },
-          "attachments": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/Attachment" } },
-          "created_by": { "type": "integer", "nullable": true },
-          "creator": { "allOf": [{ "$ref": "#/components/schemas/User" }], "nullable": true },
-          "created_at": { "type": "string", "format": "date-time" },
-          "updated_at": { "type": "string", "format": "date-time" },
-          "deleted_at": { "type": "string", "format": "date-time", "nullable": true }
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "nullable": true
+          },
+          "address": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/Note"
+            }
+          },
+          "attachments": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/Attachment"
+            }
+          },
+          "created_by": {
+            "type": "integer",
+            "nullable": true
+          },
+          "creator": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/User"
+              }
+            ],
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deleted_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
         }
       },
       "StorageLocationResource": {
         "type": "object",
-        "properties": { "data": { "$ref": "#/components/schemas/StorageLocation" } }
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/StorageLocation"
+          }
+        }
       },
       "StockMovementLine": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer" },
-          "part_id": { "type": "integer" },
-          "part": { "allOf": [{ "$ref": "#/components/schemas/Part" }], "nullable": true },
-          "storage_location_id": { "type": "integer" },
-          "storage_location": { "allOf": [{ "$ref": "#/components/schemas/StorageLocation" }], "nullable": true },
-          "quantity": { "type": "string", "description": "Always a positive magnitude" },
-          "direction": { "type": "integer", "enum": [-1, 1], "description": "-1 out of the location, +1 into it" },
-          "signed_quantity": { "type": "string", "description": "quantity × direction — what this line contributes to the balance" },
-          "unit_cost": { "type": "string", "nullable": true },
-          "total_cost": { "type": "string", "nullable": true }
+          "id": {
+            "type": "integer"
+          },
+          "part_id": {
+            "type": "integer"
+          },
+          "part": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Part"
+              }
+            ],
+            "nullable": true
+          },
+          "storage_location_id": {
+            "type": "integer"
+          },
+          "storage_location": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StorageLocation"
+              }
+            ],
+            "nullable": true
+          },
+          "quantity": {
+            "type": "string",
+            "description": "Always a positive magnitude"
+          },
+          "direction": {
+            "type": "integer",
+            "enum": [
+              -1,
+              1
+            ],
+            "description": "-1 out of the location, +1 into it"
+          },
+          "signed_quantity": {
+            "type": "string",
+            "description": "quantity × direction — what this line contributes to the balance"
+          },
+          "unit_cost": {
+            "type": "string",
+            "nullable": true
+          },
+          "total_cost": {
+            "type": "string",
+            "nullable": true
+          }
         }
       },
       "StockMovement": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer" },
-          "moved_at": { "type": "string", "format": "date-time" },
+          "id": {
+            "type": "integer"
+          },
+          "moved_at": {
+            "type": "string",
+            "format": "date-time"
+          },
           "type": {
             "type": "object",
             "properties": {
-              "value": { "type": "string", "enum": ["purchase", "draw", "return", "transfer_out", "transfer_in", "adjustment", "initial_count", "reversal"] },
-              "label": { "type": "string" }
+              "value": {
+                "type": "string",
+                "enum": [
+                  "purchase",
+                  "draw",
+                  "return",
+                  "transfer_out",
+                  "transfer_in",
+                  "adjustment",
+                  "initial_count",
+                  "reversal"
+                ]
+              },
+              "label": {
+                "type": "string"
+              }
             }
           },
-          "storage_location_id": { "type": "integer", "nullable": true },
-          "storage_location": { "allOf": [{ "$ref": "#/components/schemas/StorageLocation" }], "nullable": true },
+          "storage_location_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "storage_location": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StorageLocation"
+              }
+            ],
+            "nullable": true
+          },
           "paid_by": {
             "type": "object",
             "nullable": true,
             "properties": {
-              "value": { "type": "string", "enum": ["us", "technician"] },
-              "label": { "type": "string" }
+              "value": {
+                "type": "string",
+                "enum": [
+                  "us",
+                  "technician"
+                ]
+              },
+              "label": {
+                "type": "string"
+              }
             }
           },
-          "paid_by_technician_id": { "type": "integer", "nullable": true },
-          "paid_by_technician": { "allOf": [{ "$ref": "#/components/schemas/Technician" }], "nullable": true },
-          "body": { "type": "string", "nullable": true },
-          "part_usage_id": { "type": "integer", "nullable": true, "description": "Set when this movement was generated by a part usage rather than recorded by hand" },
-          "reverses_stock_movement_id": { "type": "integer", "nullable": true },
-          "mistaken": { "type": "boolean", "description": "Display only — flagged movements still count toward the balance, because the reversal is what corrects it" },
-          "lines": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/StockMovementLine" } },
-          "total_cost": { "type": "string", "nullable": true },
-          "notes": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/Note" } },
-          "attachments": { "type": "array", "nullable": true, "items": { "$ref": "#/components/schemas/Attachment" } },
-          "created_by": { "type": "integer", "nullable": true },
-          "creator": { "allOf": [{ "$ref": "#/components/schemas/User" }], "nullable": true },
-          "created_at": { "type": "string", "format": "date-time" },
-          "updated_at": { "type": "string", "format": "date-time" }
+          "paid_by_technician_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "paid_by_technician": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Technician"
+              }
+            ],
+            "nullable": true
+          },
+          "body": {
+            "type": "string",
+            "nullable": true
+          },
+          "part_usage_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Set when this movement was generated by a part usage rather than recorded by hand"
+          },
+          "reverses_stock_movement_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "mistaken": {
+            "type": "boolean",
+            "description": "Display only — flagged movements still count toward the balance, because the reversal is what corrects it"
+          },
+          "lines": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/StockMovementLine"
+            }
+          },
+          "total_cost": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/Note"
+            }
+          },
+          "attachments": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/Attachment"
+            }
+          },
+          "created_by": {
+            "type": "integer",
+            "nullable": true
+          },
+          "creator": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/User"
+              }
+            ],
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "StockMovementResource": {
         "type": "object",
-        "properties": { "data": { "$ref": "#/components/schemas/StockMovement" } }
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/StockMovement"
+          }
+        }
       },
       "StockBalance": {
         "type": "object",
         "properties": {
-          "part_id": { "type": "integer" },
-          "part": { "allOf": [{ "$ref": "#/components/schemas/Part" }], "nullable": true },
-          "storage_location_id": { "type": "integer" },
-          "storage_location": { "allOf": [{ "$ref": "#/components/schemas/StorageLocation" }], "nullable": true },
-          "quantity": { "type": "string", "description": "May be negative when a reversal was applied after the stock had been consumed" },
-          "updated_at": { "type": "string", "format": "date-time" }
+          "part_id": {
+            "type": "integer"
+          },
+          "part": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Part"
+              }
+            ],
+            "nullable": true
+          },
+          "storage_location_id": {
+            "type": "integer"
+          },
+          "storage_location": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StorageLocation"
+              }
+            ],
+            "nullable": true
+          },
+          "quantity": {
+            "type": "string",
+            "description": "May be negative when a reversal was applied after the stock had been consumed"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "PartUsage": {
@@ -6077,45 +7840,90 @@
           "source": {
             "type": "object",
             "properties": {
-              "value": { "type": "string", "enum": ["purchased", "from_storage"] },
-              "label": { "type": "string" }
+              "value": {
+                "type": "string",
+                "enum": [
+                  "purchased",
+                  "from_storage"
+                ]
+              },
+              "label": {
+                "type": "string"
+              }
             }
           },
           "paid_by": {
             "type": "object",
             "properties": {
-              "value": { "type": "string", "enum": ["us", "technician"] },
-              "label": { "type": "string" }
+              "value": {
+                "type": "string",
+                "enum": [
+                  "us",
+                  "technician"
+                ]
+              },
+              "label": {
+                "type": "string"
+              }
             }
           },
           "reimbursable": {
             "type": "boolean",
             "description": "True when someone other than us paid and is owed the money back"
           },
-          "paid_by_technician_id": { "type": "integer", "nullable": true },
+          "paid_by_technician_id": {
+            "type": "integer",
+            "nullable": true
+          },
           "paid_by_technician": {
-            "allOf": [{ "$ref": "#/components/schemas/Technician" }],
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Technician"
+              }
+            ],
             "nullable": true
           },
-          "storage_location_id": { "type": "integer", "nullable": true },
+          "storage_location_id": {
+            "type": "integer",
+            "nullable": true
+          },
           "storage_location": {
-            "allOf": [{ "$ref": "#/components/schemas/StorageLocation" }],
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StorageLocation"
+              }
+            ],
             "nullable": true
           },
-          "returned_quantity": { "type": "string" },
-          "returned_to_storage_location_id": { "type": "integer", "nullable": true },
+          "returned_quantity": {
+            "type": "string"
+          },
+          "returned_to_storage_location_id": {
+            "type": "integer",
+            "nullable": true
+          },
           "returned_to_storage_location": {
-            "allOf": [{ "$ref": "#/components/schemas/StorageLocation" }],
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StorageLocation"
+              }
+            ],
             "nullable": true
           },
           "stock_movement_ids": {
             "type": "array",
             "nullable": true,
-            "items": { "type": "integer" },
+            "items": {
+              "type": "integer"
+            },
             "description": "The movements this usage generated in the stock ledger, if any"
           },
           "payment": {
-            "allOf": [{ "$ref": "#/components/schemas/PaymentState" }],
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaymentState"
+              }
+            ],
             "nullable": true,
             "description": "Whether whoever paid for this has had it back through a pay sheet. A part we bought ourselves reads as not_payable — there is nobody to reimburse."
           },
@@ -6493,11 +8301,15 @@
             "nullable": true,
             "description": "Whether everything this issue costs anybody is on a pay sheet yet. Anything still owed dominates, so the issue reads as unpaid until the last of its payables is settled. Null when the records it reads were not loaded.",
             "properties": {
-              "status": { "$ref": "#/components/schemas/PaymentStatus" },
+              "status": {
+                "$ref": "#/components/schemas/PaymentStatus"
+              },
               "daily_pay_line_ids": {
                 "type": "array",
                 "nullable": true,
-                "items": { "type": "integer" },
+                "items": {
+                  "type": "integer"
+                },
                 "description": "The pay lines that cover this issue."
               }
             }
@@ -6738,9 +8550,24 @@
                 "items": {
                   "type": "object",
                   "properties": {
-                    "status": { "type": "string", "enum": ["pending", "assigned", "in_progress", "waiting", "complete", "deferred", "cancelled"] },
-                    "label": { "type": "string" },
-                    "count": { "type": "integer" }
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "assigned",
+                        "in_progress",
+                        "waiting",
+                        "complete",
+                        "deferred",
+                        "cancelled"
+                      ]
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer"
+                    }
                   }
                 },
                 "description": "All 7 IssueStatus values always present, zero-filled when absent. status_breakdown[status=complete].count is 'how many completed'."
@@ -6751,20 +8578,44 @@
             "type": "object",
             "description": "Averages in seconds/hours; null with sample_size 0 when no issue matches",
             "properties": {
-              "pending_to_next_status": { "$ref": "#/components/schemas/DurationAverage" },
-              "time_to_complete_or_cancelled": { "$ref": "#/components/schemas/DurationAverage" }
+              "pending_to_next_status": {
+                "$ref": "#/components/schemas/DurationAverage"
+              },
+              "time_to_complete_or_cancelled": {
+                "$ref": "#/components/schemas/DurationAverage"
+              }
             }
           },
           "avg_tickets_per_week": {
             "type": "object",
             "description": "Always all-time (ignores created_from/to and changed_from/to; still respects every other active filter). Custom week runs Tuesday 00:00:00 through Monday 23:59:59.",
             "properties": {
-              "value": { "type": "number", "nullable": true },
-              "total_tickets": { "type": "integer" },
-              "weeks_spanned": { "type": "integer", "nullable": true, "description": "Weeks between the earliest and latest matching ticket, inclusive; weeks with zero tickets still count" },
-              "span_start": { "type": "string", "format": "date", "nullable": true },
-              "span_end": { "type": "string", "format": "date", "nullable": true },
-              "week_starts_on": { "type": "string", "example": "tuesday" }
+              "value": {
+                "type": "number",
+                "nullable": true
+              },
+              "total_tickets": {
+                "type": "integer"
+              },
+              "weeks_spanned": {
+                "type": "integer",
+                "nullable": true,
+                "description": "Weeks between the earliest and latest matching ticket, inclusive; weeks with zero tickets still count"
+              },
+              "span_start": {
+                "type": "string",
+                "format": "date",
+                "nullable": true
+              },
+              "span_end": {
+                "type": "string",
+                "format": "date",
+                "nullable": true
+              },
+              "week_starts_on": {
+                "type": "string",
+                "example": "tuesday"
+              }
             }
           }
         }
@@ -6772,9 +8623,17 @@
       "DurationAverage": {
         "type": "object",
         "properties": {
-          "avg_seconds": { "type": "number", "nullable": true },
-          "avg_hours": { "type": "number", "nullable": true },
-          "sample_size": { "type": "integer" }
+          "avg_seconds": {
+            "type": "number",
+            "nullable": true
+          },
+          "avg_hours": {
+            "type": "number",
+            "nullable": true
+          },
+          "sample_size": {
+            "type": "integer"
+          }
         }
       },
       "TicketAnalyticsResource": {
@@ -6791,7 +8650,10 @@
         "properties": {
           "value": {
             "type": "string",
-            "enum": ["normal", "preventive_maintenance"]
+            "enum": [
+              "normal",
+              "preventive_maintenance"
+            ]
           },
           "label": {
             "type": "string",
@@ -6808,7 +8670,10 @@
           "type": {
             "type": "string",
             "nullable": true,
-            "enum": ["normal", "preventive_maintenance"],
+            "enum": [
+              "normal",
+              "preventive_maintenance"
+            ],
             "description": "Ticket type. Defaults to 'normal' when omitted."
           },
           "issues": {
@@ -6913,7 +8778,10 @@
       },
       "CreateOtherTicketRequest": {
         "type": "object",
-        "required": ["other_store", "issues"],
+        "required": [
+          "other_store",
+          "issues"
+        ],
         "description": "Request body for POST /tickets (the 'Others' flow). Supply other_store instead of a store in the URL.",
         "properties": {
           "other_store": {
@@ -6924,7 +8792,10 @@
           "type": {
             "type": "string",
             "nullable": true,
-            "enum": ["normal", "preventive_maintenance"],
+            "enum": [
+              "normal",
+              "preventive_maintenance"
+            ],
             "description": "Ticket type. Defaults to 'normal' when omitted."
           },
           "issues": {
@@ -6933,7 +8804,10 @@
             "description": "One or more issue lines. Each line uses either a catalog issue_id OR a free-text other_title.",
             "items": {
               "type": "object",
-              "required": ["priority", "description"],
+              "required": [
+                "priority",
+                "description"
+              ],
               "properties": {
                 "issue_id": {
                   "type": "integer",
@@ -6947,7 +8821,12 @@
                 },
                 "priority": {
                   "type": "string",
-                  "enum": ["urgent", "high", "medium", "low"]
+                  "enum": [
+                    "urgent",
+                    "high",
+                    "medium",
+                    "low"
+                  ]
                 },
                 "description": {
                   "type": "string"
@@ -6961,10 +8840,18 @@
             "description": "Optional notes to attach to the ticket itself at creation time.",
             "items": {
               "type": "object",
-              "required": ["body"],
+              "required": [
+                "body"
+              ],
               "properties": {
-                "body": { "type": "string", "maxLength": 10000 },
-                "type": { "type": "string", "nullable": true }
+                "body": {
+                  "type": "string",
+                  "maxLength": 10000
+                },
+                "type": {
+                  "type": "string",
+                  "nullable": true
+                }
               }
             }
           },
@@ -6972,7 +8859,10 @@
             "type": "array",
             "nullable": true,
             "description": "Files to attach directly to the ticket (requires multipart/form-data).",
-            "items": { "type": "string", "format": "binary" }
+            "items": {
+              "type": "string",
+              "format": "binary"
+            }
           }
         }
       }

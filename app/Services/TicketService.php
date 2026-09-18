@@ -278,6 +278,42 @@ class TicketService
             }
         }
 
+        // ?q=fryer — free text over the ticket, its store and its issues.
+        //
+        // The whole disjunction lives inside ONE where() closure. Every other
+        // clause in this method is a top-level where/whereHas, so a bare
+        // orWhere here would bind as "(A and B and C) or q" and quietly return
+        // tickets that fail every other filter. Do not unwrap it.
+        $q = trim((string) $request->query('q', ''));
+        if ($q !== '') {
+            // Escape the LIKE metacharacters so a search for "50%" means "50%".
+            // NOTE: Laravel emits no ESCAPE clause, so MySQL honours the backslash
+            // (its default LIKE escape) while sqlite takes it literally. Production
+            // is MySQL, the test suite is sqlite -- worth knowing before asserting
+            // on a wildcard search.
+            $like = '%' . addcslashes($q, '\%_') . '%';
+
+            $query->where(function (Builder $outer) use ($q, $like) {
+                // Exact only: a LIKE on a bigint can never use the primary key,
+                // and "find ticket 4821" is the commonest search there is.
+                if (ctype_digit($q)) {
+                    $outer->orWhere('tickets.id', (int) $q);
+                }
+
+                $outer->orWhereHas('store', fn(Builder $s) => $s->where('store_number', 'like', $like));
+
+                // A ticket with store_id = null can never match via the store
+                // relation, so searching a store name would silently miss every
+                // "other store" ticket without this line.
+                $outer->orWhere('tickets.other_store', 'like', $like);
+
+                $outer->orWhereHas('ticketIssues', fn(Builder $i) => $i->where(fn(Builder $w) => $w
+                    ->where('ticket_issues.other_title', 'like', $like)
+                    ->orWhere('ticket_issues.description', 'like', $like)
+                    ->orWhereHas('issue', fn(Builder $c) => $c->where('issues.title', 'like', $like))));
+            });
+        }
+
         // ?statuses[]=pending&statuses[]=assigned (OR logic)
         $statusValues = array_filter((array) $request->query('statuses', []));
         $statuses = array_values(array_filter(
@@ -322,6 +358,37 @@ class TicketService
         }
         if ($to = $request->query('created_to')) {
             $query->whereDate('created_at', '<=', $to);
+        }
+
+        // ?assigned_from=2026-01-01&assigned_to=2026-01-31
+        // Tickets carrying an issue SCHEDULED inside the window. This is what
+        // answers "what is on for today"; created_at cannot, because a ticket
+        // raised in March is routinely worked in September.
+        //
+        // Composition with ?technician_ids[]: two independent whereHas clauses
+        // mean "has AN issue scheduled in the window AND has AN issue worked by
+        // Ana" -- possibly two different issues. That is exactly how priorities,
+        // issue_statuses and issue_ids already compose here, so it is the
+        // consistent reading. A same-issue variant would be a different filter.
+        $assignedFrom = $request->query('assigned_from');
+        $assignedTo   = $request->query('assigned_to');
+        if ($assignedFrom || $assignedTo) {
+            $query->whereHas('ticketIssues.assignments', function (Builder $q) use ($assignedFrom, $assignedTo) {
+                // Mistaken assignments never count, exactly as mistaken part
+                // usages never count in part_cost_* and mistaken payables never
+                // count in payment_statuses.
+                $q->where('assignments.mistaken', false);
+
+                // Plain where, NOT whereDate: assigned_date is a DATE column, so
+                // wrapping it in DATE() would only defeat the index. created_from
+                // above uses whereDate because created_at is a DATETIME.
+                if ($assignedFrom) {
+                    $q->where('assignments.assigned_date', '>=', $assignedFrom);
+                }
+                if ($assignedTo) {
+                    $q->where('assignments.assigned_date', '<=', $assignedTo);
+                }
+            });
         }
 
         // ?changed_statuses[]=assigned&changed_statuses[]=complete&changed_statuses[]=waiting
