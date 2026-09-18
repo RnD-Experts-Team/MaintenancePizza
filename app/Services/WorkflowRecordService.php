@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Enums\AttendanceEventKind;
 use App\Models\AttendanceEntry;
+use App\Models\AttendanceEvent;
 use App\Models\DailyPayPayment;
 use App\Models\Diagnosis;
 use App\Models\PartUsage;
@@ -12,6 +14,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Creates and presents the per-issue workflow records that attach to one-or-many
@@ -20,15 +23,26 @@ use Illuminate\Support\Facades\DB;
  */
 class WorkflowRecordService
 {
-    private const CLOCKS = [
-        'start_clock',
-        'end_clock',
-        'start_break',
-        'end_break',
-        'start_parts_run',
-        'end_parts_run',
-        'start_travel',
-        'end_travel',
+    /**
+     * The eight clock fields the create endpoint still accepts, mapped to the
+     * event each one becomes.
+     *
+     * KEPT ON PURPOSE. Attendance is an event ledger now, but creation still
+     * takes a handful of clocks and converts them here -- which is what lets
+     * the existing form, the visit basket and every existing test keep working
+     * while the frontend moves across at its own pace.
+     *
+     * @var array<string, AttendanceEventKind>
+     */
+    private const CLOCK_EVENTS = [
+        'start_clock' => AttendanceEventKind::ClockIn,
+        'end_clock' => AttendanceEventKind::ClockOut,
+        'start_break' => AttendanceEventKind::BreakStart,
+        'end_break' => AttendanceEventKind::BreakEnd,
+        'start_parts_run' => AttendanceEventKind::PartsRunStart,
+        'end_parts_run' => AttendanceEventKind::PartsRunEnd,
+        'start_travel' => AttendanceEventKind::TravelStart,
+        'end_travel' => AttendanceEventKind::TravelEnd,
     ];
 
     private const PAY_FIELDS = [
@@ -64,6 +78,7 @@ class WorkflowRecordService
      * @var list<string>
      */
     private const ATTENDANCE_LOADS = [
+        'events',
         'dailyPayPayments.entry',
         'dailyPayPayments.technician',
         ...self::NOTE_LOADS,
@@ -132,12 +147,26 @@ class WorkflowRecordService
     public function createAttendance(array $data, array $files, array $noteFiles = []): array
     {
         $entry = DB::transaction(function () use ($data, $files, $noteFiles) {
-            $entry = new AttendanceEntry(array_merge(
-                ['technician_id' => $data['technician_id']],
-                array_intersect_key($data, array_flip(self::CLOCKS)),
-            ));
+            $entry = new AttendanceEntry(['technician_id' => $data['technician_id']]);
             $entry->created_by = Auth::id();
             $entry->save();
+
+            // The clocks become events. Nulls are skipped, so posting only a
+            // clock-in produces one event and an open session -- which is what
+            // it always meant, now said in a way the system can add to.
+            foreach (self::CLOCK_EVENTS as $field => $kind) {
+                if (($data[$field] ?? null) === null) {
+                    continue;
+                }
+
+                $entry->events()->create([
+                    'kind' => $kind,
+                    'at' => $data[$field],
+                    'created_by' => Auth::id(),
+                ]);
+            }
+
+            $this->syncSessionClocks($entry);
 
             $entry->ticketIssues()->attach($data['ticket_issue_ids']);
             $this->attachments->store($entry, $files);
@@ -160,6 +189,130 @@ class WorkflowRecordService
         $entry->update(['mistaken' => true]);
 
         return $this->presentAttendance($entry->load(['technician', ...self::ATTENDANCE_LOADS]));
+    }
+
+    /* ------------------------------------------------------ Attendance events */
+
+    /**
+     * Add one thing that happened.
+     *
+     * This is the method the old shape had no room for. Recording a clock-in
+     * and then wanting to add "he set off at 08:30" used to mean flagging the
+     * whole record wrong and typing it again, because after creation the only
+     * mutation was mistaken = true.
+     *
+     * A CLOCK-IN ON AN ALREADY-OPEN SESSION OPENS A NEW ONE. Coming back to a
+     * store later is a second visit, not a continuation -- and a session with
+     * two clock-ins in it would make "when did this shift start" unanswerable.
+     * The new session inherits the technician and the issues, because they are
+     * what made it the same piece of work.
+     *
+     * @return array<string, mixed>  the session the event landed on
+     */
+    public function appendAttendanceEvent(AttendanceEntry $entry, AttendanceEventKind $kind, string $at): array
+    {
+        $target = DB::transaction(function () use ($entry, $kind, $at) {
+            $target = $entry;
+
+            if ($kind === AttendanceEventKind::ClockIn && $entry->start_clock !== null) {
+                $target = new AttendanceEntry(['technician_id' => $entry->technician_id]);
+                $target->created_by = Auth::id();
+                $target->save();
+                $target->ticketIssues()->attach($entry->ticketIssues()->pluck('ticket_issues.id')->all());
+            }
+
+            $target->events()->create([
+                'kind' => $kind,
+                'at' => $at,
+                'created_by' => Auth::id(),
+            ]);
+
+            $this->syncSessionClocks($target);
+
+            return $target;
+        });
+
+        return $this->presentAttendance(
+            $target->load(['technician', 'ticketIssues', ...self::ATTENDANCE_LOADS])
+        );
+    }
+
+    /**
+     * Correct when something happened.
+     *
+     * Allowed only while no pay sheet has claimed the session. You can fix what
+     * nobody has been paid against; you cannot quietly rewrite what somebody
+     * was paid on -- for that, flag the event mistaken and record the right one,
+     * so the change is visible in the trail rather than hidden in it.
+     *
+     * @return array<string, mixed>
+     */
+    public function updateAttendanceEvent(AttendanceEvent $event, string $at): array
+    {
+        $entry = $event->attendanceEntry;
+
+        if ($entry->dailyPayPayments()->exists()) {
+            throw ValidationException::withMessages([
+                'at' => 'These hours are already on a pay sheet. Flag this event as a mistake and record the right one instead.',
+            ]);
+        }
+
+        DB::transaction(function () use ($event, $at, $entry) {
+            $event->update(['at' => $at]);
+            $this->syncSessionClocks($entry->refresh());
+        });
+
+        return $this->presentAttendance(
+            $entry->load(['technician', 'ticketIssues', ...self::ATTENDANCE_LOADS])
+        );
+    }
+
+    /**
+     * Strike one event without removing it.
+     *
+     * The same flag the rest of the system uses: it stays visible, struck
+     * through, and stops counting. Striking a clock-in leaves the session with
+     * no opening, so its cached start_clock goes null and durations() reports
+     * zero work -- there is no window to clip anything into. That reads on
+     * screen as a session needing a clock-in, which is exactly what it is.
+     *
+     * @return array<string, mixed>
+     */
+    public function markAttendanceEventMistaken(AttendanceEvent $event): array
+    {
+        $entry = $event->attendanceEntry;
+
+        DB::transaction(function () use ($event, $entry) {
+            $event->update(['mistaken' => true]);
+            $this->syncSessionClocks($entry->refresh());
+        });
+
+        return $this->presentAttendance(
+            $entry->load(['technician', 'ticketIssues', ...self::ATTENDANCE_LOADS])
+        );
+    }
+
+    /**
+     * Rewrite the session's cached clock window from its live events.
+     *
+     * Called inside the same transaction as every event write, exactly the way
+     * StockService keeps stock_balances in step with the movement ledger. The
+     * cache exists because DailyPayEntryService does MIN/MAX/BETWEEN over these
+     * two columns in raw SQL; nothing may write them by any other route.
+     */
+    private function syncSessionClocks(AttendanceEntry $entry): void
+    {
+        $events = $entry->events()->where('mistaken', false)->orderBy('at')->get();
+
+        $first = fn (AttendanceEventKind $kind) => $events
+            ->first(fn (AttendanceEvent $e) => $e->kind === $kind)?->at;
+
+        $entry->forceFill([
+            'start_clock' => $first(AttendanceEventKind::ClockIn),
+            'end_clock' => $first(AttendanceEventKind::ClockOut),
+        ])->save();
+
+        $entry->setRelation('events', $events);
     }
 
     // -------------------------------------------------------------- Part usage
@@ -327,6 +480,37 @@ class WorkflowRecordService
     }
 
     /**
+     * The session's events, oldest first, flagged ones included.
+     *
+     * A struck event stays in the list. It is part of the trail, and hiding it
+     * would defeat the reason the flag exists -- the same rule every other
+     * record in this system follows.
+     *
+     * @return ?array<int, array<string, mixed>>
+     */
+    private function presentAttendanceEvents(AttendanceEntry $entry): ?array
+    {
+        if (! $entry->relationLoaded('events')) {
+            return null;
+        }
+
+        return $entry->events
+            ->sortBy([fn (AttendanceEvent $a, AttendanceEvent $b) => $a->at <=> $b->at])
+            ->map(fn (AttendanceEvent $event) => [
+                'id' => $event->id,
+                'kind' => $event->kind->value,
+                'label' => $event->kind->label(),
+                'bucket' => $event->kind->bucket(),
+                'opens' => $event->kind->opens(),
+                'paid' => $event->kind->paid(),
+                'at' => $event->at,
+                'mistaken' => $event->mistaken,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function presentAttendance(AttendanceEntry $entry): array
@@ -337,14 +521,15 @@ class WorkflowRecordService
             'technician' => $entry->relationLoaded('technician') && $entry->technician
                 ? $this->catalog->presentTechnician($entry->technician)
                 : null,
+            // The clock window, from the cache kept in step with the events.
+            // An end_clock of null means the session is still open -- which is
+            // a normal state, not a missing value.
             'start_clock' => $entry->start_clock,
             'end_clock' => $entry->end_clock,
-            'start_break' => $entry->start_break,
-            'end_break' => $entry->end_break,
-            'start_parts_run' => $entry->start_parts_run,
-            'end_parts_run' => $entry->end_parts_run,
-            'start_travel' => $entry->start_travel,
-            'end_travel' => $entry->end_travel,
+            // Everything that happened, oldest first. This replaced six flat
+            // columns that could hold only one break, one travel and one parts
+            // run per session.
+            'events' => $this->presentAttendanceEvents($entry),
             // Derived, never stored. Minutes are authoritative; hours are the
             // same figure rounded once for display.
             'durations' => $this->presentDurations($entry),

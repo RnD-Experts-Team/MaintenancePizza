@@ -17,10 +17,19 @@ class StorageLocation extends Model
 
     protected $fillable = ['name', 'code', 'address'];
 
-    /** The named places inside this location. @return HasMany<StorageSlot, $this> */
-    public function slots(): HasMany
+    /**
+     * How this location addresses the space inside it -- Shelf, Row, Column.
+     *
+     * NAMED `placeLevels` TO MATCH ITS ROUTE PARAMETER `{placeLevel}`. Laravel
+     * resolves a scoped binding's relation as Str::plural(Str::camel($param)),
+     * so a mismatch here is a 500 on every nested PATCH and DELETE -- which is
+     * exactly how the slots feature this replaces shipped broken.
+     *
+     * @return HasMany<StoragePlaceLevel, $this>
+     */
+    public function placeLevels(): HasMany
     {
-        return $this->hasMany(StorageSlot::class)->orderBy('sort_order')->orderBy('name');
+        return $this->hasMany(StoragePlaceLevel::class)->orderBy('sort_order')->orderBy('name');
     }
 
     /** @return HasMany<StockBalance, $this> */

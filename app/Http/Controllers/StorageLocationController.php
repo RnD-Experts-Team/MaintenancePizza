@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreStorageLocationRequest;
 use App\Models\StorageLocation;
-use App\Models\StorageSlot;
-use App\Http\Requests\StoreStorageSlotRequest;
+use App\Models\StoragePlaceLevel;
+use App\Models\StoragePlaceValue;
+use App\Http\Requests\StoragePlaceLevelRequest;
+use App\Http\Requests\StoragePlaceValueRequest;
 use App\Services\StorageLocationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -36,44 +38,77 @@ class StorageLocationController extends Controller
         return ['data' => $this->locations->restore($storageLocation)];
     }
 
-    /* ------------------------------------------------------------- Slots */
+    /* ------------------------------------------------- Place levels & values */
 
     /**
-     * Where inside this location things sit.
+     * How this location addresses the space inside it.
      *
-     * A location answers "Storage A"; a slot answers "shelf C, section 5". Each
-     * location defines its own, so a van and a depot do not have to share a
-     * vocabulary. Slots do not split the stock count -- they record where a part
-     * lives, which is a findability question rather than an accounting one.
+     * A location answers "Storage A"; its levels and their values answer
+     * "shelf C, row 8, column 5". Each location declares its own, so a van and
+     * a depot never have to share a vocabulary.
+     *
+     * None of this splits the stock count -- it records where a part lives,
+     * which is a findability question rather than an accounting one.
      */
-    public function slotsIndex(Request $request, StorageLocation $storageLocation)
+    public function placeLevelsIndex(Request $request, StorageLocation $storageLocation)
     {
-        return ['data' => $this->locations->slots($storageLocation, $request->boolean('trashed'))];
+        return ['data' => $this->locations->placeLevels($storageLocation, $request->boolean('trashed'))];
     }
 
-    public function slotsStore(StoreStorageSlotRequest $request, StorageLocation $storageLocation)
+    public function placeLevelsStore(StoragePlaceLevelRequest $request, StorageLocation $storageLocation)
     {
         return response()->json(
-            ['data' => $this->locations->createSlot($storageLocation, $request->validated())],
+            ['data' => $this->locations->createPlaceLevel($storageLocation, $request->validated())],
             201
         );
     }
 
-    /** Slots ARE editable, unlike locations -- a mislabelled shelf is not worth
-     *  retiring and recreating. */
-    public function slotsUpdate(
-        StoreStorageSlotRequest $request,
+    /** Levels ARE editable, unlike locations -- a mislabelled level is not
+     *  worth retiring and recreating along with all its values. */
+    public function placeLevelsUpdate(
+        StoragePlaceLevelRequest $request,
         StorageLocation $storageLocation,
-        StorageSlot $storageSlot
+        StoragePlaceLevel $placeLevel
     ) {
-        return ['data' => $this->locations->updateSlot($storageSlot, $request->validated())];
+        return ['data' => $this->locations->updatePlaceLevel($placeLevel, $request->validated())];
     }
 
-    public function slotsDestroy(StorageLocation $storageLocation, StorageSlot $storageSlot): Response
-    {
-        $this->locations->deleteSlot($storageSlot);
+    public function placeLevelsDestroy(
+        StorageLocation $storageLocation,
+        StoragePlaceLevel $placeLevel
+    ): Response {
+        $this->locations->deletePlaceLevel($placeLevel);
 
         return response()->noContent();
     }
 
+    public function placeValuesStore(
+        StoragePlaceValueRequest $request,
+        StorageLocation $storageLocation,
+        StoragePlaceLevel $placeLevel
+    ) {
+        return response()->json(
+            ['data' => $this->locations->createPlaceValue($placeLevel, $request->validated())],
+            201
+        );
+    }
+
+    public function placeValuesUpdate(
+        StoragePlaceValueRequest $request,
+        StorageLocation $storageLocation,
+        StoragePlaceLevel $placeLevel,
+        StoragePlaceValue $placeValue
+    ) {
+        return ['data' => $this->locations->updatePlaceValue($placeValue, $request->validated())];
+    }
+
+    public function placeValuesDestroy(
+        StorageLocation $storageLocation,
+        StoragePlaceLevel $placeLevel,
+        StoragePlaceValue $placeValue
+    ): Response {
+        $this->locations->deletePlaceValue($placeValue);
+
+        return response()->noContent();
+    }
 }

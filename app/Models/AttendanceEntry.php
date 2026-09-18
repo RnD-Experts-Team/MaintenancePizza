@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\AttendanceEventKind;
 use App\Enums\PaymentStatus;
 use App\Models\Concerns\HasNotesAndAttachments;
 use Database\Factories\AttendanceEntryFactory;
@@ -9,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class AttendanceEntry extends Model
 {
@@ -21,28 +23,22 @@ class AttendanceEntry extends Model
      */
     private const MAX_PAIR_MINUTES = 1440;
 
-    /**
-     * The four start/end pairs, keyed by the bucket they contribute to.
-     *
-     * @var array<string, array{0: string, 1: string}>
-     */
-    private const PAIRS = [
-        'work' => ['start_clock', 'end_clock'],
-        'break' => ['start_break', 'end_break'],
-        'parts_run' => ['start_parts_run', 'end_parts_run'],
-        'travel' => ['start_travel', 'end_travel'],
-    ];
+    /** The buckets a session's spans fall into. `work` is the clock window. */
+    private const BUCKETS = ['work', 'travel', 'break', 'parts_run'];
 
+    /**
+     * start_clock and end_clock are a CACHE of the clock_in / clock_out events,
+     * rewritten by WorkflowRecordService inside the same transaction as every
+     * event write. They are kept as columns because DailyPayEntryService runs
+     * MIN/MAX/BETWEEN over them in raw SQL and overlaps() filters on both --
+     * deriving them would make every pay run pay for a correlated subquery.
+     *
+     * Never set them by hand. Set the events; the cache follows.
+     */
     protected $fillable = [
         'technician_id',
         'start_clock',
         'end_clock',
-        'start_break',
-        'end_break',
-        'start_parts_run',
-        'end_parts_run',
-        'start_travel',
-        'end_travel',
         'mistaken',
     ];
 
@@ -54,12 +50,6 @@ class AttendanceEntry extends Model
         return [
             'start_clock' => 'datetime',
             'end_clock' => 'datetime',
-            'start_break' => 'datetime',
-            'end_break' => 'datetime',
-            'start_parts_run' => 'datetime',
-            'end_parts_run' => 'datetime',
-            'start_travel' => 'datetime',
-            'end_travel' => 'datetime',
             'mistaken' => 'boolean',
         ];
     }
@@ -68,46 +58,71 @@ class AttendanceEntry extends Model
      * Duration of each bucket, in whole MINUTES, plus any warnings about the
      * data it was derived from.
      *
-     * The clock columns are deliberately unconstrained (see the table
-     * migration: "the dispatcher may set any subset, repeatedly"), and nothing
-     * validates that an end follows its start. So this must never throw and
-     * must never return a negative — payroll reads it. Bad pairs contribute
-     * zero and raise a warning instead.
+     * Walks the session's live events in time order, pairing each opening event
+     * with the next closing one of the same bucket. So a session can now hold
+     * as many breaks, travels and parts runs as actually happened -- which is
+     * the thing the four fixed column-pairs made impossible.
      *
-     * `work` is NET: the break, parts-run and travel intervals are merged and
+     * Nothing upstream constrains the order events are recorded in, and nothing
+     * should: a coordinator writing up a visit from a phone call enters them as
+     * they are remembered. So this must never throw and must never return a
+     * negative -- payroll reads it. Anything unusable contributes zero and
+     * raises a warning instead.
+     *
+     * `work` is NET: the break, parts-run and travel spans are merged and
      * subtracted, but only the portion of each that actually falls inside the
      * clock window. Techs record runs both inside and outside their shift, and
      * intersecting is correct under either convention. Merging before
      * subtracting stops an overlapping break and parts run being deducted
      * twice. The other three buckets are reported at their full recorded
-     * length — they are their own line items.
+     * length -- they are their own line items.
+     *
+     * AN OPEN SESSION IS NOT AN ERROR. A clock-in with no clock-out yet is the
+     * normal state of somebody currently working, and it warns about nothing.
+     * The dangling-half warning fires only once the session has been closed,
+     * where a half-recorded break really is something somebody forgot.
      *
      * @return array{work: int, travel: int, break: int, parts_run: int, warnings: list<string>}
      */
     public function durations(): array
     {
+        $events = $this->liveEvents();
+        $closed = $events->contains(fn (AttendanceEvent $e) => $e->kind === AttendanceEventKind::ClockOut);
+
         $warnings = [];
+        $spans = [];
+
+        foreach (self::BUCKETS as $bucket) {
+            [$spans[$bucket], $bucketWarnings] = $this->spansFor($events, $bucket, $closed);
+            $warnings = array_merge($warnings, $bucketWarnings);
+        }
+
         $minutes = [];
-        $intervals = [];
 
-        foreach (self::PAIRS as $bucket => [$startField, $endField]) {
-            [$minutes[$bucket], $intervals[$bucket], $warning] = $this->pair($bucket, $startField, $endField);
-
-            if ($warning !== null) {
-                $warnings[] = $warning;
-            }
+        foreach (self::BUCKETS as $bucket) {
+            $minutes[$bucket] = $this->mergedMinutes($spans[$bucket]);
         }
 
         $work = $minutes['work'];
 
-        if ($intervals['work'] !== null) {
+        // The clock window, as one interval. Several clock-in/clock-out pairs
+        // in one session would be two sessions, so in practice this is one --
+        // but merging keeps the maths total if it ever is not.
+        $window = $spans['work'] === [] ? null : [
+            min(array_column($spans['work'], 0)),
+            max(array_column($spans['work'], 1)),
+        ];
+
+        if ($window !== null) {
             $deductions = [];
 
             foreach (['break', 'parts_run', 'travel'] as $bucket) {
-                $clipped = $this->intersect($intervals[$bucket], $intervals['work']);
+                foreach ($spans[$bucket] as $span) {
+                    $clipped = $this->intersect($span, $window);
 
-                if ($clipped !== null) {
-                    $deductions[] = $clipped;
+                    if ($clipped !== null) {
+                        $deductions[] = $clipped;
+                    }
                 }
             }
 
@@ -124,42 +139,109 @@ class AttendanceEntry extends Model
     }
 
     /**
-     * One start/end pair as [minutes, interval, warning]. The interval is a
-     * [startTimestamp, endTimestamp] tuple, or null when there is nothing
-     * usable to intersect against.
+     * Every span of one bucket, paired off in time order.
      *
-     * @return array{0: int, 1: ?array{0: int, 1: int}, 2: ?string}
+     * An opening event is held until the matching closing one arrives. A second
+     * opening while one is already held means the first was never closed -- so
+     * it is reported and dropped rather than silently swallowing the gap.
+     *
+     * @param  \Illuminate\Support\Collection<int, AttendanceEvent>  $events
+     * @return array{0: list<array{0: int, 1: int}>, 1: list<string>}
      */
-    private function pair(string $bucket, string $startField, string $endField): array
+    private function spansFor($events, string $bucket, bool $sessionClosed): array
     {
-        $start = $this->{$startField};
-        $end = $this->{$endField};
+        /** @var list<AttendanceEvent> $own */
+        $own = $events->filter(fn (AttendanceEvent $e) => $e->kind->bucket() === $bucket)
+            ->values()
+            ->all();
 
-        if ($start === null && $end === null) {
-            // Simply not recorded. Not an error, so no warning.
-            return [0, null, null];
+        $spans = [];
+        $warnings = [];
+        $openAt = null;
+        $count = count($own);
+
+        for ($i = 0; $i < $count; $i++) {
+            $event = $own[$i];
+
+            if ($event->kind->opens()) {
+                if ($openAt !== null) {
+                    $warnings[] = "incomplete_pair:{$bucket}";
+                }
+
+                $openAt = $event->at->getTimestamp();
+
+                continue;
+            }
+
+            if ($openAt === null) {
+                /*
+                 * A closing half with nothing open yet.
+                 *
+                 * This is where an INVERTED pair shows up. Sorting by time is
+                 * what makes out-of-order entry work, but it also means a pair
+                 * typed the wrong way round -- clocked in 16:00, clocked out
+                 * 08:00 -- arrives as close-then-open rather than as a negative
+                 * span. Recognising the adjacent pair is the only way to tell
+                 * that apart from a genuinely orphaned half, and telling them
+                 * apart matters: one is a typo, the other is a forgotten press.
+                 */
+                if ($i + 1 < $count && $own[$i + 1]->kind->opens()) {
+                    $warnings[] = "inverted_pair:{$bucket}";
+                    $i++; // consume the open too; the pair counts as zero
+
+                    continue;
+                }
+
+                $warnings[] = "incomplete_pair:{$bucket}";
+
+                continue;
+            }
+
+            $to = $event->at->getTimestamp();
+
+            if (intdiv($to - $openAt, 60) > self::MAX_PAIR_MINUTES) {
+                // A forgotten close. Clamped rather than believed, and the
+                // clamped span is what gets subtracted, so the reported figure
+                // and the deduction stay consistent.
+                $warnings[] = "implausible_pair:{$bucket}";
+                $spans[] = [$openAt, $openAt + self::MAX_PAIR_MINUTES * 60];
+                $openAt = null;
+
+                continue;
+            }
+
+            $spans[] = [$openAt, $to];
+            $openAt = null;
         }
 
-        if ($start === null || $end === null) {
-            return [0, null, "incomplete_pair:{$bucket}"];
+
+        // Something still open at the end. Only a problem once the session is
+        // closed -- while it is running, this is just somebody still driving.
+        if ($openAt !== null && $sessionClosed) {
+            $warnings[] = "incomplete_pair:{$bucket}";
         }
 
-        $from = $start->getTimestamp();
-        $to = $end->getTimestamp();
+        return [$spans, array_values(array_unique($warnings))];
+    }
 
-        if ($to < $from) {
-            return [0, null, "inverted_pair:{$bucket}"];
-        }
+    /**
+     * The events that count, oldest first.
+     *
+     * Sorted by `at`, NOT by id: reality does not arrive in insertion order. A
+     * coordinator catching up on a visit may enter the clock-out before
+     * remembering the break, and the session still has to read as a story.
+     *
+     * @return \Illuminate\Support\Collection<int, AttendanceEvent>
+     */
+    public function liveEvents()
+    {
+        $events = $this->relationLoaded('events')
+            ? $this->events
+            : $this->events()->get();
 
-        $span = intdiv($to - $from, 60);
-
-        if ($span > self::MAX_PAIR_MINUTES) {
-            // Clamp the interval too, so the subtraction below stays consistent
-            // with the reported figure.
-            return [self::MAX_PAIR_MINUTES, [$from, $from + self::MAX_PAIR_MINUTES * 60], "implausible_pair:{$bucket}"];
-        }
-
-        return [$span, [$from, $to], null];
+        return $events->reject(fn (AttendanceEvent $e) => $e->mistaken)
+            ->sortBy(fn (AttendanceEvent $e) => $e->at->getTimestamp())
+            ->values();
     }
 
     /**
@@ -183,6 +265,10 @@ class AttendanceEntry extends Model
 
     /**
      * Total minutes covered by these intervals, counting overlaps once.
+     *
+     * Now load-bearing in a second place: a session with two breaks produces
+     * two spans in one bucket, and this is what turns them into one figure
+     * without double-counting an overlap.
      *
      * @param  list<array{0: int, 1: int}>  $intervals
      */
@@ -244,6 +330,21 @@ class AttendanceEntry extends Model
         return $this->dailyPayPayments->isNotEmpty()
             ? PaymentStatus::Paid
             : PaymentStatus::Unpaid;
+    }
+
+    /**
+     * Everything that happened during this session.
+     *
+     * NAMED `events` TO MATCH ITS ROUTE PARAMETER `{event}`. Laravel resolves a
+     * scoped binding's relation as Str::plural(Str::camel($param)), and getting
+     * that wrong is a 500 on every nested write -- as the storage slots feature
+     * demonstrated.
+     *
+     * @return HasMany<AttendanceEvent, $this>
+     */
+    public function events(): HasMany
+    {
+        return $this->hasMany(AttendanceEvent::class)->orderBy('at')->orderBy('id');
     }
 
     /** @return BelongsTo<Technician, $this> */

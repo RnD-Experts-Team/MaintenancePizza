@@ -100,7 +100,12 @@ class DailyPayAggregationService
             }
 
             $payDate = $payment->entry?->date?->toDateString();
-            $entryDate = $entry->start_clock?->toDateString() ?? $entry->start_travel?->toDateString();
+            // start_travel is no longer a column -- it is an event. The
+            // fallback is now the session's earliest live event, which is
+            // strictly better: it covers a session that opens with anything at
+            // all, not just travel. A loop over a loaded relation, not a query.
+            $entryDate = $entry->start_clock?->toDateString()
+                ?? $entry->liveEvents()->first()?->at->toDateString();
 
             if ($payDate && $entryDate && $payDate !== $entryDate) {
                 $warnings[] = [

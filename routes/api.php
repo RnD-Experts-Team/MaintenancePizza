@@ -81,14 +81,30 @@ Route::middleware('auth.token.store')->group(function () {
     Route::delete('storage-locations/{storageLocation}', [StorageLocationController::class, 'destroy'])->name('storage-locations.destroy');
     Route::post('storage-locations/{storageLocation}/restore', [StorageLocationController::class, 'restore'])->withTrashed()->name('storage-locations.restore');
 
-    // Where inside a location things sit. scopeBindings keeps {storageSlot}
-    // belonging to {storageLocation}, so one location's slot can never be
-    // edited through another's URL.
-    Route::prefix('storage-locations/{storageLocation}/slots')->scopeBindings()->group(function () {
-        Route::get('/', [StorageLocationController::class, 'slotsIndex'])->name('storage-locations.slots.index');
-        Route::post('/', [StorageLocationController::class, 'slotsStore'])->name('storage-locations.slots.store');
-        Route::patch('{storageSlot}', [StorageLocationController::class, 'slotsUpdate'])->name('storage-locations.slots.update');
-        Route::delete('{storageSlot}', [StorageLocationController::class, 'slotsDestroy'])->name('storage-locations.slots.destroy');
+    /*
+     | How a location addresses the space inside it -- its levels (Shelf, Row,
+     | Column) and the values declared on each.
+     |
+     | scopeBindings keeps a child belonging to its parent, so one location's
+     | level can never be reached through another's URL.
+     |
+     | PARAMETER NAMES ARE LOAD-BEARING. Laravel resolves a scoped binding's
+     | relation as Str::plural(Str::camel($param)), so {placeLevel} requires
+     | StorageLocation::placeLevels() and {placeValue} requires
+     | StoragePlaceLevel::placeValues(). The slots feature this replaces used
+     | {storageSlot} against a slots() relation and 500'd on every PATCH and
+     | DELETE -- and its tests never caught it because they called the service
+     | instead of the endpoint. Every route here is tested over HTTP.
+     */
+    Route::prefix('storage-locations/{storageLocation}/place-levels')->scopeBindings()->group(function () {
+        Route::get('/', [StorageLocationController::class, 'placeLevelsIndex'])->name('storage-locations.place-levels.index');
+        Route::post('/', [StorageLocationController::class, 'placeLevelsStore'])->name('storage-locations.place-levels.store');
+        Route::patch('{placeLevel}', [StorageLocationController::class, 'placeLevelsUpdate'])->name('storage-locations.place-levels.update');
+        Route::delete('{placeLevel}', [StorageLocationController::class, 'placeLevelsDestroy'])->name('storage-locations.place-levels.destroy');
+
+        Route::post('{placeLevel}/values', [StorageLocationController::class, 'placeValuesStore'])->name('storage-locations.place-values.store');
+        Route::patch('{placeLevel}/values/{placeValue}', [StorageLocationController::class, 'placeValuesUpdate'])->name('storage-locations.place-values.update');
+        Route::delete('{placeLevel}/values/{placeValue}', [StorageLocationController::class, 'placeValuesDestroy'])->name('storage-locations.place-values.destroy');
     });
     Route::post('storage-locations/{storageLocation}/notes', [NoteController::class, 'storageLocation'])->name('storage-locations.notes');
     Route::post('storage-locations/{storageLocation}/attachments', [AttachmentController::class, 'storageLocation'])->name('storage-locations.attachments');
@@ -100,7 +116,10 @@ Route::middleware('auth.token.store')->group(function () {
     Route::post('stock-movements/{stockMovement}/notes', [NoteController::class, 'stockMovement'])->name('stock-movements.notes');
     Route::post('stock-movements/{stockMovement}/attachments', [AttachmentController::class, 'stockMovement'])->name('stock-movements.attachments');
 
-    Route::get('stock-balances', StockBalanceController::class)->name('stock-balances.index');
+    Route::get('stock-balances', [StockBalanceController::class, 'index'])->name('stock-balances.index');
+    // Where a part sits inside its location. The complete address each time --
+    // a level left out is cleared, because a part has one address per location.
+    Route::put('stock-balances/{stockBalance}/place', [StockBalanceController::class, 'setPlace'])->name('stock-balances.place');
 
     /*
     |--------------------------------------------------------------------------
@@ -201,6 +220,27 @@ Route::middleware('auth.token.store')->group(function () {
 
         Route::post('diagnoses/{diagnosis}/mistaken', [DiagnosisController::class, 'mistaken'])->name('tickets.diagnoses.mistaken');
         Route::post('attendance-entries/{attendanceEntry}/mistaken', [AttendanceEntryController::class, 'mistaken'])->name('tickets.attendance.mistaken');
+
+
+        /*
+         | The attendance event ledger. Each of these appends or amends ONE
+         | thing that happened, which is what makes adding to a saved session an
+         | insert rather than a correction -- the complaint that prompted it.
+         |
+         | DELIBERATELY NOT scopeBindings(), for the reason this whole group
+         | exists: an attendance entry is not a child of a ticket. It reaches
+         | issues through a pivot and one entry can span several tickets, so
+         | scoping would make Laravel look for Ticket::attendanceEntries() and
+         | 500. The event-belongs-to-entry check that scoping would have given
+         | us is done explicitly in the controller instead, where it can also
+         | say what it means.
+         */
+        Route::prefix('attendance-entries/{attendanceEntry}/events')->group(function () {
+            Route::post('/', [AttendanceEntryController::class, 'eventsStore'])->name('tickets.attendance.events.store');
+            Route::patch('{event}', [AttendanceEntryController::class, 'eventsUpdate'])->name('tickets.attendance.events.update');
+            Route::post('{event}/mistaken', [AttendanceEntryController::class, 'eventsMistaken'])->name('tickets.attendance.events.mistaken');
+        });
+
         Route::post('part-usages/{partUsage}/mistaken', [PartUsageController::class, 'mistaken'])->name('tickets.part-usages.mistaken');
         Route::post('pay-entries/{payEntry}/mistaken', [PayEntryController::class, 'mistaken'])->name('tickets.pay-entries.mistaken');
         Route::post('warranties/{warranty}/mistaken', [WarrantyController::class, 'mistaken'])->name('tickets.warranties.mistaken');

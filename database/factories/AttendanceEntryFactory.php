@@ -20,10 +20,7 @@ class AttendanceEntryFactory extends Factory
             'technician_id' => Technician::factory(),
             'start_clock' => null,
             'end_clock' => null,
-            'start_break' => null,
-            'end_break' => null,
-            'start_parts_run' => null,
-            'end_parts_run' => null,
+
             'mistaken' => false,
         ];
     }

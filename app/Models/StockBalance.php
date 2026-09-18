@@ -6,6 +6,7 @@ use Database\Factories\StockBalanceFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * How many of one part are at one location. A cache of the ledger, written
@@ -17,9 +18,10 @@ class StockBalance extends Model
     /** @use HasFactory<StockBalanceFactory> */
     use HasFactory;
 
-    // storage_slot_id is user-entered and is NOT part of the cached figure --
-    // see the migration. Everything else here is written only by StockService.
-    protected $fillable = ['part_id', 'storage_location_id', 'storage_slot_id', 'quantity'];
+    // Every column here is written only by StockService. The address is
+    // user-entered but lives on stock_balance_places rather than on this row,
+    // so a rebuild of the cache can no longer take it with it.
+    protected $fillable = ['part_id', 'storage_location_id', 'quantity'];
 
     /**
      * @return array<string, string>
@@ -37,11 +39,19 @@ class StockBalance extends Model
         return $this->belongsTo(Part::class);
     }
 
-    /** Where inside the location this part sits. Null when nobody has said.
-     *  @return BelongsTo<StorageSlot, $this> */
-    public function storageSlot(): BelongsTo
+    /**
+     * Where inside the location this part sits -- one row per level that has a
+     * value, so "Shelf C, Row 8" is two rows and a part with only a column
+     * recorded is one.
+     *
+     * An empty set means nobody has said, which is a different answer from
+     * "nowhere" and must not be rendered as a dash.
+     *
+     * @return HasMany<StockBalancePlace, $this>
+     */
+    public function places(): HasMany
     {
-        return $this->belongsTo(StorageSlot::class);
+        return $this->hasMany(StockBalancePlace::class);
     }
 
     /** @return BelongsTo<StorageLocation, $this> */

@@ -8,13 +8,16 @@ use App\Exceptions\InsufficientStockException;
 use App\Models\Part;
 use App\Models\PartUsage;
 use App\Models\StockBalance;
+use App\Models\StockBalancePlace;
 use App\Models\StockMovement;
 use App\Models\StockMovementLine;
 use App\Models\StorageLocation;
+use App\Models\StoragePlaceValue;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * The only writer of stock_movement_lines and stock_balances.
@@ -370,7 +373,7 @@ class StockService
     public function listBalances(array $filters): LengthAwarePaginator
     {
         /** @var Builder<StockBalance> $query */
-        $query = StockBalance::query()->with(['part', 'storageLocation', 'storageSlot']);
+        $query = StockBalance::query()->with(['part', 'storageLocation', 'places.placeLevel', 'places.placeValue']);
 
         if (! empty($filters['part_ids'])) {
             $query->whereIn('part_id', array_filter((array) $filters['part_ids']));
@@ -453,7 +456,7 @@ class StockService
         // The breakdown behind each total. Loaded for the page only, so the
         // cost does not grow with the catalogue.
         $locations = StockBalance::query()
-            ->with(['storageLocation', 'storageSlot'])
+            ->with(['storageLocation', 'places.placeLevel', 'places.placeValue'])
             ->whereIn('part_id', $partIds)
             ->when(! empty($filters['storage_location_ids']), fn ($q) => $q->whereIn(
                 'storage_location_id', array_filter((array) $filters['storage_location_ids'])
@@ -480,13 +483,15 @@ class StockService
                 'location_count' => (int) $row->location_count,
                 'locations' => ($locations->get($partId) ?? collect())
                     ->map(fn (StockBalance $b) => [
+                        // The row's own id, so the client can address THIS
+                        // balance directly -- tagging happens on the stock
+                        // list, and the list is built from this shape.
+                        'id' => $b->id,
                         'storage_location_id' => $b->storage_location_id,
                         'storage_location' => $b->relationLoaded('storageLocation') && $b->storageLocation
                             ? $this->locations->present($b->storageLocation)
                             : null,
-                        'storage_slot' => $b->relationLoaded('storageSlot') && $b->storageSlot
-                            ? $this->locations->presentSlot($b->storageSlot)
-                            : null,
+                        'place' => $this->presentPlace($b),
                         'quantity' => $b->quantity,
                     ])->values()->all(),
                 'updated_at' => $row->updated_at,
@@ -1020,11 +1025,96 @@ class StockService
     }
 
     /**
+     * Say where a part sits inside a location.
+     *
+     * THE WHOLE ADDRESS AT ONCE. `$valueIds` is the complete set; a level left
+     * out of it is cleared. That is not laziness about PATCH semantics -- a
+     * part has ONE address per location, so "set shelf to C" and "the address
+     * is shelf C and nothing else" have to be distinguishable, and replacing
+     * the lot is the only version of that with no hidden state.
+     *
+     * Every value must belong to a level of THIS balance's location. Otherwise
+     * a part in Storage A could be recorded as sitting on Storage B's shelf,
+     * which reads as a fact and is not one.
+     *
+     * @param  array<int, int>  $valueIds  storage_place_value ids, in any order
+     * @return array<string, mixed>  the address as presentPlace() renders it
+     */
+    public function setBalancePlace(StockBalance $balance, array $valueIds): array
+    {
+        $values = StoragePlaceValue::query()
+            ->whereIn('id', $valueIds)
+            ->with('placeLevel')
+            ->get();
+
+        foreach ($values as $value) {
+            if ($value->placeLevel?->storage_location_id !== $balance->storage_location_id) {
+                throw ValidationException::withMessages([
+                    'place_value_ids' => "That place belongs to a different location.",
+                ]);
+            }
+        }
+
+        // One value per level is a database rule (stock_balance_place_unique),
+        // but saying so here gives a sentence instead of an integrity error.
+        $byLevel = $values->groupBy('storage_place_level_id');
+
+        foreach ($byLevel as $levelValues) {
+            if ($levelValues->count() > 1) {
+                throw ValidationException::withMessages([
+                    'place_value_ids' => "A part can only be in one place on each level.",
+                ]);
+            }
+        }
+
+        DB::transaction(function () use ($balance, $byLevel) {
+            $balance->places()->delete();
+
+            foreach ($byLevel as $levelId => $levelValues) {
+                $balance->places()->create([
+                    'storage_place_level_id' => $levelId,
+                    'storage_place_value_id' => $levelValues->first()->id,
+                ]);
+            }
+        });
+
+        return $this->presentPlace($balance->load(['places.placeLevel', 'places.placeValue']));
+    }
+
+    /**
+     * The address, ordered the way the location declares its levels.
+     *
+     * A LIST rather than a map, because the order is the address: "C / 8 / 5"
+     * only means shelf-row-column if it comes out in that order every time.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function presentPlace(StockBalance $balance): array
+    {
+        if (! $balance->relationLoaded('places')) {
+            return [];
+        }
+
+        return $balance->places
+            ->filter(fn (StockBalancePlace $p) => $p->placeLevel && $p->placeValue)
+            ->sortBy(fn (StockBalancePlace $p) => [$p->placeLevel->sort_order, $p->placeLevel->name])
+            ->map(fn (StockBalancePlace $p) => [
+                'level_id' => $p->storage_place_level_id,
+                'level' => $p->placeLevel->name,
+                'value_id' => $p->storage_place_value_id,
+                'value' => $p->placeValue->value,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function presentBalance(StockBalance $balance, ?array $valuation = null): array
     {
         return [
+            'id' => $balance->id,
             'part_id' => $balance->part_id,
             'part' => $balance->relationLoaded('part') && $balance->part
                 ? $this->catalog->presentPart($balance->part)
@@ -1033,11 +1123,10 @@ class StockService
             'storage_location' => $balance->relationLoaded('storageLocation') && $balance->storageLocation
                 ? $this->locations->present($balance->storageLocation)
                 : null,
-            // Where inside that location it sits. Null means nobody has said --
-            // which is different from "nowhere", so do not substitute a dash here.
-            'storage_slot' => $balance->relationLoaded('storageSlot') && $balance->storageSlot
-                ? $this->locations->presentSlot($balance->storageSlot)
-                : null,
+            // Where inside that location it sits, level by level. An EMPTY
+            // list means nobody has said -- which is different from "nowhere",
+            // so do not substitute a dash for it downstream.
+            'place' => $this->presentPlace($balance),
             // Quantity from the cache, value from the layers. That split is
             // deliberate: it is what makes this figure incapable of disagreeing
             // with Part::onHand() or with the ungrouped listing.

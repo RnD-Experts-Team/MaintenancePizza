@@ -3,10 +3,13 @@
 namespace App\Services;
 
 use App\Models\StorageLocation;
-use App\Models\StorageSlot;
+use App\Models\StockBalancePlace;
+use App\Models\StoragePlaceLevel;
+use App\Models\StoragePlaceValue;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 /**
  * The storage locations catalog — the physical places parts are kept. Follows
@@ -90,73 +93,133 @@ class StorageLocationService
         ];
     }
 
-    /* ------------------------------------------------------------- Slots */
+    /* ------------------------------------------------- Place levels & values */
+
+    /*
+     * How a location addresses the space inside it.
+     *
+     * Storage A declares its LEVELS -- Shelf, Row, Column, Section -- and each
+     * level declares its VALUES. A part then carries at most one value per
+     * level, and every level is optional, so a thing that lives in a column and
+     * nothing else says exactly that.
+     *
+     * Values are declared rather than typed freehand so "C" cannot also exist
+     * as "c" and as "Shelf C", which is the only thing that makes "what is on
+     * Shelf C?" answerable. The setup that buys is kept cheap by letting a new
+     * value be declared from inside the picker.
+     */
 
     /**
-     * The named places inside one location.
+     * The levels of one location, each with its declared values.
      *
      * @return array<int, array<string, mixed>>
      */
-    public function slots(StorageLocation $location, bool $withTrashed = false): array
+    public function placeLevels(StorageLocation $location, bool $withTrashed = false): array
     {
-        return $location->slots()
+        return $location->placeLevels()
             ->when($withTrashed, fn ($q) => $q->withTrashed())
+            ->with(['placeValues' => fn ($q) => $withTrashed ? $q->withTrashed() : $q])
             ->get()
-            ->map(fn (StorageSlot $slot) => $this->presentSlot($slot))
+            ->map(fn (StoragePlaceLevel $level) => $this->presentPlaceLevel($level))
             ->all();
     }
 
-    /**
-     * @param  array<string, mixed>  $data
-     * @return array<string, mixed>
-     */
-    public function createSlot(StorageLocation $location, array $data): array
+    public function createPlaceLevel(StorageLocation $location, array $data): array
     {
-        $slot = new StorageSlot($data);
-        $slot->storage_location_id = $location->id;
-        $slot->created_by = Auth::id();
-        $slot->save();
+        $level = new StoragePlaceLevel($data);
+        $level->storage_location_id = $location->id;
+        $level->created_by = Auth::id();
+        $level->save();
 
-        return $this->presentSlot($slot);
+        return $this->presentPlaceLevel($level->load('placeValues'));
+    }
+
+    public function updatePlaceLevel(StoragePlaceLevel $level, array $data): array
+    {
+        $level->fill($data)->save();
+
+        return $this->presentPlaceLevel($level->refresh()->load('placeValues'));
     }
 
     /**
-     * Slots ARE editable, unlike locations -- a shelf gets relabelled far more
-     * often than a depot gets renamed, and a typo in "Section 5" is not worth
-     * retiring and recreating.
+     * Retiring a level stops it being offered AND drops the addresses that used
+     * it, in one transaction.
      *
-     * @param  array<string, mixed>  $data
-     * @return array<string, mixed>
+     * Leaving those rows behind is what the slots feature did: the column went
+     * on pointing at a retired row while the API rendered null, which is two
+     * stories about one fact. A part keeps its other levels and its quantity is
+     * never touched; it simply stops claiming a level that no longer exists.
      */
-    public function updateSlot(StorageSlot $slot, array $data): array
+    public function deletePlaceLevel(StoragePlaceLevel $level): void
     {
-        $slot->fill($data)->save();
-
-        return $this->presentSlot($slot->refresh());
+        DB::transaction(function () use ($level) {
+            StockBalancePlace::query()->where('storage_place_level_id', $level->id)->delete();
+            $level->placeValues()->delete();
+            $level->delete();
+        });
     }
 
-    /** Retiring a slot leaves the stock where it is -- the FK nulls rather than
-     *  restricting, so we simply stop claiming to know which shelf. */
-    public function deleteSlot(StorageSlot $slot): void
+    public function createPlaceValue(StoragePlaceLevel $level, array $data): array
     {
-        $slot->delete();
+        $value = new StoragePlaceValue($data);
+        $value->storage_place_level_id = $level->id;
+        $value->created_by = Auth::id();
+        $value->save();
+
+        return $this->presentPlaceValue($value);
+    }
+
+    public function updatePlaceValue(StoragePlaceValue $value, array $data): array
+    {
+        $value->fill($data)->save();
+
+        return $this->presentPlaceValue($value->refresh());
+    }
+
+    /** Same rule as a level: the addresses that used it go with it, so nothing
+     *  is left pointing at something that will never be shown again. */
+    public function deletePlaceValue(StoragePlaceValue $value): void
+    {
+        DB::transaction(function () use ($value) {
+            StockBalancePlace::query()->where('storage_place_value_id', $value->id)->delete();
+            $value->delete();
+        });
     }
 
     /**
      * @return array<string, mixed>
      */
-    public function presentSlot(StorageSlot $slot): array
+    public function presentPlaceLevel(StoragePlaceLevel $level): array
     {
         return [
-            'id' => $slot->id,
-            'storage_location_id' => $slot->storage_location_id,
-            'name' => $slot->name,
-            'code' => $slot->code,
-            'sort_order' => $slot->sort_order,
-            'created_at' => $slot->created_at,
-            'updated_at' => $slot->updated_at,
-            'deleted_at' => $slot->deleted_at,
+            'id' => $level->id,
+            'storage_location_id' => $level->storage_location_id,
+            'name' => $level->name,
+            'sort_order' => $level->sort_order,
+            // Null, not [], when the relation was not loaded -- "we did not ask"
+            // and "there are none" are different and the client can tell.
+            'values' => $level->relationLoaded('placeValues')
+                ? $level->placeValues->map(fn (StoragePlaceValue $v) => $this->presentPlaceValue($v))->all()
+                : null,
+            'created_at' => $level->created_at,
+            'updated_at' => $level->updated_at,
+            'deleted_at' => $level->deleted_at,
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    public function presentPlaceValue(StoragePlaceValue $value): array
+    {
+        return [
+            'id' => $value->id,
+            'storage_place_level_id' => $value->storage_place_level_id,
+            'value' => $value->value,
+            'sort_order' => $value->sort_order,
+            'created_at' => $value->created_at,
+            'updated_at' => $value->updated_at,
+            'deleted_at' => $value->deleted_at,
+        ];
+    }
 }

@@ -60,7 +60,14 @@ class AttendanceEntryTest extends TestCase
 
         $entry = AttendanceEntry::sole();
 
-        $this->assertSame('2026-09-10 07:15:00', $entry->start_travel->toDateTimeString());
+        // The clocks posted to create become EVENTS. The endpoint still accepts
+        // the eight fields -- which is what let the existing form keep working
+        // while the ledger went in underneath it.
+        $travel = $entry->events()->whereIn('kind', ['travel_start', 'travel_end'])->orderBy('at')->get();
+
+        $this->assertCount(2, $travel);
+        $this->assertSame('2026-09-10 07:15:00', $travel[0]->at->toDateTimeString());
+        $this->assertSame('2026-09-10 08:00:00', $travel[1]->at->toDateTimeString());
         $this->assertSame(45, $entry->durations()['travel']);
     }
 
