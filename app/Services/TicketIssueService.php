@@ -36,6 +36,10 @@ class TicketIssueService
         'diagnoses.notes.creator',
         'diagnoses.notes.attachments.creator',
         'attendanceEntries.creator',
+        // Without this every session reaches the ticket page with events: [],
+        // which reads as "nothing recorded" -- the stream shows nothing and a
+        // still-open session is indistinguishable from a closed one.
+        'attendanceEntries.events',
         'attendanceEntries.dailyPayPayments.entry',
         'attendanceEntries.dailyPayPayments.technician',
         'attendanceEntries.technician',
