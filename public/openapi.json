@@ -228,6 +228,201 @@
         }
       }
     },
+    "/attendance-entries/{attendanceEntry}/events": {
+      "post": {
+        "tags": [
+          "Maintenance"
+        ],
+        "summary": "Record one thing that happened on the clock",
+        "operationId": "createAttendanceEventGlobal",
+        "description": "Attendance is an append-only EVENT LEDGER: one row per thing that happened. The entry survives as the SESSION -- one clock-in to one clock-out -- and keeps its id, its issues and its pay pivot, so the anti-double-pay index does not move. This replaced four fixed start/end column pairs, which meant a session could hold only ONE break, ONE travel and ONE parts run, and which had no update path at all: after creation the only mutation was mistaken = true, so adding \"he set off at 08:30\" to a saved clock-in meant flagging the record wrong and typing it again. NO ORDERING IS ENFORCED, deliberately -- a coordinator writing up a visit from a phone call enters events as they are remembered, and the stream re-sorts by time. An open session (a clock-in with no clock-out) is a normal state and warns about nothing. A clock_in appended to an already-open session opens a NEW session instead, inheriting the technician and the issues: coming back to a store later is a second visit, and a session with two clock-ins would make \"when did this shift start\" unanswerable. UNSCOPED, for the same reason creation has an unscoped variant: a visit covering issues on several tickets has no one ticket its URL could honestly name. The ticket-nested equivalent remains for the ordinary single-ticket case, where the URL saying which ticket you are looking at is worth having.",
+        "parameters": [
+          {
+            "name": "attendanceEntry",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "at"
+                ],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "clock_in",
+                      "clock_out",
+                      "travel_start",
+                      "travel_end",
+                      "break_start",
+                      "break_end",
+                      "parts_run_start",
+                      "parts_run_end"
+                    ]
+                  },
+                  "at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "REQUIRED, unlike the nullable clock columns this replaces: an event with no time is not an event. \"Has not clocked out yet\" is said by the absence of a clock_out event."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The session the event landed on",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "description": "The whole session the event landed on, in the usual attendance shape."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/attendance-entries/{attendanceEntry}/events/{event}": {
+      "patch": {
+        "tags": [
+          "Maintenance"
+        ],
+        "summary": "Correct when an event happened",
+        "operationId": "updateAttendanceEventGlobal",
+        "description": "Moves an event in time. REFUSED once a pay sheet has claimed the session: you can fix what nobody has been paid against, but you cannot quietly rewrite what somebody was paid on. For that, flag the event mistaken and record the right one, so the change is visible in the trail rather than hidden in it. UNSCOPED, for the same reason creation has an unscoped variant: a visit covering issues on several tickets has no one ticket its URL could honestly name. The ticket-nested equivalent remains for the ordinary single-ticket case, where the URL saying which ticket you are looking at is worth having.",
+        "parameters": [
+          {
+            "name": "attendanceEntry",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "event",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "at"
+                ],
+                "properties": {
+                  "at": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "description": "The whole session the event landed on, in the usual attendance shape."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "description": "The session is already on a pay sheet"
+          }
+        }
+      }
+    },
+    "/attendance-entries/{attendanceEntry}/events/{event}/mistaken": {
+      "post": {
+        "tags": [
+          "Maintenance"
+        ],
+        "summary": "Flag one event as a mistake",
+        "operationId": "markAttendanceEventMistakenGlobal",
+        "description": "Strikes the event without removing it -- it stays visible and stops counting, the same flag every other record here uses. Striking a clock_in leaves the session with no opening, so its cached start_clock goes null and durations() reports zero work: there is no window to clip anything into. That reads as a session needing a clock-in, which is what it is. UNSCOPED, for the same reason creation has an unscoped variant: a visit covering issues on several tickets has no one ticket its URL could honestly name. The ticket-nested equivalent remains for the ordinary single-ticket case, where the URL saying which ticket you are looking at is worth having.",
+        "parameters": [
+          {
+            "name": "attendanceEntry",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "event",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Flagged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "description": "The whole session the event landed on, in the usual attendance shape."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
     "/categories": {
       "get": {
         "tags": [

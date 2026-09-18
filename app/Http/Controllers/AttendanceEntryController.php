@@ -71,12 +71,24 @@ class AttendanceEntryController extends Controller
     }
 
 
-    public function eventsStore(
-        AttendanceEventRequest $request,
-        Store $store,
-        Ticket $ticket,
-        AttendanceEntry $attendanceEntry
-    ) {
+    /*
+     * EACH OF THESE EXISTS TWICE: once nested under a store and ticket, once
+     * global.
+     *
+     * Not duplication for its own sake -- it is the same split creation already
+     * has. A visit can cover issues on several tickets, so there is no one
+     * ticket its URL could honestly name; that is why `storeGlobal` exists
+     * above, and the visit basket needs the same freedom to keep adding to the
+     * session it just opened. The nested pair stays for the ordinary
+     * single-ticket case, where the URL saying which ticket you are looking at
+     * is worth having.
+     *
+     * The global method holds the logic; the nested one delegates. The Store
+     * and Ticket parameters exist only to bind the URL.
+     */
+
+    public function eventsStoreGlobal(AttendanceEventRequest $request, AttendanceEntry $attendanceEntry)
+    {
         $data = $request->validated();
 
         return response()->json([
@@ -88,12 +100,19 @@ class AttendanceEntryController extends Controller
         ], 201);
     }
 
-    /** Moves an event in time. Refused once a pay sheet has claimed the
-     *  session -- flag it mistaken and record the right one instead. */
-    public function eventsUpdate(
+    public function eventsStore(
         AttendanceEventRequest $request,
         Store $store,
         Ticket $ticket,
+        AttendanceEntry $attendanceEntry
+    ) {
+        return $this->eventsStoreGlobal($request, $attendanceEntry);
+    }
+
+    /** Moves an event in time. Refused once a pay sheet has claimed the
+     *  session -- flag it mistaken and record the right one instead. */
+    public function eventsUpdateGlobal(
+        AttendanceEventRequest $request,
         AttendanceEntry $attendanceEntry,
         AttendanceEvent $event
     ) {
@@ -103,15 +122,30 @@ class AttendanceEntryController extends Controller
         )];
     }
 
+    public function eventsUpdate(
+        AttendanceEventRequest $request,
+        Store $store,
+        Ticket $ticket,
+        AttendanceEntry $attendanceEntry,
+        AttendanceEvent $event
+    ) {
+        return $this->eventsUpdateGlobal($request, $attendanceEntry, $event);
+    }
+
+    public function eventsMistakenGlobal(AttendanceEntry $attendanceEntry, AttendanceEvent $event)
+    {
+        return ['data' => $this->workflow->markAttendanceEventMistaken(
+            $this->ownedEvent($attendanceEntry, $event),
+        )];
+    }
+
     public function eventsMistaken(
         Store $store,
         Ticket $ticket,
         AttendanceEntry $attendanceEntry,
         AttendanceEvent $event
     ) {
-        return ['data' => $this->workflow->markAttendanceEventMistaken(
-            $this->ownedEvent($attendanceEntry, $event),
-        )];
+        return $this->eventsMistakenGlobal($attendanceEntry, $event);
     }
 
     public function mistaken(Store $store, Ticket $ticket, AttendanceEntry $attendanceEntry)

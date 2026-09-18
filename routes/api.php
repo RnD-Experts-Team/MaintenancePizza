@@ -131,6 +131,17 @@ Route::middleware('auth.token.store')->group(function () {
     Route::post('attendance-entries', [AttendanceEntryController::class, 'storeGlobal'])->name('attendance.store-global');
 
     /*
+     | The event ledger, unscoped for the same reason creation is: a visit
+     | covering several tickets has no one ticket its URL could honestly name.
+     | The ticket-nested equivalents below stay for the single-ticket case.
+     */
+    Route::prefix('attendance-entries/{attendanceEntry}/events')->group(function () {
+        Route::post('/', [AttendanceEntryController::class, 'eventsStoreGlobal'])->name('attendance.events.store-global');
+        Route::patch('{event}', [AttendanceEntryController::class, 'eventsUpdateGlobal'])->name('attendance.events.update-global');
+        Route::post('{event}/mistaken', [AttendanceEntryController::class, 'eventsMistakenGlobal'])->name('attendance.events.mistaken-global');
+    });
+
+    /*
     |--------------------------------------------------------------------------
     | Daily Pay Entries (global, not store-scoped)
     |--------------------------------------------------------------------------

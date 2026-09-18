@@ -239,6 +239,63 @@ class AttendanceEventTest extends TestCase
         ])->assertStatus(422)->assertJsonValidationErrors('kind');
     }
 
+    /* ------------------------------------------------- the unscoped variant */
+
+    /*
+     * A visit covering issues on several tickets is filed outside any of them
+     * -- that is what the global create endpoint is for. It needs the same
+     * freedom to keep adding to the session it just opened, because there is no
+     * one ticket whose URL could honestly carry the events either.
+     */
+
+    public function test_an_event_can_be_added_without_naming_a_ticket(): void
+    {
+        [$entry] = $this->openSession();
+
+        $data = $this->postJson("/api/attendance-entries/{$entry->id}/events", [
+            'kind' => 'travel_start',
+            'at' => '2026-09-10 08:30:00',
+        ])->assertCreated()->json('data');
+
+        $this->assertSame(
+            ['clock_in', 'travel_start'],
+            array_column($data['events'], 'kind')
+        );
+    }
+
+    public function test_the_unscoped_variant_corrects_and_strikes_too(): void
+    {
+        [$entry] = $this->openSession();
+        $event = $entry->events()->sole();
+
+        $this->patchJson("/api/attendance-entries/{$entry->id}/events/{$event->id}", [
+            'at' => '2026-09-10 07:45:00',
+        ])->assertOk();
+
+        $this->assertSame('2026-09-10 07:45:00', $entry->fresh()->start_clock->toDateTimeString());
+
+        $this->postJson("/api/attendance-entries/{$entry->id}/events/{$event->id}/mistaken")
+            ->assertOk();
+
+        $this->assertNull($entry->fresh()->start_clock);
+    }
+
+    /** The ownership check is not the URL's scoping -- it is explicit, so it
+     *  has to hold on the unscoped route as well. */
+    public function test_the_unscoped_variant_still_refuses_another_sessions_event(): void
+    {
+        [$entry] = $this->openSession();
+        $event = $entry->events()->sole();
+
+        $other = AttendanceEntry::create(['technician_id' => $entry->technician_id]);
+
+        $this->patchJson("/api/attendance-entries/{$other->id}/events/{$event->id}", [
+            'at' => '2026-09-10 07:45:00',
+        ])->assertNotFound();
+
+        $this->assertSame('2026-09-10 08:00:00', $entry->fresh()->start_clock->toDateTimeString());
+    }
+
     /* ------------------------------------------------------------- behaviour */
 
     /**
