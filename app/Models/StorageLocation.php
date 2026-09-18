@@ -17,6 +17,12 @@ class StorageLocation extends Model
 
     protected $fillable = ['name', 'code', 'address'];
 
+    /** The named places inside this location. @return HasMany<StorageSlot, $this> */
+    public function slots(): HasMany
+    {
+        return $this->hasMany(StorageSlot::class)->orderBy('sort_order')->orderBy('name');
+    }
+
     /** @return HasMany<StockBalance, $this> */
     public function stockBalances(): HasMany
     {

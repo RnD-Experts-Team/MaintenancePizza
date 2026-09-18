@@ -5558,6 +5558,301 @@
           }
         }
       }
+    },
+    "/storage-locations/{storageLocation}/slots": {
+      "get": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "The named places inside a location",
+        "operationId": "listStorageSlots",
+        "description": "Where inside a location a part actually sits. A location answers \"Storage A\"; a slot answers \"shelf C, section 5, column Z\". Each location defines its OWN slots, so a van and a depot need not share a vocabulary. A SLOT IS NOT A STOCK DIMENSION: quantities stay per (part, location), no movement names a slot, and the slot records where a part lives rather than splitting its count. Names are unique per location among live slots.",
+        "parameters": [
+          {
+            "name": "storageLocation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "trashed",
+            "in": "query",
+            "required": false,
+            "description": "Include retired slots.",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The slots, in their hand-given order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer"
+                          },
+                          "storage_location_id": {
+                            "type": "integer"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "code": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "sort_order": {
+                            "type": "integer"
+                          },
+                          "deleted_at": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "Add a slot to a location",
+        "operationId": "createStorageSlot",
+        "parameters": [
+          {
+            "name": "storageLocation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "code": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "nullable": true
+                  },
+                  "sort_order": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 65535
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer"
+                        },
+                        "storage_location_id": {
+                          "type": "integer"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "sort_order": {
+                          "type": "integer"
+                        },
+                        "deleted_at": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/storage-locations/{storageLocation}/slots/{storageSlot}": {
+      "patch": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "Rename or reorder a slot",
+        "operationId": "updateStorageSlot",
+        "description": "Slots ARE editable, unlike locations, which have no update endpoint at all -- a mislabelled shelf is not worth retiring and recreating.",
+        "parameters": [
+          {
+            "name": "storageLocation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "storageSlot",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "code": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "nullable": true
+                  },
+                  "sort_order": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 65535
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer"
+                        },
+                        "storage_location_id": {
+                          "type": "integer"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "sort_order": {
+                          "type": "integer"
+                        },
+                        "deleted_at": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "Retire a slot",
+        "operationId": "deleteStorageSlot",
+        "description": "Soft-deletes. Stock that referenced it is left exactly where it is -- the foreign key nulls rather than restricting, so we simply stop claiming to know which shelf.",
+        "parameters": [
+          {
+            "name": "storageLocation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "storageSlot",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Retired"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
     }
   },
   "components": {

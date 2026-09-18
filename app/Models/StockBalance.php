@@ -17,7 +17,9 @@ class StockBalance extends Model
     /** @use HasFactory<StockBalanceFactory> */
     use HasFactory;
 
-    protected $fillable = ['part_id', 'storage_location_id', 'quantity'];
+    // storage_slot_id is user-entered and is NOT part of the cached figure --
+    // see the migration. Everything else here is written only by StockService.
+    protected $fillable = ['part_id', 'storage_location_id', 'storage_slot_id', 'quantity'];
 
     /**
      * @return array<string, string>
@@ -33,6 +35,13 @@ class StockBalance extends Model
     public function part(): BelongsTo
     {
         return $this->belongsTo(Part::class);
+    }
+
+    /** Where inside the location this part sits. Null when nobody has said.
+     *  @return BelongsTo<StorageSlot, $this> */
+    public function storageSlot(): BelongsTo
+    {
+        return $this->belongsTo(StorageSlot::class);
     }
 
     /** @return BelongsTo<StorageLocation, $this> */

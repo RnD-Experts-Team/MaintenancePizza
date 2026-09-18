@@ -370,7 +370,7 @@ class StockService
     public function listBalances(array $filters): LengthAwarePaginator
     {
         /** @var Builder<StockBalance> $query */
-        $query = StockBalance::query()->with(['part', 'storageLocation']);
+        $query = StockBalance::query()->with(['part', 'storageLocation', 'storageSlot']);
 
         if (! empty($filters['part_ids'])) {
             $query->whereIn('part_id', array_filter((array) $filters['part_ids']));
@@ -453,7 +453,7 @@ class StockService
         // The breakdown behind each total. Loaded for the page only, so the
         // cost does not grow with the catalogue.
         $locations = StockBalance::query()
-            ->with('storageLocation')
+            ->with(['storageLocation', 'storageSlot'])
             ->whereIn('part_id', $partIds)
             ->when(! empty($filters['storage_location_ids']), fn ($q) => $q->whereIn(
                 'storage_location_id', array_filter((array) $filters['storage_location_ids'])
@@ -483,6 +483,9 @@ class StockService
                         'storage_location_id' => $b->storage_location_id,
                         'storage_location' => $b->relationLoaded('storageLocation') && $b->storageLocation
                             ? $this->locations->present($b->storageLocation)
+                            : null,
+                        'storage_slot' => $b->relationLoaded('storageSlot') && $b->storageSlot
+                            ? $this->locations->presentSlot($b->storageSlot)
                             : null,
                         'quantity' => $b->quantity,
                     ])->values()->all(),
@@ -1029,6 +1032,11 @@ class StockService
             'storage_location_id' => $balance->storage_location_id,
             'storage_location' => $balance->relationLoaded('storageLocation') && $balance->storageLocation
                 ? $this->locations->present($balance->storageLocation)
+                : null,
+            // Where inside that location it sits. Null means nobody has said --
+            // which is different from "nowhere", so do not substitute a dash here.
+            'storage_slot' => $balance->relationLoaded('storageSlot') && $balance->storageSlot
+                ? $this->locations->presentSlot($balance->storageSlot)
                 : null,
             // Quantity from the cache, value from the layers. That split is
             // deliberate: it is what makes this figure incapable of disagreeing

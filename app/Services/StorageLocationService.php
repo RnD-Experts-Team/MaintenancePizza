@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\StorageLocation;
+use App\Models\StorageSlot;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
@@ -88,4 +89,74 @@ class StorageLocationService
             'deleted_at' => $location->deleted_at,
         ];
     }
+
+    /* ------------------------------------------------------------- Slots */
+
+    /**
+     * The named places inside one location.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function slots(StorageLocation $location, bool $withTrashed = false): array
+    {
+        return $location->slots()
+            ->when($withTrashed, fn ($q) => $q->withTrashed())
+            ->get()
+            ->map(fn (StorageSlot $slot) => $this->presentSlot($slot))
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public function createSlot(StorageLocation $location, array $data): array
+    {
+        $slot = new StorageSlot($data);
+        $slot->storage_location_id = $location->id;
+        $slot->created_by = Auth::id();
+        $slot->save();
+
+        return $this->presentSlot($slot);
+    }
+
+    /**
+     * Slots ARE editable, unlike locations -- a shelf gets relabelled far more
+     * often than a depot gets renamed, and a typo in "Section 5" is not worth
+     * retiring and recreating.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public function updateSlot(StorageSlot $slot, array $data): array
+    {
+        $slot->fill($data)->save();
+
+        return $this->presentSlot($slot->refresh());
+    }
+
+    /** Retiring a slot leaves the stock where it is -- the FK nulls rather than
+     *  restricting, so we simply stop claiming to know which shelf. */
+    public function deleteSlot(StorageSlot $slot): void
+    {
+        $slot->delete();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function presentSlot(StorageSlot $slot): array
+    {
+        return [
+            'id' => $slot->id,
+            'storage_location_id' => $slot->storage_location_id,
+            'name' => $slot->name,
+            'code' => $slot->code,
+            'sort_order' => $slot->sort_order,
+            'created_at' => $slot->created_at,
+            'updated_at' => $slot->updated_at,
+            'deleted_at' => $slot->deleted_at,
+        ];
+    }
+
 }

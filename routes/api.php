@@ -80,6 +80,16 @@ Route::middleware('auth.token.store')->group(function () {
     Route::post('storage-locations', [StorageLocationController::class, 'store'])->name('storage-locations.store');
     Route::delete('storage-locations/{storageLocation}', [StorageLocationController::class, 'destroy'])->name('storage-locations.destroy');
     Route::post('storage-locations/{storageLocation}/restore', [StorageLocationController::class, 'restore'])->withTrashed()->name('storage-locations.restore');
+
+    // Where inside a location things sit. scopeBindings keeps {storageSlot}
+    // belonging to {storageLocation}, so one location's slot can never be
+    // edited through another's URL.
+    Route::prefix('storage-locations/{storageLocation}/slots')->scopeBindings()->group(function () {
+        Route::get('/', [StorageLocationController::class, 'slotsIndex'])->name('storage-locations.slots.index');
+        Route::post('/', [StorageLocationController::class, 'slotsStore'])->name('storage-locations.slots.store');
+        Route::patch('{storageSlot}', [StorageLocationController::class, 'slotsUpdate'])->name('storage-locations.slots.update');
+        Route::delete('{storageSlot}', [StorageLocationController::class, 'slotsDestroy'])->name('storage-locations.slots.destroy');
+    });
     Route::post('storage-locations/{storageLocation}/notes', [NoteController::class, 'storageLocation'])->name('storage-locations.notes');
     Route::post('storage-locations/{storageLocation}/attachments', [AttachmentController::class, 'storageLocation'])->name('storage-locations.attachments');
 
