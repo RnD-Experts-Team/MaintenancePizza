@@ -28,10 +28,11 @@ class StoragePlaceLevelRequest extends FormRequest
 
         return [
             'name' => [
-                'required', 'string', 'max:255',
+                'required',
+                'string',
+                'max:255',
                 Rule::unique('storage_place_levels', 'name')
-                    ->where(fn ($q) => $q->where('storage_location_id', $locationId))
-                    ->whereNull('deleted_at')
+                    ->where(fn($q) => $q->where('storage_location_id', $locationId))
                     ->ignore($levelId),
             ],
             'sort_order' => ['nullable', 'integer', 'min:0', 'max:65535'],
