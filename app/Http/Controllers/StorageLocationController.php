@@ -14,7 +14,9 @@ use Illuminate\Http\Response;
 
 class StorageLocationController extends Controller
 {
-    public function __construct(private StorageLocationService $locations) {}
+    public function __construct(private StorageLocationService $locations)
+    {
+    }
 
     public function index(Request $request)
     {
@@ -52,7 +54,7 @@ class StorageLocationController extends Controller
      */
     public function placeLevelsIndex(Request $request, StorageLocation $storageLocation)
     {
-        return ['data' => $this->locations->placeLevels($storageLocation, $request->boolean('trashed'))];
+        return ['data' => $this->locations->placeLevels($storageLocation)];
     }
 
     public function placeLevelsStore(StoragePlaceLevelRequest $request, StorageLocation $storageLocation)

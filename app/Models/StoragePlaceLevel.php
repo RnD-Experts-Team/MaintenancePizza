@@ -5,7 +5,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * One axis of a location's addressing scheme -- "Shelf", "Row", "Column".
@@ -18,15 +17,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * every shelf; it is not a child of Shelf C. Nesting them would multiply the
  * setup work by the number of shelves for no gain in what can be said.
  *
- * Soft-deletes so retiring a level stops it being offered without orphaning
- * anything -- see StorageLocationService::deletePlaceLevel(), which clears the
- * assignments in the same transaction rather than leaving rows pointing at
- * something the API will not show.
  */
 class StoragePlaceLevel extends Model
 {
-    use SoftDeletes;
-
     protected $fillable = ['storage_location_id', 'name', 'sort_order'];
 
     /**

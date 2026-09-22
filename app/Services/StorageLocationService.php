@@ -40,7 +40,7 @@ class StorageLocationService
             default => null,
         };
 
-        return $query->paginate($perPage)->through(fn (StorageLocation $l) => $this->present($l));
+        return $query->paginate($perPage)->through(fn(StorageLocation $l) => $this->present($l));
     }
 
     /**
@@ -114,13 +114,12 @@ class StorageLocationService
      *
      * @return array<int, array<string, mixed>>
      */
-    public function placeLevels(StorageLocation $location, bool $withTrashed = false): array
+    public function placeLevels(StorageLocation $location): array
     {
         return $location->placeLevels()
-            ->when($withTrashed, fn ($q) => $q->withTrashed())
-            ->with(['placeValues' => fn ($q) => $withTrashed ? $q->withTrashed() : $q])
+            ->with('placeValues')
             ->get()
-            ->map(fn (StoragePlaceLevel $level) => $this->presentPlaceLevel($level))
+            ->map(fn(StoragePlaceLevel $level) => $this->presentPlaceLevel($level))
             ->all();
     }
 
@@ -199,11 +198,10 @@ class StorageLocationService
             // Null, not [], when the relation was not loaded -- "we did not ask"
             // and "there are none" are different and the client can tell.
             'values' => $level->relationLoaded('placeValues')
-                ? $level->placeValues->map(fn (StoragePlaceValue $v) => $this->presentPlaceValue($v))->all()
+                ? $level->placeValues->map(fn(StoragePlaceValue $v) => $this->presentPlaceValue($v))->all()
                 : null,
             'created_at' => $level->created_at,
             'updated_at' => $level->updated_at,
-            'deleted_at' => $level->deleted_at,
         ];
     }
 
@@ -219,7 +217,6 @@ class StorageLocationService
             'sort_order' => $value->sort_order,
             'created_at' => $value->created_at,
             'updated_at' => $value->updated_at,
-            'deleted_at' => $value->deleted_at,
         ];
     }
 }
