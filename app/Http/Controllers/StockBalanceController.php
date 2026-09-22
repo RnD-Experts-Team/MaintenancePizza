@@ -26,6 +26,7 @@ class StockBalanceController extends Controller
             'part_ids',
             'storage_location_ids',
             'non_zero',
+            'negative_only',
             'per_page',
         ]);
 

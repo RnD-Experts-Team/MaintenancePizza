@@ -388,6 +388,17 @@ class StockService
             $query->where('quantity', '!=', 0);
         }
 
+        /*
+         * ?negative_only=1 — only the pairs that owe. Kept INDEPENDENT of
+         * non_zero, which hides what netted to zero: conflating the two would
+         * let "hide the empties" quietly hide the shortages as well, which are
+         * the rows this filter exists to find. Negative implies non-zero, so
+         * the two are never in conflict, only ever redundant.
+         */
+        if (! empty($filters['negative_only'])) {
+            $query->where('quantity', '<', 0);
+        }
+
         $page = $query->orderBy('part_id')->orderBy('storage_location_id')
             ->paginate(max(1, (int) ($filters['per_page'] ?? 50)));
 
@@ -439,6 +450,13 @@ class StockService
         // zeroed pair does in the ungrouped listing.
         if (! empty($filters['non_zero'])) {
             $query->havingRaw('SUM(quantity) != 0');
+        }
+
+        // Also applied to the TOTAL, for the same reason: a part that is -5 on
+        // one shelf and +5 on another owes nothing overall, and the shelf that
+        // is short is a question for the ungrouped listing, not for this one.
+        if (! empty($filters['negative_only'])) {
+            $query->havingRaw('SUM(quantity) < 0');
         }
 
         $page = $query->orderBy('part_id')
