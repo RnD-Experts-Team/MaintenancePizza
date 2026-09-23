@@ -7,6 +7,7 @@ use App\Models\PartUsage;
 use App\Models\Store;
 use App\Models\Ticket;
 use App\Services\WorkflowRecordService;
+use Illuminate\Http\Request;
 
 class PartUsageController extends Controller
 {
@@ -14,14 +15,17 @@ class PartUsageController extends Controller
 
     public function store(StorePartUsageRequest $request, Store $store, Ticket $ticket)
     {
-        $data = $request->validated();
+        $noteFiles = [];
+
+        foreach ($request->input('notes', []) as $i => $_) {
+            $noteFiles[$i] = (array) $request->file("notes.{$i}.files", []);
+        }
 
         return response()->json([
             'data' => $this->workflow->createPartUsage(
-                $data['ticket_issue_ids'],
-                $data['part_id'],
-                $data['cost'],
+                $request->validated(),
                 (array) $request->file('files', []),
+                $noteFiles,
             ),
         ], 201);
     }

@@ -18,7 +18,14 @@ class PartUsagesSheet implements FromCollection, WithHeadings, WithMapping, With
 
     public function collection(): Collection
     {
-        return PartUsage::with(['part', 'ticketIssues'])->withCount('attachments')->orderBy('id')->get();
+        return PartUsage::with([
+            'part',
+            'ticketIssues',
+            'paidByTechnician',
+            'storageLocation',
+            'returnedToStorageLocation',
+            'dailyPayPayments',
+        ])->withCount('attachments')->orderBy('id')->get();
     }
 
     /**
@@ -26,7 +33,13 @@ class PartUsagesSheet implements FromCollection, WithHeadings, WithMapping, With
      */
     public function headings(): array
     {
-        return ['ID', 'Part', 'Cost', 'Mistaken', 'Ticket Issue IDs', 'Attachments', 'Created By', 'Created At'];
+        return [
+            'ID', 'Part', 'Quantity', 'Unit Cost', 'Cost (gross)',
+            'Returned Quantity', 'Returned To', 'Net Quantity', 'Net Cost',
+            'Source', 'Paid By', 'Paid By Technician', 'Taken From',
+            'Payment Status', 'Reimbursed On Pay Sheets',
+            'Mistaken', 'Ticket Issue IDs', 'Attachments', 'Created By', 'Created At',
+        ];
     }
 
     /**
@@ -38,7 +51,19 @@ class PartUsagesSheet implements FromCollection, WithHeadings, WithMapping, With
         return [
             $usage->id,
             $usage->part?->name,
+            $usage->quantity,
+            $usage->unit_cost,
             $usage->cost,
+            $usage->returned_quantity,
+            $usage->returnedToStorageLocation?->name,
+            $usage->netQuantity(),
+            $usage->netCost(),
+            $usage->source->label(),
+            $usage->paid_by->label(),
+            $usage->paidByTechnician?->name,
+            $usage->storageLocation?->name,
+            $usage->paymentStatus()?->label(),
+            $usage->dailyPayPayments->pluck('id')->implode(', '),
             $usage->mistaken ? 'yes' : 'no',
             $usage->ticketIssues->pluck('id')->implode(', '),
             $usage->attachments_count,

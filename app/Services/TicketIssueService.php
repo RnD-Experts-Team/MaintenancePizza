@@ -36,12 +36,25 @@ class TicketIssueService
         'diagnoses.notes.creator',
         'diagnoses.notes.attachments.creator',
         'attendanceEntries.creator',
+        // Without this every session reaches the ticket page with events: [],
+        // which reads as "nothing recorded" -- the stream shows nothing and a
+        // still-open session is indistinguishable from a closed one.
+        'attendanceEntries.events',
+        'attendanceEntries.dailyPayPayments.entry',
+        'attendanceEntries.dailyPayPayments.technician',
         'attendanceEntries.technician',
         'attendanceEntries.attachments.creator',
         'attendanceEntries.notes.creator',
         'attendanceEntries.notes.attachments.creator',
+        'dailyPayLines',
         'partUsages.creator',
+        'partUsages.dailyPayPayments.entry',
+        'partUsages.dailyPayPayments.technician',
         'partUsages.part',
+        'partUsages.paidByTechnician',
+        'partUsages.storageLocation',
+        'partUsages.returnedToStorageLocation',
+        'partUsages.stockMovements',
         'partUsages.attachments.creator',
         'partUsages.notes.creator',
         'partUsages.notes.attachments.creator',
@@ -135,6 +148,33 @@ class TicketIssueService
         });
 
         return $this->present($child->load(['issue', 'parent', 'creator']));
+    }
+
+    /**
+     * Re-link an issue to a different catalog issue.
+     *
+     * @return array<string, mixed>
+     */
+    public function update(TicketIssue $ticketIssue, int $issueId): array
+    {
+        $ticketIssue->issue_id = $issueId;
+        $ticketIssue->save();
+
+        return $this->present($ticketIssue->fresh(['issue', 'creator']));
+    }
+
+    /**
+     * Set (or clear, with null) the staff-assigned priority. Distinct from and
+     * never overwrites the priority chosen at ticket creation.
+     *
+     * @return array<string, mixed>
+     */
+    public function assignPriority(TicketIssue $ticketIssue, ?string $priority): array
+    {
+        $ticketIssue->assigned_priority = $priority;
+        $ticketIssue->save();
+
+        return $this->present($ticketIssue->fresh(['issue', 'creator']));
     }
 
     /**
@@ -238,6 +278,58 @@ class TicketIssueService
     }
 
     /**
+     * The relaxed counterpart of validateIssuesBelongToTicket(): the record may
+     * span tickets, so long as it touches the one it is being filed under.
+     *
+     * Used by attendance, where a single visit legitimately covers issues on
+     * several tickets at the same store — one drive out, three tickets worked.
+     * Everything else (parts, assignments, diagnoses) still uses the strict
+     * check, which is why this is a separate method rather than a flag.
+     *
+     * @param  array<int|string>  $ids
+     */
+    public function validateAtLeastOneIssueBelongsToTicket(Validator $validator, ?Ticket $ticket, array $ids): void
+    {
+        if (!$ticket || empty($ids)) {
+            return;
+        }
+
+        $invalid = $this->issuesNotBelongingToTicket($ticket, $ids);
+
+        if (count($invalid) === count($ids)) {
+            $validator->errors()->add(
+                'ticket_issue_ids',
+                'At least one of the selected issues must belong to this ticket.'
+            );
+        }
+    }
+
+    /**
+     * Add a validation error for any id that is not a real ticket issue. The
+     * cross-ticket entry points have no parent ticket to check against, so
+     * existence is the only structural rule left.
+     *
+     * @param  array<int|string>  $ids
+     */
+    public function validateIssuesExist(Validator $validator, array $ids): void
+    {
+        if (empty($ids)) {
+            return;
+        }
+
+        $ids = array_map('intval', $ids);
+        $found = TicketIssue::query()->whereIn('id', $ids)->pluck('id')->all();
+        $missing = array_values(array_diff($ids, $found));
+
+        if (!empty($missing)) {
+            $validator->errors()->add(
+                'ticket_issue_ids',
+                'These issues do not exist: ' . implode(', ', $missing) . '.'
+            );
+        }
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function present(TicketIssue $issue): array
@@ -252,8 +344,13 @@ class TicketIssueService
             'other_title' => $issue->other_title,
             'display_title' => $issue->displayTitle(),
             'priority' => ['value' => $issue->priority->value, 'label' => $issue->priority->label()],
+            'assigned_priority' => $issue->assigned_priority
+                ? ['value' => $issue->assigned_priority->value, 'label' => $issue->assigned_priority->label()]
+                : null,
             'description' => $issue->description,
             'status' => ['value' => $issue->status->value, 'label' => $issue->status->label()],
+            // Whether everything this issue costs anybody is on a pay sheet yet.
+            'payment' => $this->presentIssuePaymentStatus($issue),
             'parent_id' => $issue->parent_id,
             'children' => $issue->relationLoaded('children')
                 ? $issue->children->map(fn(TicketIssue $c) => $this->present($c))->all()
@@ -274,6 +371,31 @@ class TicketIssueService
                 : null,
             'created_at' => $issue->created_at,
             'updated_at' => $issue->updated_at,
+        ];
+    }
+
+    /**
+     * The issue's own payment position: whether its hours and the parts a
+     * technician fronted are on a pay sheet yet, and which pay lines cover it.
+     *
+     * Anything still owed dominates the roll-up, so an issue reads as unpaid
+     * until the last of its payables is settled.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function presentIssuePaymentStatus(TicketIssue $issue): ?array
+    {
+        $status = $issue->paymentStatus();
+
+        if ($status === null) {
+            return null;
+        }
+
+        return [
+            'status' => ['value' => $status->value, 'label' => $status->label()],
+            'daily_pay_line_ids' => $issue->relationLoaded('dailyPayLines')
+                ? $issue->dailyPayLines->pluck('id')->all()
+                : null,
         ];
     }
 

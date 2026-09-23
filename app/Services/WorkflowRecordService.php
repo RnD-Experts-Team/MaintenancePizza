@@ -2,7 +2,10 @@
 
 namespace App\Services;
 
+use App\Enums\AttendanceEventKind;
 use App\Models\AttendanceEntry;
+use App\Models\AttendanceEvent;
+use App\Models\DailyPayPayment;
 use App\Models\Diagnosis;
 use App\Models\PartUsage;
 use App\Models\PayEntry;
@@ -11,6 +14,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Creates and presents the per-issue workflow records that attach to one-or-many
@@ -19,13 +23,26 @@ use Illuminate\Support\Facades\DB;
  */
 class WorkflowRecordService
 {
-    private const CLOCKS = [
-        'start_clock',
-        'end_clock',
-        'start_break',
-        'end_break',
-        'start_parts_run',
-        'end_parts_run',
+    /**
+     * The eight clock fields the create endpoint still accepts, mapped to the
+     * event each one becomes.
+     *
+     * KEPT ON PURPOSE. Attendance is an event ledger now, but creation still
+     * takes a handful of clocks and converts them here -- which is what lets
+     * the existing form, the visit basket and every existing test keep working
+     * while the frontend moves across at its own pace.
+     *
+     * @var array<string, AttendanceEventKind>
+     */
+    private const CLOCK_EVENTS = [
+        'start_clock' => AttendanceEventKind::ClockIn,
+        'end_clock' => AttendanceEventKind::ClockOut,
+        'start_break' => AttendanceEventKind::BreakStart,
+        'end_break' => AttendanceEventKind::BreakEnd,
+        'start_parts_run' => AttendanceEventKind::PartsRunStart,
+        'end_parts_run' => AttendanceEventKind::PartsRunEnd,
+        'start_travel' => AttendanceEventKind::TravelStart,
+        'end_travel' => AttendanceEventKind::TravelEnd,
     ];
 
     private const PAY_FIELDS = [
@@ -42,6 +59,8 @@ class WorkflowRecordService
         private AttachmentService $attachments,
         private CatalogService $catalog,
         private NoteService $notes,
+        private StockService $stock,
+        private StorageLocationService $storageLocations,
     ) {
     }
 
@@ -51,6 +70,35 @@ class WorkflowRecordService
      * @var list<string>
      */
     private const NOTE_LOADS = ['creator', 'attachments.creator', 'notes.creator', 'notes.attachments.creator'];
+
+    /**
+     * Everything presentAttendance() reads, beyond the technician and issues.
+     * The claims are what the payment status is derived from.
+     *
+     * @var list<string>
+     */
+    private const ATTENDANCE_LOADS = [
+        'events',
+        'dailyPayPayments.entry',
+        'dailyPayPayments.technician',
+        ...self::NOTE_LOADS,
+    ];
+
+    /**
+     * Everything presentPartUsage() reads, beyond the ticket issues.
+     *
+     * @var list<string>
+     */
+    private const PART_USAGE_LOADS = [
+        'part',
+        'dailyPayPayments.entry',
+        'dailyPayPayments.technician',
+        'paidByTechnician',
+        'storageLocation',
+        'returnedToStorageLocation',
+        'stockMovements',
+        ...self::NOTE_LOADS,
+    ];
 
     // ---------------------------------------------------------------- Diagnosis
 
@@ -88,27 +136,49 @@ class WorkflowRecordService
     // --------------------------------------------------------------- Attendance
 
     /**
-     * @param  array<string, mixed>  $data  Includes technician_id, ticket_issue_ids, and clock fields.
+     * The issues may belong to more than one ticket: a technician drives out
+     * once and works several tickets at the same store.
+     *
+     * @param  array<string, mixed>  $data  Includes technician_id, ticket_issue_ids, clock fields and optional notes.
      * @param  array<int, UploadedFile>  $files
+     * @param  array<int, array<int, UploadedFile>>  $noteFiles  noteIndex → files
      * @return array<string, mixed>
      */
-    public function createAttendance(array $data, array $files): array
+    public function createAttendance(array $data, array $files, array $noteFiles = []): array
     {
-        $entry = DB::transaction(function () use ($data, $files) {
-            $entry = new AttendanceEntry(array_merge(
-                ['technician_id' => $data['technician_id']],
-                array_intersect_key($data, array_flip(self::CLOCKS)),
-            ));
+        $entry = DB::transaction(function () use ($data, $files, $noteFiles) {
+            $entry = new AttendanceEntry(['technician_id' => $data['technician_id']]);
             $entry->created_by = Auth::id();
             $entry->save();
+
+            // The clocks become events. Nulls are skipped, so posting only a
+            // clock-in produces one event and an open session -- which is what
+            // it always meant, now said in a way the system can add to.
+            foreach (self::CLOCK_EVENTS as $field => $kind) {
+                if (($data[$field] ?? null) === null) {
+                    continue;
+                }
+
+                $entry->events()->create([
+                    'kind' => $kind,
+                    'at' => $data[$field],
+                    'created_by' => Auth::id(),
+                ]);
+            }
+
+            $this->syncSessionClocks($entry);
 
             $entry->ticketIssues()->attach($data['ticket_issue_ids']);
             $this->attachments->store($entry, $files);
 
+            foreach ($data['notes'] ?? [] as $i => $note) {
+                $this->notes->store($entry, $note['body'], $note['type'] ?? null, $noteFiles[$i] ?? []);
+            }
+
             return $entry;
         });
 
-        return $this->presentAttendance($entry->load(['technician', 'ticketIssues', ...self::NOTE_LOADS]));
+        return $this->presentAttendance($entry->load(['technician', 'ticketIssues', ...self::ATTENDANCE_LOADS]));
     }
 
     /**
@@ -118,40 +188,205 @@ class WorkflowRecordService
     {
         $entry->update(['mistaken' => true]);
 
-        return $this->presentAttendance($entry->load(['technician', ...self::NOTE_LOADS]));
+        return $this->presentAttendance($entry->load(['technician', ...self::ATTENDANCE_LOADS]));
+    }
+
+    /* ------------------------------------------------------ Attendance events */
+
+    /**
+     * Add one thing that happened.
+     *
+     * This is the method the old shape had no room for. Recording a clock-in
+     * and then wanting to add "he set off at 08:30" used to mean flagging the
+     * whole record wrong and typing it again, because after creation the only
+     * mutation was mistaken = true.
+     *
+     * A CLOCK-IN ON AN ALREADY-OPEN SESSION OPENS A NEW ONE. Coming back to a
+     * store later is a second visit, not a continuation -- and a session with
+     * two clock-ins in it would make "when did this shift start" unanswerable.
+     * The new session inherits the technician and the issues, because they are
+     * what made it the same piece of work.
+     *
+     * @return array<string, mixed>  the session the event landed on
+     */
+    public function appendAttendanceEvent(AttendanceEntry $entry, AttendanceEventKind $kind, string $at): array
+    {
+        $target = DB::transaction(function () use ($entry, $kind, $at) {
+            $target = $entry;
+
+            if ($kind === AttendanceEventKind::ClockIn && $entry->start_clock !== null) {
+                $target = new AttendanceEntry(['technician_id' => $entry->technician_id]);
+                $target->created_by = Auth::id();
+                $target->save();
+                $target->ticketIssues()->attach($entry->ticketIssues()->pluck('ticket_issues.id')->all());
+            }
+
+            $target->events()->create([
+                'kind' => $kind,
+                'at' => $at,
+                'created_by' => Auth::id(),
+            ]);
+
+            $this->syncSessionClocks($target);
+
+            return $target;
+        });
+
+        return $this->presentAttendance(
+            $target->load(['technician', 'ticketIssues', ...self::ATTENDANCE_LOADS])
+        );
+    }
+
+    /**
+     * Correct when something happened.
+     *
+     * Allowed only while no pay sheet has claimed the session. You can fix what
+     * nobody has been paid against; you cannot quietly rewrite what somebody
+     * was paid on -- for that, flag the event mistaken and record the right one,
+     * so the change is visible in the trail rather than hidden in it.
+     *
+     * @return array<string, mixed>
+     */
+    public function updateAttendanceEvent(AttendanceEvent $event, string $at): array
+    {
+        $entry = $event->attendanceEntry;
+
+        if ($entry->dailyPayPayments()->exists()) {
+            throw ValidationException::withMessages([
+                'at' => 'These hours are already on a pay sheet. Flag this event as a mistake and record the right one instead.',
+            ]);
+        }
+
+        DB::transaction(function () use ($event, $at, $entry) {
+            $event->update(['at' => $at]);
+            $this->syncSessionClocks($entry->refresh());
+        });
+
+        return $this->presentAttendance(
+            $entry->load(['technician', 'ticketIssues', ...self::ATTENDANCE_LOADS])
+        );
+    }
+
+    /**
+     * Strike one event without removing it.
+     *
+     * The same flag the rest of the system uses: it stays visible, struck
+     * through, and stops counting. Striking a clock-in leaves the session with
+     * no opening, so its cached start_clock goes null and durations() reports
+     * zero work -- there is no window to clip anything into. That reads on
+     * screen as a session needing a clock-in, which is exactly what it is.
+     *
+     * @return array<string, mixed>
+     */
+    public function markAttendanceEventMistaken(AttendanceEvent $event): array
+    {
+        $entry = $event->attendanceEntry;
+
+        DB::transaction(function () use ($event, $entry) {
+            $event->update(['mistaken' => true]);
+            $this->syncSessionClocks($entry->refresh());
+        });
+
+        return $this->presentAttendance(
+            $entry->load(['technician', 'ticketIssues', ...self::ATTENDANCE_LOADS])
+        );
+    }
+
+    /**
+     * Rewrite the session's cached clock window from its live events.
+     *
+     * Called inside the same transaction as every event write, exactly the way
+     * StockService keeps stock_balances in step with the movement ledger. The
+     * cache exists because DailyPayEntryService does MIN/MAX/BETWEEN over these
+     * two columns in raw SQL; nothing may write them by any other route.
+     */
+    private function syncSessionClocks(AttendanceEntry $entry): void
+    {
+        $events = $entry->events()->where('mistaken', false)->orderBy('at')->get();
+
+        $first = fn (AttendanceEventKind $kind) => $events
+            ->first(fn (AttendanceEvent $e) => $e->kind === $kind)?->at;
+
+        $entry->forceFill([
+            'start_clock' => $first(AttendanceEventKind::ClockIn),
+            'end_clock' => $first(AttendanceEventKind::ClockOut),
+        ])->save();
+
+        $entry->setRelation('events', $events);
     }
 
     // -------------------------------------------------------------- Part usage
 
     /**
-     * @param  array<int>  $ticketIssueIds
+     * $data carries ticket_issue_ids, part_id, quantity, unit_cost, source,
+     * paid_by and the optional storage/return fields.
+     *
+     * `cost` is computed here, once, as quantity * unit_cost, and is the GROSS
+     * outlay — TicketService's part_cost_* filters sum this column, so it must
+     * never become net-of-returns. Round once at write; never re-derive on
+     * read, or a presenter will disagree with the stored value.
+     *
+     * Drawing from storage moves stock inside this same transaction, so a draw
+     * with nothing on the shelf rolls the part usage back with it: the caller
+     * gets a 422 and no row is created.
+     *
+     * @param  array<string, mixed>  $data
      * @param  array<int, UploadedFile>  $files
+     * @param  array<int, array<int, UploadedFile>>  $noteFiles  noteIndex → files
      * @return array<string, mixed>
      */
-    public function createPartUsage(array $ticketIssueIds, int $partId, float|string $cost, array $files): array
+    public function createPartUsage(array $data, array $files, array $noteFiles = []): array
     {
-        $usage = DB::transaction(function () use ($ticketIssueIds, $partId, $cost, $files) {
-            $usage = new PartUsage(['part_id' => $partId, 'cost' => $cost]);
+        $usage = DB::transaction(function () use ($data, $files, $noteFiles) {
+            $quantity = (string) $data['quantity'];
+            $unitCost = (string) $data['unit_cost'];
+
+            $usage = new PartUsage([
+                'part_id' => $data['part_id'],
+                'quantity' => $quantity,
+                'unit_cost' => $unitCost,
+                'cost' => bcmul($quantity, $unitCost, 2),
+                'source' => $data['source'],
+                'paid_by' => $data['paid_by'],
+                'paid_by_technician_id' => $data['paid_by_technician_id'] ?? null,
+                'storage_location_id' => $data['storage_location_id'] ?? null,
+                'returned_quantity' => $data['returned_quantity'] ?? 0,
+                'returned_to_storage_location_id' => $data['returned_to_storage_location_id'] ?? null,
+            ]);
             $usage->created_by = Auth::id();
             $usage->save();
 
-            $usage->ticketIssues()->attach($ticketIssueIds);
+            $usage->ticketIssues()->attach($data['ticket_issue_ids']);
             $this->attachments->store($usage, $files);
+
+            foreach ($data['notes'] ?? [] as $i => $note) {
+                $this->notes->store($usage, $note['body'], $note['type'] ?? null, $noteFiles[$i] ?? []);
+            }
+
+            $this->stock->drawForPartUsage($usage);
+            $this->stock->returnForPartUsage($usage);
 
             return $usage;
         });
 
-        return $this->presentPartUsage($usage->load(['part', 'ticketIssues', ...self::NOTE_LOADS]));
+        return $this->presentPartUsage($usage->load([...self::PART_USAGE_LOADS, 'ticketIssues']));
     }
 
     /**
+     * Flagging a usage as a mistake puts any stock it moved back — by writing
+     * the equal-and-opposite movements, never by editing or deleting the
+     * originals. The ledger is append-only.
+     *
      * @return array<string, mixed>
      */
     public function markPartUsageMistaken(PartUsage $usage): array
     {
-        $usage->update(['mistaken' => true]);
+        DB::transaction(function () use ($usage) {
+            $usage->update(['mistaken' => true]);
+            $this->stock->reverseForPartUsage($usage);
+        });
 
-        return $this->presentPartUsage($usage->load(['part', ...self::NOTE_LOADS]));
+        return $this->presentPartUsage($usage->load(self::PART_USAGE_LOADS));
     }
 
     // --------------------------------------------------------------- Pay entry
@@ -245,6 +480,37 @@ class WorkflowRecordService
     }
 
     /**
+     * The session's events, oldest first, flagged ones included.
+     *
+     * A struck event stays in the list. It is part of the trail, and hiding it
+     * would defeat the reason the flag exists -- the same rule every other
+     * record in this system follows.
+     *
+     * @return ?array<int, array<string, mixed>>
+     */
+    private function presentAttendanceEvents(AttendanceEntry $entry): ?array
+    {
+        if (! $entry->relationLoaded('events')) {
+            return null;
+        }
+
+        return $entry->events
+            ->sortBy([fn (AttendanceEvent $a, AttendanceEvent $b) => $a->at <=> $b->at])
+            ->map(fn (AttendanceEvent $event) => [
+                'id' => $event->id,
+                'kind' => $event->kind->value,
+                'label' => $event->kind->label(),
+                'bucket' => $event->kind->bucket(),
+                'opens' => $event->kind->opens(),
+                'paid' => $event->kind->paid(),
+                'at' => $event->at,
+                'mistaken' => $event->mistaken,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function presentAttendance(AttendanceEntry $entry): array
@@ -255,12 +521,20 @@ class WorkflowRecordService
             'technician' => $entry->relationLoaded('technician') && $entry->technician
                 ? $this->catalog->presentTechnician($entry->technician)
                 : null,
+            // The clock window, from the cache kept in step with the events.
+            // An end_clock of null means the session is still open -- which is
+            // a normal state, not a missing value.
             'start_clock' => $entry->start_clock,
             'end_clock' => $entry->end_clock,
-            'start_break' => $entry->start_break,
-            'end_break' => $entry->end_break,
-            'start_parts_run' => $entry->start_parts_run,
-            'end_parts_run' => $entry->end_parts_run,
+            // Everything that happened, oldest first. This replaced six flat
+            // columns that could hold only one break, one travel and one parts
+            // run per session.
+            'events' => $this->presentAttendanceEvents($entry),
+            // Derived, never stored. Minutes are authoritative; hours are the
+            // same figure rounded once for display.
+            'durations' => $this->presentDurations($entry),
+            // Whether these hours have been settled through a pay sheet.
+            'payment' => $this->presentPaymentStatus($entry),
             'mistaken' => $entry->mistaken,
             'attachments' => $this->presentAttachments($entry),
             'notes' => $this->notes->presentMany($entry),
@@ -285,7 +559,41 @@ class WorkflowRecordService
             'part' => $usage->relationLoaded('part') && $usage->part
                 ? $this->catalog->presentPart($usage->part)
                 : null,
+            'quantity' => $usage->quantity,
+            'unit_cost' => $usage->unit_cost,
+            // GROSS outlay (quantity * unit_cost). net_cost is what the payer
+            // is actually out of pocket once returns are taken off; only that
+            // one is reimbursed.
             'cost' => $usage->cost,
+            'net_quantity' => $usage->netQuantity(),
+            'net_cost' => $usage->netCost(),
+            'source' => [
+                'value' => $usage->source->value,
+                'label' => $usage->source->label(),
+            ],
+            'paid_by' => [
+                'value' => $usage->paid_by->value,
+                'label' => $usage->paid_by->label(),
+            ],
+            'reimbursable' => $usage->isReimbursable(),
+            'paid_by_technician_id' => $usage->paid_by_technician_id,
+            'paid_by_technician' => $usage->relationLoaded('paidByTechnician') && $usage->paidByTechnician
+                ? $this->catalog->presentTechnician($usage->paidByTechnician)
+                : null,
+            'storage_location_id' => $usage->storage_location_id,
+            'storage_location' => $usage->relationLoaded('storageLocation') && $usage->storageLocation
+                ? $this->storageLocations->present($usage->storageLocation)
+                : null,
+            'returned_quantity' => $usage->returned_quantity,
+            'returned_to_storage_location_id' => $usage->returned_to_storage_location_id,
+            'returned_to_storage_location' => $usage->relationLoaded('returnedToStorageLocation') && $usage->returnedToStorageLocation
+                ? $this->storageLocations->present($usage->returnedToStorageLocation)
+                : null,
+            'stock_movement_ids' => $usage->relationLoaded('stockMovements')
+                ? $usage->stockMovements->pluck('id')->all()
+                : null,
+            // Whether whoever paid has had it back through a pay sheet.
+            'payment' => $this->presentPaymentStatus($usage),
             'mistaken' => $usage->mistaken,
             'attachments' => $this->presentAttachments($usage),
             'notes' => $this->notes->presentMany($usage),
@@ -349,6 +657,81 @@ class WorkflowRecordService
                 : null,
             'created_at' => $warranty->created_at,
             'updated_at' => $warranty->updated_at,
+        ];
+    }
+
+    /**
+     * Whether this record has been settled through a pay sheet, and which
+     * payments did it. Being on a sheet IS being paid.
+     *
+     * Derived from the pay sheets themselves, so it can never disagree with
+     * them. Null when the claims are not loaded, like every other relation.
+     *
+     * @param  AttendanceEntry|PartUsage  $record
+     * @return array<string, mixed>|null
+     */
+    private function presentPaymentStatus($record): ?array
+    {
+        $status = $record->paymentStatus();
+
+        if ($status === null) {
+            return null;
+        }
+
+        $payments = $record->relationLoaded('dailyPayPayments')
+            ? $record->dailyPayPayments->map(function (DailyPayPayment $payment) use ($record) {
+                $pivot = $payment->pivot;
+
+                $presented = [
+                    'daily_pay_payment_id' => $payment->id,
+                    'daily_pay_entry_id' => $payment->daily_pay_entry_id,
+                    'daily_pay_line_id' => $pivot->daily_pay_line_id,
+                    'date' => $payment->relationLoaded('entry') && $payment->entry
+                        ? $payment->entry->date->toDateString()
+                        : null,
+                    'technician_id' => $payment->technician_id,
+                    'technician' => $payment->relationLoaded('technician') && $payment->technician
+                        ? $this->catalog->presentTechnician($payment->technician)
+                        : null,
+                ];
+
+                // A reimbursed receipt carries the money it was allowed; hours
+                // carry the minutes that were counted.
+                return $record instanceof PartUsage
+                    // Pivot columns carry no casts, so the money is formatted
+                    // here to match every other decimal the API emits.
+                    ? $presented + ['amount' => number_format((float) $pivot->amount, 2, '.', '')]
+                    : $presented + ['minutes' => [
+                        'work' => (int) $pivot->work_minutes,
+                        'travel' => (int) $pivot->travel_minutes,
+                        'break' => (int) $pivot->break_minutes,
+                        'parts_run' => (int) $pivot->parts_run_minutes,
+                    ]];
+            })->all()
+            : [];
+
+        return [
+            'status' => ['value' => $status->value, 'label' => $status->label()],
+            'payments' => $payments,
+        ];
+    }
+
+    /**
+     * Both units of each attendance bucket, plus whatever durations() could
+     * not make sense of. Nothing here is stored — see AttendanceEntry::durations().
+     *
+     * @return array<string, mixed>
+     */
+    private function presentDurations(AttendanceEntry $entry): array
+    {
+        $d = $entry->durations();
+        $warnings = $d['warnings'];
+        unset($d['warnings']);
+
+        return [
+            'minutes' => $d,
+            'hours' => array_map(fn(int $m) => round($m / 60, 2), $d),
+            'warnings' => $warnings,
         ];
     }
 

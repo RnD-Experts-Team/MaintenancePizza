@@ -11,14 +11,13 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 class IssueFactory extends Factory
 {
     /**
-     * Define the model's default state.
-     *
      * @return array<string, mixed>
      */
     public function definition(): array
     {
         return [
-            //
+            'title' => $this->faker->unique()->sentence(3),
+            'description' => $this->faker->sentence(),
         ];
     }
 }

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AssignmentController;
 use App\Http\Controllers\DailyPayEntryController;
+use App\Http\Controllers\DailyPayEntryRecalculationController;
 use App\Http\Controllers\AssignmentDelayController;
 use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\AttendanceEntryController;
@@ -11,6 +12,9 @@ use App\Http\Controllers\ExportController;
 use App\Http\Controllers\NoteController;
 use App\Http\Controllers\PartUsageController;
 use App\Http\Controllers\PayEntryController;
+use App\Http\Controllers\StockBalanceController;
+use App\Http\Controllers\StockMovementController;
+use App\Http\Controllers\StorageLocationController;
 use App\Http\Controllers\TechnicianAssignmentController;
 use App\Http\Controllers\TicketCancellationController;
 use App\Http\Controllers\TicketController;
@@ -47,6 +51,8 @@ Route::middleware('auth.token.store')->group(function () {
     Route::post('parts', [CatalogController::class, 'partsStore'])->name('parts.store');
     Route::delete('parts/{part}', [CatalogController::class, 'partsDestroy'])->name('parts.destroy');
     Route::post('parts/{part}/restore', [CatalogController::class, 'partsRestore'])->withTrashed()->name('parts.restore');
+    // What we have paid for this part, and when.
+    Route::get('parts/{part}/price-history', [CatalogController::class, 'partsPriceHistory'])->name('parts.price-history');
 
     /*
     |--------------------------------------------------------------------------
@@ -65,6 +71,78 @@ Route::middleware('auth.token.store')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
+    | Storage. Locations are a controlled catalog; movements are an append-only
+    | ledger (corrections are reversals, never edits) and stock-balances is the
+    | cached SUM(quantity * direction) over that ledger.
+    |--------------------------------------------------------------------------
+    */
+    Route::get('storage-locations', [StorageLocationController::class, 'index'])->name('storage-locations.index');
+    Route::post('storage-locations', [StorageLocationController::class, 'store'])->name('storage-locations.store');
+    Route::delete('storage-locations/{storageLocation}', [StorageLocationController::class, 'destroy'])->name('storage-locations.destroy');
+    Route::post('storage-locations/{storageLocation}/restore', [StorageLocationController::class, 'restore'])->withTrashed()->name('storage-locations.restore');
+
+    /*
+     | How a location addresses the space inside it -- its levels (Shelf, Row,
+     | Column) and the values declared on each.
+     |
+     | scopeBindings keeps a child belonging to its parent, so one location's
+     | level can never be reached through another's URL.
+     |
+     | PARAMETER NAMES ARE LOAD-BEARING. Laravel resolves a scoped binding's
+     | relation as Str::plural(Str::camel($param)), so {placeLevel} requires
+     | StorageLocation::placeLevels() and {placeValue} requires
+     | StoragePlaceLevel::placeValues(). The slots feature this replaces used
+     | {storageSlot} against a slots() relation and 500'd on every PATCH and
+     | DELETE -- and its tests never caught it because they called the service
+     | instead of the endpoint. Every route here is tested over HTTP.
+     */
+    Route::prefix('storage-locations/{storageLocation}/place-levels')->scopeBindings()->group(function () {
+        Route::get('/', [StorageLocationController::class, 'placeLevelsIndex'])->name('storage-locations.place-levels.index');
+        Route::post('/', [StorageLocationController::class, 'placeLevelsStore'])->name('storage-locations.place-levels.store');
+        Route::patch('{placeLevel}', [StorageLocationController::class, 'placeLevelsUpdate'])->name('storage-locations.place-levels.update');
+        Route::delete('{placeLevel}', [StorageLocationController::class, 'placeLevelsDestroy'])->name('storage-locations.place-levels.destroy');
+
+        Route::post('{placeLevel}/values', [StorageLocationController::class, 'placeValuesStore'])->name('storage-locations.place-values.store');
+        Route::patch('{placeLevel}/values/{placeValue}', [StorageLocationController::class, 'placeValuesUpdate'])->name('storage-locations.place-values.update');
+        Route::delete('{placeLevel}/values/{placeValue}', [StorageLocationController::class, 'placeValuesDestroy'])->name('storage-locations.place-values.destroy');
+    });
+    Route::post('storage-locations/{storageLocation}/notes', [NoteController::class, 'storageLocation'])->name('storage-locations.notes');
+    Route::post('storage-locations/{storageLocation}/attachments', [AttachmentController::class, 'storageLocation'])->name('storage-locations.attachments');
+
+    Route::get('stock-movements', [StockMovementController::class, 'index'])->name('stock-movements.index');
+    Route::post('stock-movements', [StockMovementController::class, 'store'])->name('stock-movements.store');
+    Route::get('stock-movements/{stockMovement}', [StockMovementController::class, 'show'])->name('stock-movements.show');
+    Route::post('stock-movements/{stockMovement}/mistaken', [StockMovementController::class, 'mistaken'])->name('stock-movements.mistaken');
+    Route::post('stock-movements/{stockMovement}/notes', [NoteController::class, 'stockMovement'])->name('stock-movements.notes');
+    Route::post('stock-movements/{stockMovement}/attachments', [AttachmentController::class, 'stockMovement'])->name('stock-movements.attachments');
+
+    Route::get('stock-balances', [StockBalanceController::class, 'index'])->name('stock-balances.index');
+    // Where a part sits inside its location. The complete address each time --
+    // a level left out is cleared, because a part has one address per location.
+    Route::put('stock-balances/{stockBalance}/place', [StockBalanceController::class, 'setPlace'])->name('stock-balances.place');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Cross-ticket attendance. One visit can cover issues on several tickets,
+    | so this entry point is not scoped to any of them. The ticket-nested
+    | route below stays for the ordinary single-ticket case.
+    |--------------------------------------------------------------------------
+    */
+    Route::post('attendance-entries', [AttendanceEntryController::class, 'storeGlobal'])->name('attendance.store-global');
+
+    /*
+     | The event ledger, unscoped for the same reason creation is: a visit
+     | covering several tickets has no one ticket its URL could honestly name.
+     | The ticket-nested equivalents below stay for the single-ticket case.
+     */
+    Route::prefix('attendance-entries/{attendanceEntry}/events')->group(function () {
+        Route::post('/', [AttendanceEntryController::class, 'eventsStoreGlobal'])->name('attendance.events.store-global');
+        Route::patch('{event}', [AttendanceEntryController::class, 'eventsUpdateGlobal'])->name('attendance.events.update-global');
+        Route::post('{event}/mistaken', [AttendanceEntryController::class, 'eventsMistakenGlobal'])->name('attendance.events.mistaken-global');
+    });
+
+    /*
+    |--------------------------------------------------------------------------
     | Daily Pay Entries (global, not store-scoped)
     |--------------------------------------------------------------------------
     */
@@ -72,6 +150,9 @@ Route::middleware('auth.token.store')->group(function () {
     Route::post('daily-pay-entries', [DailyPayEntryController::class, 'store'])->name('daily-pay-entries.store');
     Route::get('daily-pay-entries/{dailyPayEntry}', [DailyPayEntryController::class, 'show'])->name('daily-pay-entries.show');
     Route::post('daily-pay-entries/{dailyPayEntry}/edit', [DailyPayEntryController::class, 'edit'])->name('daily-pay-entries.edit');
+    Route::post('daily-pay-entries/{dailyPayEntry}/recalculate', DailyPayEntryRecalculationController::class)->name('daily-pay-entries.recalculate');
+    // Recorded but never claimed by a payment: what we still owe, per payee.
+    Route::get('unpaid-work', [DailyPayEntryController::class, 'unpaidWork'])->name('unpaid-work');
 
     /*
     |--------------------------------------------------------------------------
@@ -81,6 +162,10 @@ Route::middleware('auth.token.store')->group(function () {
     Route::get('tickets', [TicketController::class, 'globalIndex'])->name('tickets.global');
     Route::get('tickets/analytics', [TicketController::class, 'globalAnalytics'])->name('tickets.analytics');
     Route::post('tickets', [TicketController::class, 'storeOther'])->name('tickets.store-other');
+    // Unscoped read. Declared AFTER tickets/analytics so the literal segment
+    // still wins over {ticket}. The store-scoped twin stays the canonical route;
+    // this one exists because an other_store ticket has no store to bind to.
+    Route::get('tickets/{ticket}/issues', [TicketIssueController::class, 'globalIndex'])->name('tickets.issues.global');
     Route::get('export/excel', ExportController::class)->name('export.excel')->withoutMiddleware('auth.token.store')->middleware('auth.secret.key');
 
     /*
@@ -110,12 +195,14 @@ Route::middleware('auth.token.store')->group(function () {
             // The "one look" lifecycle views.
             Route::get('issues', [TicketIssueController::class, 'index'])->name('tickets.issues.index');
             Route::get('issues/{ticketIssue}', [TicketIssueController::class, 'show'])->name('tickets.issues.show');
+            Route::patch('issues/{ticketIssue}', [TicketIssueController::class, 'update'])->name('tickets.issues.update');
 
             // Issue state transitions.
             Route::post('issues/status', [TicketIssueStatusController::class, 'store'])->name('tickets.issues.status');
             Route::post('issues/{ticketIssue}/defer', TicketIssueDeferralController::class)->name('tickets.issues.defer');
             Route::post('issues/{ticketIssue}/cancel', TicketIssueCancellationController::class)->name('tickets.issues.cancel');
             Route::post('issues/{ticketIssue}/wait', TicketIssueWaitingController::class)->name('tickets.issues.wait');
+            Route::post('issues/{ticketIssue}/assigned-priority', [TicketIssueController::class, 'assignPriority'])->name('tickets.issues.assigned-priority');
 
             // Generic notes & attachments on an individual issue.
             Route::post('issues/{ticketIssue}/notes', [NoteController::class, 'ticketIssue'])->name('tickets.issues.notes');
@@ -144,6 +231,27 @@ Route::middleware('auth.token.store')->group(function () {
 
         Route::post('diagnoses/{diagnosis}/mistaken', [DiagnosisController::class, 'mistaken'])->name('tickets.diagnoses.mistaken');
         Route::post('attendance-entries/{attendanceEntry}/mistaken', [AttendanceEntryController::class, 'mistaken'])->name('tickets.attendance.mistaken');
+
+
+        /*
+         | The attendance event ledger. Each of these appends or amends ONE
+         | thing that happened, which is what makes adding to a saved session an
+         | insert rather than a correction -- the complaint that prompted it.
+         |
+         | DELIBERATELY NOT scopeBindings(), for the reason this whole group
+         | exists: an attendance entry is not a child of a ticket. It reaches
+         | issues through a pivot and one entry can span several tickets, so
+         | scoping would make Laravel look for Ticket::attendanceEntries() and
+         | 500. The event-belongs-to-entry check that scoping would have given
+         | us is done explicitly in the controller instead, where it can also
+         | say what it means.
+         */
+        Route::prefix('attendance-entries/{attendanceEntry}/events')->group(function () {
+            Route::post('/', [AttendanceEntryController::class, 'eventsStore'])->name('tickets.attendance.events.store');
+            Route::patch('{event}', [AttendanceEntryController::class, 'eventsUpdate'])->name('tickets.attendance.events.update');
+            Route::post('{event}/mistaken', [AttendanceEntryController::class, 'eventsMistaken'])->name('tickets.attendance.events.mistaken');
+        });
+
         Route::post('part-usages/{partUsage}/mistaken', [PartUsageController::class, 'mistaken'])->name('tickets.part-usages.mistaken');
         Route::post('pay-entries/{payEntry}/mistaken', [PayEntryController::class, 'mistaken'])->name('tickets.pay-entries.mistaken');
         Route::post('warranties/{warranty}/mistaken', [WarrantyController::class, 'mistaken'])->name('tickets.warranties.mistaken');

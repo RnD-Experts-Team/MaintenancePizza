@@ -26,8 +26,11 @@ class TicketAnalyticsService
      */
     public function summarize(Request $request, ?Store $store = null): array
     {
+        $issues = $this->issueBreakdown($request, $store);
+
         return [
-            'issues' => $this->issueBreakdown($request, $store),
+            'issues' => $issues,
+            'attention' => $this->attention($request, $store, $issues),
             'durations' => [
                 'pending_to_next_status' => $this->averageDuration($request, $store, null),
                 'time_to_complete_or_cancelled' => $this->averageDuration(
@@ -80,6 +83,67 @@ class TicketAnalyticsService
         return [
             'total' => array_sum(array_column($breakdown, 'count')),
             'status_breakdown' => $breakdown,
+        ];
+    }
+
+    /**
+     * How many issues need looking at, over the same filtered set.
+     *
+     * overdue = a non-terminal issue whose LATEST non-mistaken assignment is
+     *           dated before today.
+     * stuck   = an issue sitting in `waiting`.
+     *
+     * Costs exactly one extra query: `stuck` is read straight off the status
+     * breakdown summarize() already computed. Both figures ride along on
+     * ?include_analytics=1, so the frontend never makes a second request for
+     * them.
+     *
+     * "Latest assignment" is MAX(assignments.id), NOT MAX(assigned_date).
+     * These genuinely differ: AssignmentService::delay() mutates assigned_date
+     * in place, so if a second assignment is later created for an EARLIER date,
+     * MAX(assigned_date) would report the superseded one. Creation order is
+     * what "latest" means here, and it is tie-free.
+     *
+     * @param  array<string, mixed>  $breakdown  The return of issueBreakdown().
+     * @return array<string, mixed>
+     */
+    private function attention(Request $request, ?Store $store, array $breakdown): array
+    {
+        $today = Carbon::today()->toDateString();
+
+        // One row per issue: the id of its most recently created non-mistaken
+        // assignment. Derived once and joined -- a correlated MAX() here would
+        // re-scan the pivot for every issue.
+        $latest = DB::table('assignment_ticket_issue as ati')
+            ->join('assignments as a', 'a.id', '=', 'ati.assignment_id')
+            ->where('a.mistaken', false)
+            ->groupBy('ati.ticket_issue_id')
+            ->select('ati.ticket_issue_id', DB::raw('MAX(a.id) as assignment_id'));
+
+        $overdue = DB::table('ticket_issues as ti')
+            ->joinSub($latest, 'la', 'la.ticket_issue_id', '=', 'ti.id')
+            ->join('assignments as a', 'a.id', '=', 'la.assignment_id')
+            ->whereIn('ti.ticket_id', $this->scopedTicketIdsQuery($request, $store))
+            ->whereNotIn('ti.status', array_map(fn(IssueStatus $s) => $s->value, IssueStatus::terminal()))
+            ->where('a.assigned_date', '<', $today)
+            ->count();
+
+        $waiting = IssueStatus::Waiting->value;
+        $stuck = 0;
+        foreach ($breakdown['status_breakdown'] as $row) {
+            if ($row['status'] === $waiting) {
+                $stuck = $row['count'];
+                break;
+            }
+        }
+
+        // as_of because "in the past" is relative to the server's date, and the
+        // frontend must know which day the count was computed for -- same
+        // instinct as weeklyAverage()'s self-describing week_starts_on.
+        return [
+            'overdue' => $overdue,
+            'stuck'   => (int) $stuck,
+            'as_of'   => $today,
         ];
     }
 

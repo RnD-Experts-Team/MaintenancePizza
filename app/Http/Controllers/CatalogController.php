@@ -11,6 +11,7 @@ use App\Models\Issue;
 use App\Models\Part;
 use App\Models\Technician;
 use App\Services\CatalogService;
+use App\Services\StockService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
@@ -20,7 +21,10 @@ use Illuminate\Http\Response;
  */
 class CatalogController extends Controller
 {
-    public function __construct(private CatalogService $catalog) {}
+    public function __construct(
+        private CatalogService $catalog,
+        private StockService $stock,
+    ) {}
 
     // ------------------------------------------------------------------ Issues
 
@@ -111,5 +115,18 @@ class CatalogController extends Controller
     public function partsRestore(Part $part)
     {
         return ['data' => $this->catalog->restorePart($part)];
+    }
+
+    /**
+     * What we have paid for this part, and when.
+     *
+     * The honest answer to "what does this cost us" once the price has moved:
+     * not one number, but the actual purchases. Bought 12 at 35 in June, 8 at 40
+     * in September. No valuation method to argue about, and nothing averaged
+     * into a figure nobody chose.
+     */
+    public function partsPriceHistory(Part $part)
+    {
+        return ['data' => $this->stock->priceHistory($part->id)];
     }
 }

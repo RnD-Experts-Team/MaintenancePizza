@@ -9,12 +9,17 @@ use App\Exports\Sheets\AttendanceEntriesSheet;
 use App\Exports\Sheets\CategoriesSheet;
 use App\Exports\Sheets\DailyPayEntriesSheet;
 use App\Exports\Sheets\DailyPayLinesSheet;
+use App\Exports\Sheets\DailyPayPaymentsSheet;
 use App\Exports\Sheets\DiagnosesSheet;
 use App\Exports\Sheets\IssuesSheet;
 use App\Exports\Sheets\IssueStatusChangesSheet;
 use App\Exports\Sheets\PartsSheet;
 use App\Exports\Sheets\PartUsagesSheet;
 use App\Exports\Sheets\PayEntriesSheet;
+use App\Exports\Sheets\StockBalancesSheet;
+use App\Exports\Sheets\StockMovementLinesSheet;
+use App\Exports\Sheets\StockMovementsSheet;
+use App\Exports\Sheets\StorageLocationsSheet;
 use App\Exports\Sheets\StoresSheet;
 use App\Exports\Sheets\TechnicianTicketIssuesSheet;
 use App\Exports\Sheets\TechniciansSheet;
@@ -50,12 +55,17 @@ class TicketsWorkbookExport implements WithMultipleSheets
             new PayEntriesSheet,
             new WarrantiesSheet,
             new DailyPayEntriesSheet,
+            new DailyPayPaymentsSheet,
             new DailyPayLinesSheet,
             new CategoriesSheet,
             new TechniciansSheet,
             new TechnicianTicketIssuesSheet,
             new IssuesSheet,
             new PartsSheet,
+            new StorageLocationsSheet,
+            new StockMovementsSheet,
+            new StockMovementLinesSheet,
+            new StockBalancesSheet,
             new AttachmentsSheet,
         ];
     }

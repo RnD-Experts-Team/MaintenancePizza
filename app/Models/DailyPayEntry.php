@@ -6,14 +6,20 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
+/**
+ * One day's pay sheet. It holds payments (one per payee), and each payment
+ * holds lines (one per store).
+ */
 class DailyPayEntry extends Model
 {
     use HasFactory;
 
     protected $fillable = ['date'];
 
+    /**
+     * @return array<string, string>
+     */
     protected function casts(): array
     {
         return [
@@ -21,7 +27,19 @@ class DailyPayEntry extends Model
         ];
     }
 
-    /** @return HasMany<DailyPayLine, $this> */
+    /** @return HasMany<DailyPayPayment, $this> */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(DailyPayPayment::class);
+    }
+
+    /**
+     * Every line across every payment. Kept as a direct relation (the lines
+     * still carry daily_pay_entry_id) so the store/technician filters in
+     * DailyPayEntryService::list() stay one join deep.
+     *
+     * @return HasMany<DailyPayLine, $this>
+     */
     public function lines(): HasMany
     {
         return $this->hasMany(DailyPayLine::class);
@@ -37,11 +55,5 @@ class DailyPayEntry extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
-    }
-
-    /** @return HasManyThrough<TicketIssue, DailyPayLine, $this> */
-    public function ticketIssues(): HasManyThrough
-    {
-        return $this->hasManyThrough(TicketIssue::class, DailyPayLine::class);
     }
 }

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * A free-text note attached polymorphically to any domain entity. Notes are the
@@ -17,7 +18,10 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 class Note extends Model
 {
     /** @use HasFactory<NoteFactory> */
-    use HasFactory;
+    // Soft deletes so the daily pay edit path stops hard-deleting notes that
+    // its own revision snapshot still points at. Live views are unaffected:
+    // morphMany excludes trashed rows by default.
+    use HasFactory, SoftDeletes;
 
     protected $fillable = ['type', 'body'];
 

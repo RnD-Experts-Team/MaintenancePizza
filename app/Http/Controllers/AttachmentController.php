@@ -11,7 +11,9 @@ use App\Models\Issue;
 use App\Models\Part;
 use App\Models\PartUsage;
 use App\Models\PayEntry;
+use App\Models\StockMovement;
 use App\Models\Store;
+use App\Models\StorageLocation;
 use App\Models\Technician;
 use App\Models\Ticket;
 use App\Models\TicketIssue;
@@ -90,6 +92,16 @@ class AttachmentController extends Controller
     public function category(StoreAttachmentRequest $request, Category $category): JsonResponse
     {
         return $this->make($request, $category);
+    }
+
+    public function storageLocation(StoreAttachmentRequest $request, StorageLocation $storageLocation): JsonResponse
+    {
+        return $this->make($request, $storageLocation);
+    }
+
+    public function stockMovement(StoreAttachmentRequest $request, StockMovement $stockMovement): JsonResponse
+    {
+        return $this->make($request, $stockMovement);
     }
 
     public function part(StoreAttachmentRequest $request, Part $part): JsonResponse

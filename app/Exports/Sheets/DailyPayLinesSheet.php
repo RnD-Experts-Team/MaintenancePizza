@@ -27,10 +27,12 @@ class DailyPayLinesSheet implements FromCollection, WithHeadings, WithMapping, W
     public function headings(): array
     {
         return [
-            'ID', 'Daily Pay Entry ID', 'Technician ID', 'Store ID',
-            'Total Working Hours', 'Gas', 'Invoices', 'Hourly Payment Rate',
-            'Money Owed', 'Travel Time', 'Total Break Time',
-            'Ticket Issue IDs', 'Created By', 'Created At',
+            'ID', 'Daily Pay Entry ID', 'Daily Pay Payment ID', 'Technician ID', 'Store ID',
+            'Total Working Hours', 'Travel Time', 'Total Break Time', 'Parts Run Time', 'Hours Overridden',
+            'Gas', 'Lump Sum', 'Hourly Payment Rate', 'Money Owed',
+            'Gathered Work Hours', 'Gathered Travel Hours', 'Gathered Break Hours',
+            'Gathered Parts Run Hours', 'Gathered Reimbursable Parts',
+            'Line Total', 'Ticket Issue IDs', 'Created By', 'Created At',
         ];
     }
 
@@ -43,15 +45,24 @@ class DailyPayLinesSheet implements FromCollection, WithHeadings, WithMapping, W
         return [
             $line->id,
             $line->daily_pay_entry_id,
+            $line->daily_pay_payment_id,
             $line->technician_id,
             $line->store_id,
             $line->total_working_hours,
-            $line->gas,
-            $line->invoices,
-            $line->hourly_payment_rate,
-            $line->money_owed,
             $line->travel_time,
             $line->total_break_time,
+            $line->parts_run_time,
+            $line->hours_overridden ? 'yes' : 'no',
+            $line->gas,
+            $line->lump_sum,
+            $line->hourly_payment_rate,
+            $line->money_owed,
+            $line->frozen_work_hours,
+            $line->frozen_travel_hours,
+            $line->frozen_break_hours,
+            $line->frozen_parts_run_hours,
+            $line->frozen_reimbursable_parts,
+            $line->line_total,
             $line->ticketIssues->pluck('id')->implode(', '),
             $line->created_by,
             (string) $line->created_at,

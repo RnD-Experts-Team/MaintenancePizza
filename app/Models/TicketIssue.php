@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\IssueStatus;
+use App\Enums\PaymentStatus;
 use App\Enums\Priority;
 use App\Models\Concerns\HasNotesAndAttachments;
 use Database\Factories\TicketIssueFactory;
@@ -23,6 +24,7 @@ class TicketIssue extends Model
         'issue_id',
         'other_title',
         'priority',
+        'assigned_priority',
         'description',
         'status',
         'parent_id',
@@ -35,6 +37,7 @@ class TicketIssue extends Model
     {
         return [
             'priority' => Priority::class,
+            'assigned_priority' => Priority::class,
             'status' => IssueStatus::class,
         ];
     }
@@ -131,6 +134,34 @@ class TicketIssue extends Model
     public function dailyPayLines(): BelongsToMany
     {
         return $this->belongsToMany(DailyPayLine::class, 'daily_pay_line_ticket_issue')->withTimestamps();
+    }
+
+    /**
+     * Whether everything this issue costs somebody has been settled through a
+     * pay sheet: its attendance hours and the parts a technician fronted.
+     *
+     * Anything still owed dominates, so an issue reads as unpaid until the last
+     * of its payables is on a sheet. An issue that costs nobody anything —
+     * no attendance, and no parts beyond what we bought ourselves — has nothing
+     * to pay rather than being perpetually unpaid.
+     *
+     * Derived, never stored; null when the records it reads are not loaded.
+     */
+    public function paymentStatus(): ?PaymentStatus
+    {
+        if (! $this->relationLoaded('attendanceEntries') || ! $this->relationLoaded('partUsages')) {
+            return null;
+        }
+
+        // toBase(): an Eloquent collection's merge() keys by model id and would
+        // call getKey() on these enums.
+        $statuses = $this->attendanceEntries
+            ->map(fn (AttendanceEntry $e) => $e->paymentStatus())
+            ->toBase()
+            ->merge($this->partUsages->map(fn (PartUsage $p) => $p->paymentStatus())->toBase())
+            ->filter();
+
+        return PaymentStatus::rollUp($statuses);
     }
 
     /** @return HasManyThrough<DailyPayEntry, DailyPayLine, $this> */
