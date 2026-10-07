@@ -4,10 +4,12 @@ namespace App\Console\Commands;
 
 use App\Jobs\PublishOutboxEventJob;
 use App\Models\Ticket;
+use App\Models\TicketIssue;
 use App\Services\MaintenanceAnalyticsService;
 use App\Services\MaintenanceEvents\MaintenanceEventFactory;
 use App\Services\MaintenanceEvents\MaintenanceOutboxService;
 use Illuminate\Console\Command;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class SendTicketUpdateNotifications extends Command
@@ -20,16 +22,29 @@ class SendTicketUpdateNotifications extends Command
     {
         $now = now();
 
+        // Only tickets touched in the last day -- both lookups ride the
+        // updated_at indexes, so closed and quiet tickets are never read.
+        // A change older than a day that was never sent (the scheduler was
+        // down that long) is stale news and is let go.
+        $since = $now->copy()->subDay();
+        $ticketIds = Ticket::query()->where('updated_at', '>', $since)->pluck('id')
+            ->merge(TicketIssue::query()->where('updated_at', '>', $since)->distinct()->pluck('ticket_id'))
+            ->unique()
+            ->values();
+
         $tickets = Ticket::query()
-            ->with('store')
+            ->whereIn('id', $ticketIds)
             ->whereNotNull('store_id')
-            ->where(function ($query) {
-                $query->whereRaw('updated_at > COALESCE(last_notified_at, created_at)')
-                    ->orWhereHas('ticketIssues', function ($issues) {
-                        $issues->whereRaw('ticket_issues.updated_at > COALESCE(tickets.last_notified_at, tickets.created_at)');
-                    });
-            })
-            ->get();
+            ->with('store')
+            ->withMax('ticketIssues as issues_updated_at', 'updated_at')
+            ->get()
+            ->filter(function (Ticket $ticket) {
+                $told = $ticket->last_notified_at ?? $ticket->created_at;
+                $issues = $ticket->getAttributes()['issues_updated_at'] ?? null;
+
+                return $ticket->updated_at->greaterThan($told)
+                    || ($issues !== null && Carbon::parse($issues)->greaterThan($told));
+            });
 
         foreach ($tickets as $ticket) {
             DB::transaction(function () use ($ticket, $analytics, $now) {

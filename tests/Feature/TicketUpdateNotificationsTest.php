@@ -109,6 +109,21 @@ class TicketUpdateNotificationsTest extends TestCase
         $this->assertSame('Oven: In Progress → Complete', $updates[1]->payload['data']['payload']['body']);
     }
 
+    public function test_only_recently_changed_tickets_are_looked_at(): void
+    {
+        $this->setStatus('complete');
+
+        // The scheduler was down for two days: that change is stale, let go.
+        $this->travel(2)->days();
+        $this->artisan('tickets:send-update-notifications')->assertSuccessful();
+        $this->assertSame([], $this->updates());
+
+        // A closed ticket nobody touches again is never picked up.
+        $this->travel(3)->hours();
+        $this->artisan('tickets:send-update-notifications')->assertSuccessful();
+        $this->assertSame([], $this->updates());
+    }
+
     public function test_a_private_note_alone_tells_nobody(): void
     {
         $this->postJson("/api/stores/{$this->store->store_number}/tickets/{$this->ticket->id}/notes", [
