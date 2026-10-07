@@ -2,10 +2,12 @@
 
 namespace App\Services;
 
+use App\Models\Attachment;
 use App\Models\DailyPayEntry;
 use App\Models\DailyPayEntryRevision;
 use App\Models\DailyPayLine;
 use App\Models\DailyPayPayment;
+use App\Models\Note;
 use App\Models\Technician;
 use App\Models\TicketIssue;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -154,9 +156,13 @@ class DailyPayEntryService
         array $lineFilesMap = [],
         array $lineNoteFilesMap = [],
     ): array {
-        $this->guardAgainstConcurrentEdit($entry, $validated['expected_updated_at'] ?? null);
-
         DB::transaction(function () use ($entry, $validated, $paymentFilesMap, $paymentNoteFilesMap, $lineFilesMap, $lineNoteFilesMap) {
+            // Re-read under a row lock before the concurrency check, so two
+            // saves of the same sheet are judged one after the other rather
+            // than both against the same stale row.
+            $locked = DailyPayEntry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail();
+            $this->guardAgainstConcurrentEdit($locked, $validated['expected_updated_at'] ?? null);
+
             DailyPayEntryRevision::create([
                 'daily_pay_entry_id' => $entry->id,
                 'snapshot' => $this->show($entry),
@@ -164,20 +170,19 @@ class DailyPayEntryService
                 'edited_by' => Auth::id(),
             ]);
 
+            // What the client still shows, and therefore keeps. Everything
+            // else on the old payments and lines goes, as before.
+            [$keepNoteIds, $keepAttachmentIds] = $this->keptIds($validated);
+
             // Polymorphic notes and attachments have no DB-level cascade, so
-            // they are walked bottom-up before the rows that own them go.
+            // they are walked bottom-up before the rows that own them go. Kept
+            // ones are skipped here and moved onto the rebuilt rows below; a
+            // kept note keeps its own files with it.
             $entry->load('payments.lines.notes', 'payments.lines.attachments', 'payments.notes', 'payments.attachments');
 
-            $entry->payments->each(function (DailyPayPayment $payment) {
-                $payment->lines->each(function (DailyPayLine $line) {
-                    $line->notes->each(fn ($note) => $note->attachments()->delete());
-                    $line->notes()->delete();
-                    $line->attachments()->delete();
-                });
-
-                $payment->notes->each(fn ($note) => $note->attachments()->delete());
-                $payment->notes()->delete();
-                $payment->attachments()->delete();
+            $entry->payments->each(function (DailyPayPayment $payment) use ($keepNoteIds, $keepAttachmentIds) {
+                $payment->lines->each(fn (DailyPayLine $line) => $this->dropUnkept($line, $keepNoteIds, $keepAttachmentIds));
+                $this->dropUnkept($payment, $keepNoteIds, $keepAttachmentIds);
             });
 
             $entry->payments()->delete();
@@ -185,7 +190,11 @@ class DailyPayEntryService
             // would otherwise survive its payment being removed.
             $entry->lines()->delete();
 
-            $entry->update(['date' => $validated['date']]);
+            // touch(), not update(): update() writes nothing when the date is
+            // unchanged, which left updated_at where it was -- and with it the
+            // concurrency guard, which compares updated_at, never fired.
+            $entry->fill(['date' => $validated['date']]);
+            $entry->touch();
             $entry->setRelation('payments', $entry->payments()->getRelated()->newCollection());
 
             $this->buildPayments($entry, $validated, $paymentFilesMap, $paymentNoteFilesMap, $lineFilesMap, $lineNoteFilesMap);
@@ -293,6 +302,81 @@ class DailyPayEntryService
     }
 
     /**
+     * Every note / attachment id the payload keeps, at any level.
+     *
+     * @param  array<string, mixed>  $validated
+     * @return array{0: array<int, int>, 1: array<int, int>}  [note ids, attachment ids]
+     */
+    private function keptIds(array $validated): array
+    {
+        $notes = [];
+        $attachments = [];
+
+        foreach ($validated['payments'] ?? [] as $payment) {
+            array_push($notes, ...array_map('intval', $payment['keep_note_ids'] ?? []));
+            array_push($attachments, ...array_map('intval', $payment['keep_attachment_ids'] ?? []));
+
+            foreach ($payment['lines'] ?? [] as $line) {
+                array_push($notes, ...array_map('intval', $line['keep_note_ids'] ?? []));
+                array_push($attachments, ...array_map('intval', $line['keep_attachment_ids'] ?? []));
+            }
+        }
+
+        return [$notes, $attachments];
+    }
+
+    /**
+     * Soft-delete an old payment's or line's notes (with their files) and
+     * files, except the ones being kept.
+     *
+     * @param  array<int, int>  $keepNoteIds
+     * @param  array<int, int>  $keepAttachmentIds
+     */
+    private function dropUnkept(DailyPayPayment|DailyPayLine $owner, array $keepNoteIds, array $keepAttachmentIds): void
+    {
+        foreach ($owner->notes as $note) {
+            if (in_array((int) $note->id, $keepNoteIds, true)) {
+                continue;
+            }
+
+            $note->attachments()->delete();
+            $note->delete();
+        }
+
+        foreach ($owner->attachments as $attachment) {
+            if (!in_array((int) $attachment->id, $keepAttachmentIds, true)) {
+                $attachment->delete();
+            }
+        }
+    }
+
+    /**
+     * Move kept notes and attachments onto a rebuilt payment or line. The note
+     * keeps its id, author, date and its own files; only its owner changes.
+     *
+     * @param  array<string, mixed>  $data  The payment's or line's payload.
+     */
+    private function reattachKept(DailyPayPayment|DailyPayLine $owner, array $data): void
+    {
+        $noteIds = array_map('intval', $data['keep_note_ids'] ?? []);
+        $attachmentIds = array_map('intval', $data['keep_attachment_ids'] ?? []);
+
+        if ($noteIds !== []) {
+            Note::query()->whereKey($noteIds)->update([
+                'notable_type' => $owner->getMorphClass(),
+                'notable_id' => $owner->getKey(),
+            ]);
+        }
+
+        if ($attachmentIds !== []) {
+            Attachment::query()->whereKey($attachmentIds)->update([
+                'attachable_type' => $owner->getMorphClass(),
+                'attachable_id' => $owner->getKey(),
+            ]);
+        }
+    }
+
+    /**
      * @param  array<string, mixed>  $validated
      * @param  array<int, array<int, UploadedFile>>  $paymentFilesMap
      * @param  array<int, array<int, array<int, UploadedFile>>>  $paymentNoteFilesMap
@@ -341,6 +425,7 @@ class DailyPayEntryService
             array_intersect_key($data, array_flip(self::PAYMENT_FIELDS)),
         ));
 
+        $this->reattachKept($payment, $data);
         $this->attachments->store($payment, $files);
 
         foreach ($data['notes'] ?? [] as $i => $note) {
@@ -374,6 +459,7 @@ class DailyPayEntryService
             $line->ticketIssues()->attach($data['ticket_issue_ids']);
         }
 
+        $this->reattachKept($line, $data);
         $this->attachments->store($line, $files);
 
         foreach ($data['notes'] ?? [] as $i => $note) {

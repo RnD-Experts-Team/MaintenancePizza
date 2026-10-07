@@ -6,6 +6,10 @@ $authSubject = $devMode
     ? 'auth.testing.v1.>'
     : 'auth.v1.>';
 
+$maintenanceSubject = $devMode
+    ? 'maintenance.testing.v1.>'
+    : 'maintenance.v1.>';
+
 $notificationsSubject = $devMode
     ? 'notifications.testing.v1.>'
     : 'notifications.v1.>';
@@ -20,6 +24,12 @@ return [
     'token' => env('NATS_TOKEN'),
 
     'publishers' => [
+        [
+            'name' => $devMode
+                ? env('NATS_MAINTENANCE_STREAM', 'MAINTENANCE_TESTING_EVENTS')
+                : env('NATS_MAINTENANCE_STREAM', 'MAINTENANCE_EVENTS'),
+            'subjects' => [$maintenanceSubject],
+        ],
         [
             'name' => $devMode
                 ? env('NATS_NOTIFICATIONS_STREAM', 'NOTIFICATIONS_TESTING_EVENTS')

@@ -11,7 +11,7 @@ class IssueStatusChange extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['ticket_issue_id', 'from_status', 'to_status', 'reason'];
+    protected $fillable = ['ticket_issue_id', 'from_status', 'to_status', 'reason', 'created_by'];
 
     /**
      * @return array<string, string>

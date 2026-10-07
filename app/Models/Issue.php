@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Issue extends Model
@@ -27,5 +28,15 @@ class Issue extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * What a store should try before opening a ticket for this issue.
+     *
+     * @return HasOne<TroubleshootingGuide, $this>
+     */
+    public function troubleshootingGuide(): HasOne
+    {
+        return $this->hasOne(TroubleshootingGuide::class);
     }
 }

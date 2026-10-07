@@ -15,7 +15,7 @@ class Part extends Model
     /** @use HasFactory<PartFactory> */
     use HasFactory, HasNotesAndAttachments, SoftDeletes;
 
-    protected $fillable = ['name'];
+    protected $fillable = ['name', 'description'];
 
     /** @return HasMany<PartUsage, $this> */
     public function partUsages(): HasMany

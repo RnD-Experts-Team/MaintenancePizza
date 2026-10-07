@@ -18,7 +18,12 @@ class Attachment extends Model
     // the only thing that ever unlinks a file.
     use HasFactory, SoftDeletes;
 
-    protected $fillable = ['path', 'original_name', 'mime_type', 'size'];
+    // created_by is fillable because AttachmentService::store() creates
+    // through the relation; without it the author was silently dropped.
+    protected $fillable = ['path', 'original_name', 'mime_type', 'size', 'created_by'];
+
+    /** A new or removed file is a change to whatever holds it. */
+    protected $touches = ['attachable'];
 
     /**
      * Always expose the public URL alongside the stored relative path.

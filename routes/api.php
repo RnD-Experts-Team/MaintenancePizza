@@ -9,12 +9,15 @@ use App\Http\Controllers\AttendanceEntryController;
 use App\Http\Controllers\CatalogController;
 use App\Http\Controllers\DiagnosisController;
 use App\Http\Controllers\ExportController;
+use App\Http\Controllers\IssueHistoryController;
+use App\Http\Controllers\MaintenanceAnalyticsController;
 use App\Http\Controllers\NoteController;
 use App\Http\Controllers\PartUsageController;
 use App\Http\Controllers\PayEntryController;
 use App\Http\Controllers\StockBalanceController;
 use App\Http\Controllers\StockMovementController;
 use App\Http\Controllers\StorageLocationController;
+use App\Http\Controllers\TechnicianAbilityController;
 use App\Http\Controllers\TechnicianAssignmentController;
 use App\Http\Controllers\TicketCancellationController;
 use App\Http\Controllers\TicketController;
@@ -24,6 +27,8 @@ use App\Http\Controllers\TicketIssueController;
 use App\Http\Controllers\TicketIssueDeferralController;
 use App\Http\Controllers\TicketIssueStatusController;
 use App\Http\Controllers\TicketIssueWaitingController;
+use App\Http\Controllers\TicketNoteController;
+use App\Http\Controllers\TroubleshootingController;
 use App\Http\Controllers\WarrantyController;
 use Illuminate\Support\Facades\Route;
 
@@ -35,20 +40,39 @@ Route::middleware('auth.token.store')->group(function () {
     */
     Route::get('issues', [CatalogController::class, 'issuesIndex'])->name('issues.index');
     Route::post('issues', [CatalogController::class, 'issuesStore'])->name('issues.store');
+    Route::patch('issues/{issue}', [CatalogController::class, 'issuesUpdate'])->name('issues.update');
     Route::delete('issues/{issue}', [CatalogController::class, 'issuesDestroy'])->name('issues.destroy');
     Route::post('issues/{issue}/restore', [CatalogController::class, 'issuesRestore'])->withTrashed()->name('issues.restore');
 
+    // Troubleshooting guides: what to try before opening a ticket for an issue.
+    Route::get('troubleshooting-guides', [TroubleshootingController::class, 'index'])->name('troubleshooting.index');
+    Route::get('issues/{issue}/troubleshooting', [TroubleshootingController::class, 'show'])->withTrashed()->name('issues.troubleshooting.show');
+    Route::put('issues/{issue}/troubleshooting', [TroubleshootingController::class, 'update'])->name('issues.troubleshooting.update');
+    Route::delete('issues/{issue}/troubleshooting', [TroubleshootingController::class, 'destroy'])->name('issues.troubleshooting.destroy');
+    Route::post('troubleshooting-guides/{guide}/attachments', [TroubleshootingController::class, 'attachmentsStore'])->name('troubleshooting.attachments.store');
+    Route::delete('troubleshooting-guides/{guide}/attachments/{attachment}', [TroubleshootingController::class, 'attachmentsDestroy'])->name('troubleshooting.attachments.destroy');
+
     Route::get('technicians', [CatalogController::class, 'techniciansIndex'])->name('technicians.index');
     Route::post('technicians', [CatalogController::class, 'techniciansStore'])->name('technicians.store');
+    Route::patch('technicians/{technician}', [CatalogController::class, 'techniciansUpdate'])->name('technicians.update');
     Route::delete('technicians/{technician}', [CatalogController::class, 'techniciansDestroy'])->name('technicians.destroy');
     Route::post('technicians/{technician}/restore', [CatalogController::class, 'techniciansRestore'])->withTrashed()->name('technicians.restore');
 
+    // Abilities: stars, notes and the "call first" pin, per issue and overall.
+    // Their own read, never folded into GET technicians, which store users read.
+    Route::get('technician-abilities', [TechnicianAbilityController::class, 'index'])->name('technician-abilities.index');
+    Route::put('technicians/{technician}/abilities/{issue}', [TechnicianAbilityController::class, 'update'])->name('technicians.abilities.update');
+    Route::delete('technicians/{technician}/abilities/{issue}', [TechnicianAbilityController::class, 'destroy'])->withTrashed()->name('technicians.abilities.destroy');
+    Route::patch('technicians/{technician}/rating', [TechnicianAbilityController::class, 'rating'])->name('technicians.rating');
+
     Route::get('categories', [CatalogController::class, 'categoriesIndex'])->name('categories.index');
     Route::post('categories', [CatalogController::class, 'categoriesStore'])->name('categories.store');
+    Route::patch('categories/{category}', [CatalogController::class, 'categoriesUpdate'])->name('categories.update');
     Route::delete('categories/{category}', [CatalogController::class, 'categoriesDestroy'])->name('categories.destroy');
 
     Route::get('parts', [CatalogController::class, 'partsIndex'])->name('parts.index');
     Route::post('parts', [CatalogController::class, 'partsStore'])->name('parts.store');
+    Route::patch('parts/{part}', [CatalogController::class, 'partsUpdate'])->name('parts.update');
     Route::delete('parts/{part}', [CatalogController::class, 'partsDestroy'])->name('parts.destroy');
     Route::post('parts/{part}/restore', [CatalogController::class, 'partsRestore'])->withTrashed()->name('parts.restore');
     // What we have paid for this part, and when.
@@ -166,6 +190,11 @@ Route::middleware('auth.token.store')->group(function () {
     // still wins over {ticket}. The store-scoped twin stays the canonical route;
     // this one exists because an other_store ticket has no store to bind to.
     Route::get('tickets/{ticket}/issues', [TicketIssueController::class, 'globalIndex'])->name('tickets.issues.global');
+
+    // The analytics page: one or many stores, a range of instants.
+    Route::get('maintenance-analytics/{section}', MaintenanceAnalyticsController::class)
+        ->whereIn('section', ['summary', 'activity', 'watchlist'])
+        ->name('maintenance-analytics.show');
     Route::get('export/excel', ExportController::class)->name('export.excel')->withoutMiddleware('auth.token.store')->middleware('auth.secret.key');
 
     /*
@@ -187,6 +216,11 @@ Route::middleware('auth.token.store')->group(function () {
 
         // Generic notes & attachments on the ticket and on the store itself.
         Route::post('tickets/{ticket}/notes', [NoteController::class, 'ticket'])->name('stores.tickets.notes');
+        // Every note on the ticket, its issues and records: the normal notes,
+        // or all of them (private ones too). The auth rules decide who gets
+        // which; the screen asks for /all when they allow it.
+        Route::get('tickets/{ticket}/notes', [TicketNoteController::class, 'index'])->name('stores.tickets.notes.index');
+        Route::get('tickets/{ticket}/notes/all', [TicketNoteController::class, 'all'])->name('stores.tickets.notes.all');
         Route::post('tickets/{ticket}/attachments', [AttachmentController::class, 'ticket'])->name('stores.tickets.attachments');
         Route::post('notes', [NoteController::class, 'store'])->name('stores.notes');
         Route::post('attachments', [AttachmentController::class, 'store'])->name('stores.attachments');
@@ -221,8 +255,25 @@ Route::middleware('auth.token.store')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
+    | Store reads about catalog items. NOT scopeBindings(): a catalog issue is
+    | not a child of a store, and scoping would make Laravel call the
+    | non-existent Store::issues() and 500.
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('stores/{store}')->group(function () {
+        // Earlier tickets at this store for the same catalog issue. withTrashed:
+        // history stays readable after the issue leaves the catalog.
+        Route::get('issues/{issue}/history', [IssueHistoryController::class, 'index'])
+            ->withTrashed()
+            ->name('stores.issues.history');
+    });
+
+    /*
+    |--------------------------------------------------------------------------
     | Leaf-record actions. Not scope-bound, because these records (assignment,
     | diagnosis, ...) are not direct children of the ticket — they are bound by id.
+    | Their FormRequests check the record is the ticket's and the ticket the
+    | store's (Requests\Concerns\ChecksTicketRecord).
     |--------------------------------------------------------------------------
     */
     Route::prefix('stores/{store}/tickets/{ticket}')->group(function () {
@@ -257,6 +308,9 @@ Route::middleware('auth.token.store')->group(function () {
         Route::post('warranties/{warranty}/mistaken', [WarrantyController::class, 'mistaken'])->name('tickets.warranties.mistaken');
         Route::post('assignments/{assignment}/mistaken', [AssignmentController::class, 'mistaken'])->name('tickets.assignments.mistaken');
         Route::post('assignments/{assignment}/delays/{delay}/mistaken', [AssignmentDelayController::class, 'mistaken'])->name('tickets.assignments.delays.mistaken');
+
+        // Lock / unlock any note on this ticket (private = MOS only).
+        Route::patch('notes/{note}/privacy', [TicketNoteController::class, 'privacy'])->name('stores.tickets.notes.privacy');
 
         // Notes & attachments for each leaf workflow record (any number).
         Route::post('diagnoses/{diagnosis}/notes', [NoteController::class, 'diagnosis'])->name('tickets.diagnoses.notes');

@@ -5,11 +5,16 @@ namespace App\Services;
 use App\Enums\IssueStatus;
 use App\Enums\PartUsagePayer;
 use App\Enums\PaymentStatus;
+use App\Enums\Priority;
 use App\Enums\TicketStatus;
 use App\Enums\TicketType;
+use App\Jobs\PublishOutboxEventJob;
 use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\TicketIssue;
+use App\Models\TroubleshootingGuide;
+use App\Services\MaintenanceEvents\MaintenanceEventFactory;
+use App\Services\MaintenanceEvents\MaintenanceOutboxService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -118,7 +123,12 @@ class TicketService
                 if (!empty($issueFiles[$i])) {
                     $this->attachments->store($issue, $issueFiles[$i]);
                 }
+
+                $this->recordTroubleshooting($issue, $line);
             }
+
+            $this->markNotified($ticket);
+            $this->sendCreatedNotification($store, $ticket);
 
             return $ticket;
         });
@@ -169,12 +179,79 @@ class TicketService
                 if (!empty($issueFiles[$i])) {
                     $this->attachments->store($issue, $issueFiles[$i]);
                 }
+
+                $this->recordTroubleshooting($issue, $line);
             }
+
+            $this->markNotified($ticket);
 
             return $ticket;
         });
 
         return $this->present($ticket->load($this->listWith)->loadCount('ticketIssues'));
+    }
+
+    /**
+     * When the manager confirmed trying the issue's troubleshooting steps, keep
+     * that -- and the guide exactly as they saw it, since it may change later.
+     *
+     * @param  array<string, mixed>  $line
+     */
+    private function recordTroubleshooting(TicketIssue $issue, array $line): void
+    {
+        if ($issue->issue_id === null || !filter_var($line['troubleshooting_confirmed'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            return;
+        }
+
+        $guide = TroubleshootingGuide::query()->where('issue_id', $issue->issue_id)->first();
+        if ($guide === null || !$guide->hasSteps()) {
+            return;
+        }
+
+        $issue->forceFill([
+            'troubleshooting_confirmed_at' => now(),
+            'troubleshooting_snapshot' => app(TroubleshootingService::class)->snapshot($guide),
+        ])->save();
+    }
+
+    /**
+     * The person opening a ticket knows about it, so its Store Managers start
+     * as told -- tickets:send-update-notifications reports changes after this.
+     */
+    private function markNotified(Ticket $ticket): void
+    {
+        Ticket::query()->whereKey($ticket->id)->toBase()->update(['last_notified_at' => DB::raw('updated_at')]);
+    }
+
+    private function sendCreatedNotification(Store $store, Ticket $ticket): void
+    {
+        $issues = $ticket->ticketIssues()->with('issue')->orderBy('id')->get()
+            ->map(fn (TicketIssue $issue) => $issue->displayTitle()
+                . ($issue->priority === Priority::Urgent ? ' (Urgent)' : ''))
+            ->implode(', ');
+
+        $this->recordEvent('notifications.v1.notification.role.send', [
+            'channels' => ['web'],
+            'roles'    => ['MOS'],
+            'stores'   => [$store->store_number],
+            'payload'  => [
+                'type'       => 'maintenance_ticket_created',
+                'title'      => 'New maintenance ticket',
+                'body'       => "Ticket #{$ticket->id} for Store {$store->store_number}: {$issues}.",
+                'action_url' => "/dashboard/maintenance-tickets/{$ticket->id}?store={$store->store_number}",
+            ],
+        ]);
+    }
+
+    private function recordEvent(string $subject, array $data, ?Request $request = null): void
+    {
+        $factory = app(MaintenanceEventFactory::class);
+        $outbox = app(MaintenanceOutboxService::class);
+
+        $envelope = $factory->make($subject, $data, $request);
+        $row = $outbox->record($subject, $envelope);
+
+        PublishOutboxEventJob::dispatch($row->id);
     }
 
     public function delete(Ticket $ticket): void

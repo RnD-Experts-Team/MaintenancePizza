@@ -6,11 +6,14 @@ use App\Enums\Priority;
 use App\Enums\TicketType;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Contracts\Validation\Validator;
+use App\Http\Requests\Concerns\ValidatesTroubleshootingConfirmation;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class StoreTicketRequest extends FormRequest
 {
+    use ValidatesTroubleshootingConfirmation;
+
     public function authorize(): bool
     {
         return true;
@@ -21,7 +24,7 @@ class StoreTicketRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [
+        return $this->troubleshootingRules() + [
             'type'   => ['nullable', Rule::enum(TicketType::class)],
             'issues' => ['required', 'array', 'min:1'],
             // Each line is either a catalog issue OR a free-text "other".
@@ -49,6 +52,8 @@ class StoreTicketRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
+            $this->validateTroubleshootingConfirmation($validator);
+
             foreach ((array) $this->input('issues', []) as $i => $issue) {
                 $hasId = ! empty($issue['issue_id']);
                 $hasOther = ! empty($issue['other_title']);

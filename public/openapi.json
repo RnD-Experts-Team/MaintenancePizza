@@ -56,6 +56,14 @@
     {
       "name": "Daily Pay",
       "description": "End-of-day payment records, in three levels: an entry is one date, it holds one payment per payee, and each payment holds one line per store. A payee is a Technician row — a company is simply a technician named after the company — so a single payment can cover several stores at once.\n\nEach payment gathers its own figures from records that already exist: the hours clocked against its issues, and the parts somebody other than us paid for. Those are FROZEN when the entry is saved, so a signed-off pay sheet does not change when a ticket is corrected later; POST .../recalculate re-pulls them on demand.\n\nEditing replaces the payments wholesale while keeping a JSON snapshot of the prior state as revision history."
+    },
+    {
+      "name": "Analytics",
+      "description": "The maintenance analytics page: what was filed, what changed, what keeps coming back, what nobody has touched -- for one or many stores."
+    },
+    {
+      "name": "Troubleshooting",
+      "description": "What a store should try before opening a ticket for a catalog issue. One versioned guide per issue; a library anyone can read."
     }
   ],
   "x-tagGroups": [
@@ -469,6 +477,11 @@
                 "properties": {
                   "name": {
                     "type": "string"
+                  },
+                  "description": {
+                    "type": "string",
+                    "nullable": true,
+                    "maxLength": 5000
                   }
                 }
               }
@@ -518,6 +531,66 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Categories"
+        ],
+        "summary": "Edit category",
+        "description": "Partial update: send only the fields being changed. A sent field replaces the stored value; nullable fields accept null to clear.",
+        "operationId": "updateCategory",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "description": {
+                    "type": "string",
+                    "nullable": true,
+                    "maxLength": 5000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Not found (or soft-deleted)"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
           }
         }
       }
@@ -1095,6 +1168,65 @@
             "$ref": "#/components/responses/Unauthenticated"
           }
         }
+      },
+      "patch": {
+        "tags": [
+          "Issues"
+        ],
+        "summary": "Edit catalog issue",
+        "description": "Partial update: send only the fields being changed. A sent field replaces the stored value; nullable fields accept null to clear.",
+        "operationId": "updateIssue",
+        "parameters": [
+          {
+            "name": "issue",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "description": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Not found (or soft-deleted)"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
       }
     },
     "/issues/{issue}/attachments": {
@@ -1274,6 +1406,11 @@
                 "properties": {
                   "name": {
                     "type": "string"
+                  },
+                  "description": {
+                    "type": "string",
+                    "nullable": true,
+                    "maxLength": 5000
                   }
                 }
               }
@@ -1323,6 +1460,66 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Parts"
+        ],
+        "summary": "Edit part",
+        "description": "Partial update: send only the fields being changed. A sent field replaces the stored value; nullable fields accept null to clear.",
+        "operationId": "updatePart",
+        "parameters": [
+          {
+            "name": "part",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "description": {
+                    "type": "string",
+                    "nullable": true,
+                    "maxLength": 5000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Not found (or soft-deleted)"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
           }
         }
       }
@@ -3431,6 +3628,9 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -3496,6 +3696,9 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -3566,6 +3769,9 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -3621,6 +3827,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -3662,6 +3871,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -3715,6 +3927,9 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -3959,6 +4174,9 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -4050,6 +4268,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -4137,6 +4358,9 @@
           },
           "422": {
             "description": "The session is already on a pay sheet"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -4202,6 +4426,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -4242,6 +4469,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -4295,6 +4525,9 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -4470,6 +4703,9 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -4510,6 +4746,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -4563,6 +4802,9 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -5194,6 +5436,59 @@
             "$ref": "#/components/responses/ValidationError"
           }
         }
+      },
+      "get": {
+        "tags": [
+          "Notes & Attachments"
+        ],
+        "summary": "A ticket's notes, without the locked ones",
+        "description": "The normal notes. Callers the auth rules allow to see locked notes use /notes/all instead.",
+        "operationId": "listTicketNotes",
+        "parameters": [
+          {
+            "name": "store",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Store number"
+          },
+          {
+            "name": "ticket",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Every note on the ticket, its issues and their records, oldest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TicketNote"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Unknown ticket at this store"
+          }
+        }
       }
     },
     "/stores/{store}/tickets/{ticket}/part-usages": {
@@ -5380,6 +5675,9 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -5420,6 +5718,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -5473,6 +5774,9 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -5615,6 +5919,9 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -5655,6 +5962,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -5708,6 +6018,9 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -5940,6 +6253,9 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -5981,6 +6297,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -6034,6 +6353,9 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
       }
@@ -6088,6 +6410,11 @@
                   "name": {
                     "type": "string"
                   },
+                  "phone": {
+                    "type": "string",
+                    "nullable": true,
+                    "maxLength": 32
+                  },
                   "category_id": {
                     "type": "integer",
                     "nullable": true
@@ -6140,6 +6467,71 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthenticated"
+          }
+        },
+        "description": "Soft delete. Any \"call first\" pins the technician held are cleared; their ratings and notes stay for a restore."
+      },
+      "patch": {
+        "tags": [
+          "Technicians"
+        ],
+        "summary": "Edit technician (name, phone, category)",
+        "description": "Partial update: send only the fields being changed. A sent field replaces the stored value; nullable fields accept null to clear.",
+        "operationId": "updateTechnician",
+        "parameters": [
+          {
+            "name": "technician",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "phone": {
+                    "type": "string",
+                    "nullable": true,
+                    "maxLength": 32
+                  },
+                  "category_id": {
+                    "type": "integer",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TechnicianResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Not found (or soft-deleted)"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
           }
         }
       }
@@ -6705,6 +7097,924 @@
           }
         }
       }
+    },
+    "/stores/{store}/issues/{issue}/history": {
+      "get": {
+        "tags": [
+          "Issues"
+        ],
+        "summary": "Earlier tickets at this store for the same catalog issue",
+        "description": "\"The last Oven tickets for this store\". Newest first, one row per ticket, archived tickets excluded. Works for catalog issues that have since been deleted.",
+        "operationId": "issueHistoryAtStore",
+        "parameters": [
+          {
+            "name": "store",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Store number, e.g. 03795-00001"
+          },
+          {
+            "name": "issue",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Catalog issue id"
+          },
+          {
+            "name": "exclude_ticket",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Leave out this ticket (normally the one being viewed)"
+          },
+          {
+            "name": "open_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Only tickets where this issue is still open"
+          },
+          {
+            "$ref": "#/components/parameters/PerPage"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/IssueHistoryRow"
+                      }
+                    },
+                    "links": {
+                      "$ref": "#/components/schemas/PaginationLinks"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PaginationMeta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Unknown store or issue"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/notes/{note}/privacy": {
+      "patch": {
+        "tags": [
+          "Tickets"
+        ],
+        "summary": "Lock or unlock a note on this ticket",
+        "description": "Any note on the ticket or on anything on it. Who may is the auth rule's decision. Records who locked or unlocked it, and when (locked_by / locked_at).",
+        "operationId": "setNotePrivacy",
+        "parameters": [
+          {
+            "name": "store",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ticket",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "note",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "is_private"
+                ],
+                "properties": {
+                  "is_private": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Note"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "The note is not on this ticket, or the ticket is not this store's"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/maintenance-analytics/{section}": {
+      "get": {
+        "tags": [
+          "Analytics"
+        ],
+        "summary": "Maintenance analytics for one or many stores",
+        "description": "`summary`: KPIs, tickets filed in the range (each issue flagged when it recurs at that store), and chart series (by issue, by store, open work by status, completions by issue with average hours).\n\n`activity`: the tickets that changed in the range (the ticket or one of its issues has updated_at in it), most recently changed first, paginated -- each with `changes`: whether it was opened then, its issues' status changes (title, from, to, by, at), and how many notes and files were added. Locked notes are never counted.\n\n`watchlist`: now -- open tickets with no change for `untouched_days` (default 1) or more, longest silence first (`last_change_at`, `days_silent`); and catalog issues reported on at least `recurring_min` tickets at one store in the `recurring_days` days up to `to`.\n\n`from`/`to` are INSTANTS: send the viewer's local midnights converted to UTC, so 'yesterday' is the viewer's yesterday.",
+        "operationId": "maintenanceAnalytics",
+        "parameters": [
+          {
+            "name": "section",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "summary",
+                "activity",
+                "watchlist"
+              ]
+            }
+          },
+          {
+            "name": "stores[]",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Store numbers, e.g. 03795-00001. At least one."
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Exclusive. At most 92 days after `from`."
+          },
+          {
+            "name": "recurring_min",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Default 3"
+          },
+          {
+            "name": "recurring_days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Default 90"
+          },
+          {
+            "name": "untouched_days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Default 1"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "activity only"
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "activity only (default 25, max 100)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The section",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "description": "Shape depends on the section; see description."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Unknown section"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/troubleshooting-guides": {
+      "get": {
+        "tags": [
+          "Troubleshooting"
+        ],
+        "summary": "The troubleshooting library",
+        "operationId": "troubleshootingLibrary",
+        "responses": {
+          "200": {
+            "description": "Every catalog issue that has a guide, by title",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "issue_id": {
+                            "type": "integer"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "troubleshooting": {
+                            "$ref": "#/components/schemas/TroubleshootingGuide"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/issues/{issue}/troubleshooting": {
+      "get": {
+        "tags": [
+          "Troubleshooting"
+        ],
+        "summary": "One issue's guide (null when none)",
+        "operationId": "getTroubleshootingGuide",
+        "parameters": [
+          {
+            "name": "issue",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The guide",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/TroubleshootingGuide"
+                        }
+                      ],
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Unknown issue"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Troubleshooting"
+        ],
+        "summary": "Create or replace an issue's guide (a new version)",
+        "operationId": "putTroubleshootingGuide",
+        "parameters": [
+          {
+            "name": "issue",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "steps"
+                ],
+                "properties": {
+                  "steps": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 30,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 1000
+                    },
+                    "description": "Blank rows are dropped; at least one real step."
+                  },
+                  "link_url": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "http(s) only"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The guide",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/TroubleshootingGuide"
+                        }
+                      ],
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Troubleshooting"
+        ],
+        "summary": "Remove an issue's guide",
+        "operationId": "deleteTroubleshootingGuide",
+        "parameters": [
+          {
+            "name": "issue",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/troubleshooting-guides/{guide}/attachments": {
+      "post": {
+        "tags": [
+          "Troubleshooting"
+        ],
+        "summary": "Add files to a guide",
+        "operationId": "addTroubleshootingFiles",
+        "parameters": [
+          {
+            "name": "guide",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachmentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentListResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/troubleshooting-guides/{guide}/attachments/{attachment}": {
+      "delete": {
+        "tags": [
+          "Troubleshooting"
+        ],
+        "summary": "Remove one file from a guide",
+        "operationId": "removeTroubleshootingFile",
+        "parameters": [
+          {
+            "name": "guide",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "attachment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Not this guide's file"
+          }
+        }
+      }
+    },
+    "/technician-abilities": {
+      "get": {
+        "tags": [
+          "Technicians"
+        ],
+        "summary": "Technician ratings: overall and per issue",
+        "description": "Read separately from GET /technicians on purpose: store users read the technician list, and the ratings are the coordinator's. `overall` lists only technicians with an overall rating, note or pin; deleted technicians are left out of both lists.",
+        "operationId": "listTechnicianAbilities",
+        "parameters": [
+          {
+            "name": "issue_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Only this issue's per-issue entries"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The ratings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "overall": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/TechnicianOverallRating"
+                          }
+                        },
+                        "by_issue": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/TechnicianAbility"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/technicians/{technician}/abilities/{issue}": {
+      "put": {
+        "tags": [
+          "Technicians"
+        ],
+        "summary": "Rate a technician on one issue",
+        "description": "Replaces the entry: fields left out are cleared. An entry with no stars, no notes and no pin is removed (`data` is null). `call_first: true` moves the issue's pin to this technician.",
+        "operationId": "putTechnicianAbility",
+        "parameters": [
+          {
+            "name": "technician",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "issue",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rating": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5,
+                    "nullable": true
+                  },
+                  "notes": {
+                    "type": "string",
+                    "nullable": true,
+                    "maxLength": 2000
+                  },
+                  "call_first": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The entry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/TechnicianAbility"
+                        }
+                      ],
+                      "nullable": true
+                    },
+                    "moved_from": {
+                      "type": "object",
+                      "nullable": true,
+                      "description": "Whose \"call first\" pin this write moved, when it moved one.",
+                      "properties": {
+                        "id": {
+                          "type": "integer"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Unknown or deleted technician or issue"
+          },
+          "409": {
+            "description": "Someone else moved the same pin at the same moment. Reload and try again."
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Technicians"
+        ],
+        "summary": "Forget a technician's rating on one issue",
+        "operationId": "deleteTechnicianAbility",
+        "parameters": [
+          {
+            "name": "technician",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "issue",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed (or there was none)"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Unknown technician or issue"
+          }
+        }
+      }
+    },
+    "/technicians/{technician}/rating": {
+      "patch": {
+        "tags": [
+          "Technicians"
+        ],
+        "summary": "A technician's overall rating",
+        "description": "Partial update: send only the fields being changed. `call_first: true` moves the overall pin to this technician.",
+        "operationId": "updateTechnicianRating",
+        "parameters": [
+          {
+            "name": "technician",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rating": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5,
+                    "nullable": true
+                  },
+                  "notes": {
+                    "type": "string",
+                    "nullable": true,
+                    "maxLength": 2000
+                  },
+                  "call_first": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The overall rating",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/TechnicianOverallRating"
+                    },
+                    "moved_from": {
+                      "type": "object",
+                      "nullable": true,
+                      "description": "Whose \"call first\" pin this write moved, when it moved one.",
+                      "properties": {
+                        "id": {
+                          "type": "integer"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Unknown or deleted technician"
+          },
+          "409": {
+            "description": "Someone else moved the same pin at the same moment. Reload and try again."
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/stores/{store}/tickets/{ticket}/notes/all": {
+      "get": {
+        "tags": [
+          "Notes & Attachments"
+        ],
+        "summary": "A ticket's notes, locked ones included",
+        "description": "Same as /notes plus the locked (MOS only) notes and their files. Who may call it is the auth rule's decision.",
+        "operationId": "listAllTicketNotes",
+        "parameters": [
+          {
+            "name": "store",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Store number"
+          },
+          {
+            "name": "ticket",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Every note on the ticket, its issues and their records, oldest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TicketNote"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Unknown ticket at this store"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -7228,9 +8538,37 @@
                           "type": "string",
                           "format": "binary"
                         }
+                      },
+                      "keep_note_ids": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        },
+                        "description": "Edit only. Notes already on this line (by id) that survive the edit, with their own files, author and date. Every note not listed is removed. Must belong to this pay sheet at the same level, and each may be kept once."
+                      },
+                      "keep_attachment_ids": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        },
+                        "description": "Edit only. Files already on this line (by id) that survive the edit. Every file not listed is removed (it stays on disk for the revision snapshot)."
                       }
                     }
                   }
+                },
+                "keep_note_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  },
+                  "description": "Edit only. Notes already on this payment (by id) that survive the edit, with their own files, author and date. Every note not listed is removed. Must belong to this pay sheet at the same level, and each may be kept once."
+                },
+                "keep_attachment_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  },
+                  "description": "Edit only. Files already on this payment (by id) that survive the edit. Every file not listed is removed (it stays on disk for the revision snapshot)."
                 }
               }
             }
@@ -7791,6 +9129,15 @@
             "type": "string",
             "nullable": true
           },
+          "troubleshooting": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TroubleshootingGuide"
+              }
+            ],
+            "nullable": true,
+            "description": "Present on catalog issue reads."
+          },
           "notes": {
             "type": "array",
             "nullable": true,
@@ -7866,6 +9213,10 @@
           "name": {
             "type": "string"
           },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
           "technicians_count": {
             "type": "integer",
             "nullable": true
@@ -7931,6 +9282,12 @@
           },
           "name": {
             "type": "string"
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 32,
+            "example": "+1 (234) 567-8900"
           },
           "category_id": {
             "type": "integer",
@@ -8010,6 +9367,10 @@
           },
           "name": {
             "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
           },
           "notes": {
             "type": "array",
@@ -8154,6 +9515,32 @@
           "body": {
             "type": "string"
           },
+          "is_private": {
+            "type": "boolean",
+            "description": "Locked note (MOS only). Never embedded in other reads; only GET .../notes/all returns it, with its files."
+          },
+          "locked_by": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Who last locked or unlocked it."
+          },
+          "locked_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "locker": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
           "attachments": {
             "type": "array",
             "nullable": true,
@@ -8206,6 +9593,10 @@
             "type": "string",
             "nullable": true,
             "description": "Optional free-form type string. On the ticket /final-note endpoint this must be a FinalNoteType value; on all other note endpoints it is unconstrained."
+          },
+          "is_private": {
+            "type": "boolean",
+            "description": "Write the note locked (MOS only). Notes on a ticket only; ignored on catalog, storage and store notes."
           },
           "files[]": {
             "type": "array",
@@ -9562,6 +10953,17 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "troubleshooting_confirmed_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When the manager confirmed trying the issue's troubleshooting steps."
+          },
+          "troubleshooting_snapshot": {
+            "type": "object",
+            "nullable": true,
+            "description": "The guide as it read when confirmed: guide_id, version, steps, link_url, files[{id,name}], confirmed_by."
           }
         }
       },
@@ -9644,7 +11046,8 @@
           },
           "updated_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Last change to the ticket or anything on it: its issues, their records, notes and files touch it."
           },
           "deleted_at": {
             "type": "string",
@@ -9878,6 +11281,14 @@
                       }
                     }
                   }
+                },
+                "troubleshooting_confirmed": {
+                  "type": "boolean",
+                  "description": "The manager read the issue's troubleshooting steps and tried them. Required for an issue whose guide has steps."
+                },
+                "troubleshooting_version": {
+                  "type": "integer",
+                  "description": "The guide version shown. A mismatch (the guide changed) is a 422."
                 }
               }
             }
@@ -9977,6 +11388,14 @@
                 },
                 "description": {
                   "type": "string"
+                },
+                "troubleshooting_confirmed": {
+                  "type": "boolean",
+                  "description": "The manager read the issue's troubleshooting steps and tried them. Required for an issue whose guide has steps."
+                },
+                "troubleshooting_version": {
+                  "type": "integer",
+                  "description": "The guide version shown. A mismatch (the guide changed) is a 422."
                 }
               }
             }
@@ -10009,6 +11428,306 @@
             "items": {
               "type": "string",
               "format": "binary"
+            }
+          }
+        }
+      },
+      "IssueHistoryRow": {
+        "type": "object",
+        "description": "One earlier ticket at the store that reported the same catalog issue. `issues` holds that ticket's rows for the issue (a deferral chain, or the same issue reported twice); `status` is where the newest of them stands.",
+        "properties": {
+          "ticket_id": {
+            "type": "integer"
+          },
+          "store_number": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "creator": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/User"
+              }
+            ],
+            "nullable": true
+          },
+          "status": {
+            "allOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                }
+              }
+            ],
+            "nullable": true
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "technicians": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "parent_id": {
+                  "type": "integer",
+                  "nullable": true
+                },
+                "status": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "priority": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "assigned_priority": {
+                  "allOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ],
+                  "nullable": true
+                },
+                "description": {
+                  "type": "string",
+                  "description": "First 160 characters."
+                },
+                "completed_at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "nullable": true
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          }
+        }
+      },
+      "TroubleshootingGuide": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "issue_id": {
+            "type": "integer"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "In order: what to try first, then next."
+          },
+          "link_url": {
+            "type": "string",
+            "nullable": true
+          },
+          "version": {
+            "type": "integer",
+            "description": "Goes up on every save. Send it back with the confirmation when opening a ticket."
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Attachment"
+            }
+          },
+          "updated_by": {
+            "type": "integer",
+            "nullable": true
+          },
+          "editor": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TechnicianAbility": {
+        "type": "object",
+        "description": "How good a technician is at one catalog issue.",
+        "properties": {
+          "technician_id": {
+            "type": "integer"
+          },
+          "issue_id": {
+            "type": "integer"
+          },
+          "rating": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+            "nullable": true,
+            "description": "Stars, 1-5"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "call_first": {
+            "type": "boolean",
+            "description": "The one to call first for this issue. At most one technician per issue."
+          },
+          "updated_by": {
+            "type": "integer",
+            "nullable": true
+          },
+          "editor": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TechnicianOverallRating": {
+        "type": "object",
+        "description": "A technician's overall rating. Same shape as TechnicianAbility without the issue.",
+        "properties": {
+          "technician_id": {
+            "type": "integer"
+          },
+          "rating": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "call_first": {
+            "type": "boolean",
+            "description": "The one to call first for anything. At most one technician overall."
+          },
+          "updated_by": {
+            "type": "integer",
+            "nullable": true
+          },
+          "editor": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "TicketNote": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Note"
+          }
+        ],
+        "properties": {
+          "owner": {
+            "type": "object",
+            "description": "What the note is on.",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "ticket",
+                  "ticket_issue",
+                  "assignment",
+                  "assignment_delay",
+                  "diagnosis",
+                  "attendance_entry",
+                  "part_usage",
+                  "pay_entry",
+                  "warranty"
+                ]
+              },
+              "id": {
+                "type": "integer"
+              }
             }
           }
         }

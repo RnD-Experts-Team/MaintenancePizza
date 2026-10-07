@@ -20,6 +20,9 @@ class Ticket extends Model
 
     protected $casts = [
         'type' => TicketType::class,
+        // When its Store Managers were last told it changed. Set on
+        // creation too: the person who opens a ticket knows about it.
+        'last_notified_at' => 'datetime',
     ];
 
     /** @return BelongsTo<Store, $this> */

@@ -3,12 +3,17 @@
 namespace App\Services;
 
 use App\Enums\IssueStatus;
+use App\Models\Issue;
 use App\Models\IssueStatusChange;
+use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\TicketIssue;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Issue-level lifecycle: the full "one look" listing/detail, status changes
@@ -242,6 +247,98 @@ class TicketIssueService
     }
 
     /**
+     * Earlier tickets at a store that reported the same catalog issue -- "the
+     * last Oven tickets for this store" -- newest first, one row per ticket.
+     *
+     * Paginated by TICKET, not by issue row: a deferral spawns a child issue on
+     * the same ticket, and a ticket can carry the same catalog issue twice
+     * ("oven 1", "oven 2"), so issue rows would show one ticket several times.
+     * Each row folds its matching issues together and reports the newest one's
+     * status, which is where a deferral chain currently stands.
+     *
+     * Archived (soft-deleted) tickets are left out; so is `$excludeTicketId`,
+     * normally the ticket being looked at.
+     */
+    public function history(Store $store, Issue $issue, ?int $excludeTicketId, bool $openOnly, int $perPage): LengthAwarePaginator
+    {
+        $terminal = array_map(fn (IssueStatus $s) => $s->value, IssueStatus::terminal());
+
+        return Ticket::query()
+            ->where('store_id', $store->id)
+            ->whereHas('ticketIssues', fn ($q) => $q->where('issue_id', $issue->id))
+            ->when($excludeTicketId, fn ($q) => $q->whereKeyNot($excludeTicketId))
+            ->when($openOnly, fn ($q) => $q->whereHas(
+                'ticketIssues',
+                fn ($i) => $i->where('issue_id', $issue->id)->whereNotIn('status', $terminal)
+            ))
+            ->with([
+                'creator',
+                // Only this catalog issue's rows. Nothing below may derive the
+                // TICKET's status from this relation -- it is deliberately partial.
+                'ticketIssues' => fn ($q) => $q->where('issue_id', $issue->id)
+                    ->orderBy('id')
+                    ->with(['technicians' => fn ($t) => $t->withTrashed()->select('technicians.id', 'technicians.name')])
+                    ->withMax(
+                        ['statusChanges as completed_at' => fn ($s) => $s->where('to_status', IssueStatus::Complete->value)],
+                        'created_at'
+                    ),
+            ])
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->paginate($perPage)
+            ->through(fn (Ticket $ticket) => $this->presentHistoryRow($ticket, $store));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function presentHistoryRow(Ticket $ticket, Store $store): array
+    {
+        $rows = $ticket->ticketIssues;
+        $latest = $rows->sortByDesc('id')->first();
+
+        $technicians = $rows->flatMap(fn (TicketIssue $i) => $i->technicians)
+            ->unique('id')
+            ->map(fn ($t) => ['id' => $t->id, 'name' => $t->name])
+            ->values()
+            ->all();
+
+        return [
+            'ticket_id' => $ticket->id,
+            'store_number' => $store->store_number,
+            'created_at' => $ticket->created_at,
+            'creator' => $ticket->creator ? $this->catalog->presentUser($ticket->creator) : null,
+            // Where this issue stands now on that ticket (the end of any chain).
+            'status' => $latest
+                ? ['value' => $latest->status->value, 'label' => $latest->status->label()]
+                : null,
+            'completed_at' => $latest && $latest->status === IssueStatus::Complete ? $this->timestamp($latest->completed_at) : null,
+            'technicians' => $technicians,
+            'issues' => $rows->map(fn (TicketIssue $i) => [
+                'id' => $i->id,
+                'parent_id' => $i->parent_id,
+                'status' => ['value' => $i->status->value, 'label' => $i->status->label()],
+                'priority' => ['value' => $i->priority->value, 'label' => $i->priority->label()],
+                'assigned_priority' => $i->assigned_priority
+                    ? ['value' => $i->assigned_priority->value, 'label' => $i->assigned_priority->label()]
+                    : null,
+                'description' => Str::limit((string) $i->description, 160),
+                'completed_at' => $i->status === IssueStatus::Complete ? $this->timestamp($i->completed_at) : null,
+                'created_at' => $i->created_at,
+            ])->values()->all(),
+        ];
+    }
+
+    /**
+     * An aggregate's raw DB datetime as a Carbon instance, so it serialises in
+     * the same ISO-8601 UTC shape as every model timestamp in the API.
+     */
+    private function timestamp(mixed $value): ?\Illuminate\Support\Carbon
+    {
+        return $value === null || $value === '' ? null : \Illuminate\Support\Carbon::parse($value);
+    }
+
+    /**
      * Validation helper: returns the ids that do NOT belong to the ticket.
      *
      * @param  array<int|string>  $ids
@@ -253,6 +350,26 @@ class TicketIssueService
         $valid = $ticket->ticketIssues()->whereIn('id', $ids)->pluck('id')->all();
 
         return array_values(array_diff($ids, $valid));
+    }
+
+    /**
+     * A record named in the URL -- an assignment, a diagnosis, a visit -- must
+     * be on one of this ticket's issues, and the ticket must be the store's.
+     * Leaf routes bind those records by id alone, so their FormRequests call
+     * this. 404 rather than 403: whether that record exists is none of this
+     * URL's business.
+     */
+    public function assertRecordOnTicket(mixed $store, mixed $ticket, ?Model $record = null): void
+    {
+        if (!$store instanceof Store || !$ticket instanceof Ticket) {
+            return;
+        }
+
+        abort_unless((int) $ticket->store_id === (int) $store->id, 404);
+
+        if ($record !== null) {
+            abort_unless($record->ticketIssues()->where('ticket_issues.ticket_id', $ticket->id)->exists(), 404);
+        }
     }
 
     /**
@@ -365,6 +482,10 @@ class TicketIssueService
             'status_changes' => $this->mapLoaded($issue, 'statusChanges', fn($s) => $this->presentStatusChange($s)),
             'notes' => $this->notes->presentMany($issue),
             'attachments' => $this->attachments->presentMany($issue),
+            // The troubleshooting the manager confirmed trying before opening
+            // the ticket, as it read then. Null when none was asked for.
+            'troubleshooting_confirmed_at' => $issue->troubleshooting_confirmed_at,
+            'troubleshooting_snapshot' => $issue->troubleshooting_snapshot,
             'created_by' => $issue->created_by,
             'creator' => $issue->relationLoaded('creator') && $issue->creator
                 ? $this->catalog->presentUser($issue->creator)

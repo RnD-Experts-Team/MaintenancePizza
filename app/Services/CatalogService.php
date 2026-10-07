@@ -11,6 +11,7 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 /**
  * All controlled reference catalogs (issues, technicians, categories, parts):
@@ -19,16 +20,38 @@ use Illuminate\Support\Facades\Auth;
  */
 class CatalogService
 {
+    /**
+     * Loaded on every read that presents a catalog item. The presenters always
+     * emitted notes and attachments, but nothing loaded them, so a note added
+     * to an issue or technician saved fine and then came back as `null` on the
+     * next list -- it looked lost.
+     */
+    private const CATALOG_LOADS = [
+        'creator',
+        'notes.creator',
+        'notes.attachments.creator',
+        'attachments.creator',
+    ];
+
+    /** Issues also carry their troubleshooting guide. */
+    private const ISSUE_LOADS = [
+        ...self::CATALOG_LOADS,
+        'troubleshootingGuide.attachments.creator',
+        'troubleshootingGuide.editor',
+    ];
+
     public function __construct(
         private NoteService $notes,
         private AttachmentService $attachments,
+        private TroubleshootingService $troubleshooting,
+        private TechnicianAbilityService $abilities,
     ) {}
 
     // ------------------------------------------------------------------ Issues
 
     public function listIssues(?string $trashed, int $perPage): LengthAwarePaginator
     {
-        $query = $this->trashed(Issue::query()->with('creator')->latest(), $trashed);
+        $query = $this->trashed(Issue::query()->with(self::ISSUE_LOADS)->latest(), $trashed);
 
         return $query->paginate($perPage)->through(fn (Issue $i) => $this->presentIssue($i));
     }
@@ -39,7 +62,7 @@ class CatalogService
      */
     public function createIssue(array $data): array
     {
-        return $this->presentIssue($this->persist(new Issue($data))->load('creator'));
+        return $this->presentIssue($this->persist(new Issue($data))->load(self::ISSUE_LOADS));
     }
 
     public function deleteIssue(Issue $issue): void
@@ -54,14 +77,25 @@ class CatalogService
     {
         $issue->restore();
 
-        return $this->presentIssue($issue->load('creator'));
+        return $this->presentIssue($issue->load(self::ISSUE_LOADS));
+    }
+
+    /**
+     * @param  array<string, mixed>  $data  Only the fields being changed.
+     * @return array<string, mixed>
+     */
+    public function updateIssue(Issue $issue, array $data): array
+    {
+        $issue->fill($data)->save();
+
+        return $this->presentIssue($issue->load(self::ISSUE_LOADS));
     }
 
     // ------------------------------------------------------------- Technicians
 
     public function listTechnicians(?string $trashed, int $perPage): LengthAwarePaginator
     {
-        $query = $this->trashed(Technician::query()->with(['category', 'creator'])->latest(), $trashed);
+        $query = $this->trashed(Technician::query()->with(['category', ...self::CATALOG_LOADS])->latest(), $trashed);
 
         return $query->paginate($perPage)->through(fn (Technician $t) => $this->presentTechnician($t));
     }
@@ -72,12 +106,19 @@ class CatalogService
      */
     public function createTechnician(array $data): array
     {
-        return $this->presentTechnician($this->persist(new Technician($data))->load(['category', 'creator']));
+        return $this->presentTechnician($this->persist(new Technician($data))->load(['category', ...self::CATALOG_LOADS]));
     }
 
+    /**
+     * Soft delete. Their "call first" pins go with them (see
+     * TechnicianAbilityService::clearPins); stars and notes stay for a restore.
+     */
     public function deleteTechnician(Technician $technician): void
     {
-        $technician->delete();
+        DB::transaction(function () use ($technician) {
+            $this->abilities->clearPins($technician);
+            $technician->delete();
+        });
     }
 
     /**
@@ -87,14 +128,25 @@ class CatalogService
     {
         $technician->restore();
 
-        return $this->presentTechnician($technician->load(['category', 'creator']));
+        return $this->presentTechnician($technician->load(['category', ...self::CATALOG_LOADS]));
+    }
+
+    /**
+     * @param  array<string, mixed>  $data  Only the fields being changed.
+     * @return array<string, mixed>
+     */
+    public function updateTechnician(Technician $technician, array $data): array
+    {
+        $technician->fill($data)->save();
+
+        return $this->presentTechnician($technician->load(['category', ...self::CATALOG_LOADS]));
     }
 
     // -------------------------------------------------------------- Categories
 
     public function listCategories(int $perPage): LengthAwarePaginator
     {
-        return Category::query()->with('creator')->withCount('technicians')->latest()
+        return Category::query()->with(self::CATALOG_LOADS)->withCount('technicians')->latest()
             ->paginate($perPage)->through(fn (Category $c) => $this->presentCategory($c));
     }
 
@@ -104,7 +156,18 @@ class CatalogService
      */
     public function createCategory(array $data): array
     {
-        return $this->presentCategory($this->persist(new Category($data))->load('creator'));
+        return $this->presentCategory($this->persist(new Category($data))->load(self::CATALOG_LOADS));
+    }
+
+    /**
+     * @param  array<string, mixed>  $data  Only the fields being changed.
+     * @return array<string, mixed>
+     */
+    public function updateCategory(Category $category, array $data): array
+    {
+        $category->fill($data)->save();
+
+        return $this->presentCategory($category->load(self::CATALOG_LOADS)->loadCount('technicians'));
     }
 
     public function deleteCategory(Category $category): void
@@ -117,7 +180,7 @@ class CatalogService
 
     public function listParts(?string $trashed, int $perPage): LengthAwarePaginator
     {
-        $query = $this->trashed(Part::query()->with('creator')->latest(), $trashed);
+        $query = $this->trashed(Part::query()->with(self::CATALOG_LOADS)->latest(), $trashed);
 
         return $query->paginate($perPage)->through(fn (Part $p) => $this->presentPart($p));
     }
@@ -128,7 +191,7 @@ class CatalogService
      */
     public function createPart(array $data): array
     {
-        return $this->presentPart($this->persist(new Part($data))->load('creator'));
+        return $this->presentPart($this->persist(new Part($data))->load(self::CATALOG_LOADS));
     }
 
     public function deletePart(Part $part): void
@@ -143,7 +206,18 @@ class CatalogService
     {
         $part->restore();
 
-        return $this->presentPart($part->load('creator'));
+        return $this->presentPart($part->load(self::CATALOG_LOADS));
+    }
+
+    /**
+     * @param  array<string, mixed>  $data  Only the fields being changed.
+     * @return array<string, mixed>
+     */
+    public function updatePart(Part $part, array $data): array
+    {
+        $part->fill($data)->save();
+
+        return $this->presentPart($part->load(self::CATALOG_LOADS));
     }
 
     // ------------------------------------------------------------- Presenters
@@ -157,6 +231,10 @@ class CatalogService
             'id' => $issue->id,
             'title' => $issue->title,
             'description' => $issue->description,
+            // What to try before opening a ticket for it (null when none).
+            'troubleshooting' => $issue->relationLoaded('troubleshootingGuide')
+                ? $this->troubleshooting->present($issue->troubleshootingGuide)
+                : null,
             'notes' => $this->notes->presentMany($issue),
             'attachments' => $this->attachments->presentMany($issue),
             'created_by' => $issue->created_by,
@@ -177,6 +255,7 @@ class CatalogService
         return [
             'id' => $technician->id,
             'name' => $technician->name,
+            'phone' => $technician->phone,
             'category_id' => $technician->category_id,
             'category' => $technician->relationLoaded('category') && $technician->category
                 ? $this->presentCategory($technician->category)
@@ -201,6 +280,7 @@ class CatalogService
         return [
             'id' => $category->id,
             'name' => $category->name,
+            'description' => $category->description,
             'technicians_count' => $category->technicians_count ?? null,
             'notes' => $this->notes->presentMany($category),
             'attachments' => $this->attachments->presentMany($category),
@@ -221,6 +301,7 @@ class CatalogService
         return [
             'id' => $part->id,
             'name' => $part->name,
+            'description' => $part->description,
             'notes' => $this->notes->presentMany($part),
             'attachments' => $this->attachments->presentMany($part),
             'created_by' => $part->created_by,

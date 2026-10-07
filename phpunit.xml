@@ -28,7 +28,13 @@
         <env name="DB_DATABASE" value=":memory:"/>
         <env name="DB_URL" value=""/>
         <env name="MAIL_MAILER" value="array"/>
-        <env name="QUEUE_CONNECTION" value="sync"/>
+        <!-- NOT sync: PublishOutboxEventJob does real NATS I/O, so a sync queue
+             would make every test that opens a ticket try to reach a broker.
+             The outbox row is the assertion target. -->
+        <env name="QUEUE_CONNECTION" value="null"/>
+        <!-- Keep NATS subjects on their production names so tests assert the
+             real strings rather than the *.testing.* twins. -->
+        <env name="DEV_MODE" value="0"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>

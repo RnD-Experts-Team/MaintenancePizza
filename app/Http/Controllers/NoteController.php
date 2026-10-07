@@ -35,42 +35,42 @@ class NoteController extends Controller
 
     public function ticket(StoreNoteRequest $request, Store $store, Ticket $ticket): JsonResponse
     {
-        return $this->make($request, $ticket);
+        return $this->make($request, $ticket, true);
     }
 
     public function ticketIssue(StoreNoteRequest $request, Store $store, Ticket $ticket, TicketIssue $ticketIssue): JsonResponse
     {
-        return $this->make($request, $ticketIssue);
+        return $this->make($request, $ticketIssue, true);
     }
 
     public function diagnosis(StoreNoteRequest $request, Store $store, Ticket $ticket, Diagnosis $diagnosis): JsonResponse
     {
-        return $this->make($request, $diagnosis);
+        return $this->make($request, $diagnosis, true);
     }
 
     public function attendance(StoreNoteRequest $request, Store $store, Ticket $ticket, AttendanceEntry $attendanceEntry): JsonResponse
     {
-        return $this->make($request, $attendanceEntry);
+        return $this->make($request, $attendanceEntry, true);
     }
 
     public function partUsage(StoreNoteRequest $request, Store $store, Ticket $ticket, PartUsage $partUsage): JsonResponse
     {
-        return $this->make($request, $partUsage);
+        return $this->make($request, $partUsage, true);
     }
 
     public function payEntry(StoreNoteRequest $request, Store $store, Ticket $ticket, PayEntry $payEntry): JsonResponse
     {
-        return $this->make($request, $payEntry);
+        return $this->make($request, $payEntry, true);
     }
 
     public function warranty(StoreNoteRequest $request, Store $store, Ticket $ticket, Warranty $warranty): JsonResponse
     {
-        return $this->make($request, $warranty);
+        return $this->make($request, $warranty, true);
     }
 
     public function assignment(StoreNoteRequest $request, Store $store, Ticket $ticket, Assignment $assignment): JsonResponse
     {
-        return $this->make($request, $assignment);
+        return $this->make($request, $assignment, true);
     }
 
     public function store(StoreNoteRequest $request, Store $store): JsonResponse
@@ -112,7 +112,11 @@ class NoteController extends Controller
 
     // ----------------------------------------------------------------- Helper
 
-    private function make(StoreNoteRequest $request, Model $owner): JsonResponse
+    /**
+     * `is_private` counts only for notes on a ticket ($onTicket); a catalog or
+     * storage note has nobody to be hidden from.
+     */
+    private function make(StoreNoteRequest $request, Model $owner, bool $onTicket = false): JsonResponse
     {
         $data = $request->validated();
 
@@ -121,6 +125,7 @@ class NoteController extends Controller
             $data['body'],
             $data['type'] ?? null,
             (array) $request->file('files', []),
+            $onTicket && $request->boolean('is_private'),
         );
 
         return response()->json(['data' => $this->notes->present($note)], 201);

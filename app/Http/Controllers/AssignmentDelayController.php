@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreAssignmentDelayRequest;
+use App\Http\Requests\TicketRecordRequest;
 use App\Models\Assignment;
 use App\Models\AssignmentDelay;
 use App\Models\Store;
@@ -24,7 +25,7 @@ class AssignmentDelayController extends Controller
     /**
      * Flag a delay record as entered in error.
      */
-    public function mistaken(Store $store, Ticket $ticket, Assignment $assignment, AssignmentDelay $delay)
+    public function mistaken(TicketRecordRequest $request, Store $store, Ticket $ticket, Assignment $assignment, AssignmentDelay $delay)
     {
         return ['data' => $this->assignments->markDelayMistaken($delay)];
     }

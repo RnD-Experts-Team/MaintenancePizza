@@ -22,7 +22,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class AttendanceEvent extends Model
 {
-    protected $fillable = ['attendance_entry_id', 'kind', 'at', 'mistaken'];
+    protected $fillable = ['attendance_entry_id', 'kind', 'at', 'mistaken', 'created_by'];
+
+    /** A clock event is a change to its visit (and so to the ticket). */
+    protected $touches = ['attendanceEntry'];
 
     /**
      * @return array<string, string>

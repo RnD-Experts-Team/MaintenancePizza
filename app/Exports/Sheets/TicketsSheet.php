@@ -19,7 +19,11 @@ class TicketsSheet implements FromCollection, WithHeadings, WithMapping, WithTit
 
     public function collection(): Collection
     {
-        return Ticket::withTrashed()->with(['store', 'ticketIssues', 'notes'])->orderBy('id')->get();
+        // Private (locked) notes never leave the system in an export.
+        return Ticket::withTrashed()
+            ->with(['store', 'ticketIssues', 'notes' => fn ($q) => $q->where('is_private', false)])
+            ->orderBy('id')
+            ->get();
     }
 
     /**

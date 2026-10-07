@@ -2,7 +2,6 @@
 
 namespace App\Http\Middleware;
 
-use App\Models\Employee;
 use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
@@ -109,25 +108,13 @@ class AuthTokenStoreScopeMiddleware
         $request->attributes->set('authz_permissions', (array) ($verify['permissions'] ?? []));
         $request->attributes->set('authz_ext', (array) ($verify['ext'] ?? []));
 
-        if ($subjectType === 'employee') {
-            // Employees are replicated from hiring.v1.employee.* events into
-            // the local employees table (same hiring id).
-            $employee = Employee::query()->find($userId);
-            if (!$employee) {
-                abort(401, 'Unauthorized: employee not synced yet');
-            }
-
-            if (!$employee->active) {
-                abort(401, 'Unauthorized: employee inactive');
-            }
-
-            // Employee is NOT an Authenticatable here — no Auth::login().
-            // Employee-accessible controllers must read these attributes
-            // instead of Auth::user().
-            $request->attributes->set('authz_employee_id', (int) $employee->id);
-            $request->attributes->set('authz_employee', $employee);
-
-            return $next($request);
+        // Employees (hiring-system tokens) have no table in this service, so
+        // the old employee branch fataled on a missing model. Refuse them
+        // cleanly instead. If this service ever serves employees, add the
+        // employees table, the hiring.v1.employee.* handlers and a branch here
+        // together -- ToolboxPizza made the same call.
+        if ($subjectType !== 'user') {
+            abort(403, 'Forbidden: this service accepts user tokens only');
         }
 
         // 7) DO NOT REPLICATE USERS HERE.
@@ -174,7 +161,12 @@ class AuthTokenStoreScopeMiddleware
         if ($request->isJson()) {
             $body = (array) ($request->json()->all() ?? []);
         } elseif (!$request->isMethod('GET')) {
-            $body = (array) ($request->except(['entities', 'file', 'files']) ?? []);
+            // Uploaded files are dropped at EVERY depth, not just a top-level
+            // `files` key: a pay sheet nests them (payments[0][lines][0][files][]),
+            // they carry nothing a store rule could use, and an object holding a
+            // stream cannot be JSON-encoded at all -- which failed the verify
+            // call and turned an upload into a 401.
+            $body = $this->withoutUploadedFiles((array) ($request->except(['entities', 'file', 'files']) ?? []));
         }
 
         // Add any request headers you want authz to inspect here
@@ -210,6 +202,23 @@ class AuthTokenStoreScopeMiddleware
 
         return $ctx;
     }
+    /**
+     * @param  array<mixed>  $data
+     * @return array<mixed>
+     */
+    private function withoutUploadedFiles(array $data): array
+    {
+        $out = [];
+        foreach ($data as $key => $value) {
+            if ($value instanceof \Symfony\Component\HttpFoundation\File\UploadedFile) {
+                continue;
+            }
+            $out[$key] = is_array($value) ? $this->withoutUploadedFiles($value) : $value;
+        }
+
+        return $out;
+    }
+
     private function normalizeRouteParams(array $params): array
     {
         $out = [];

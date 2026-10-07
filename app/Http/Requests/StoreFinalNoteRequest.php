@@ -25,6 +25,7 @@ class StoreFinalNoteRequest extends FormRequest
     {
         return [
             'body' => ['required', 'string'],
+            'is_private' => ['sometimes', 'boolean'],
             'type' => ['required', Rule::enum(FinalNoteType::class)],
             'files' => ['nullable', 'array'],
             'files.*' => ['file', 'max:10240'],

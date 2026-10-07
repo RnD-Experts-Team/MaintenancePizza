@@ -16,6 +16,12 @@ class Diagnosis extends Model
     protected $fillable = ['body', 'mistaken'];
 
     /**
+     * Saving this bumps its issues' updated_at, and through them the ticket's,
+     * so "what changed" and "untouched" read straight off updated_at.
+     */
+    protected $touches = ['ticketIssues'];
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array

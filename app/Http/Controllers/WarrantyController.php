@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreWarrantyRequest;
+use App\Http\Requests\TicketRecordRequest;
 use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\Warranty;
@@ -26,7 +27,7 @@ class WarrantyController extends Controller
         ], 201);
     }
 
-    public function mistaken(Store $store, Ticket $ticket, Warranty $warranty)
+    public function mistaken(TicketRecordRequest $request, Store $store, Ticket $ticket, Warranty $warranty)
     {
         return ['data' => $this->workflow->markWarrantyMistaken($warranty)];
     }

@@ -41,7 +41,12 @@ return [
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
             'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
-            'after_commit' => false,
+            // Workflow services dispatch PublishOutboxEventJob from inside a
+            // DB::transaction. Deferring the dispatch to commit keeps the job
+            // from racing the outbox row it reads — PublishOutboxEventJob
+            // returns silently when the row isn't there yet, so the event
+            // would only be rescued by outbox:publish-pending minutes later.
+            'after_commit' => true,
         ],
 
         'beanstalkd' => [

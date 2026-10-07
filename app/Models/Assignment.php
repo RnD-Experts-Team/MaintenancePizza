@@ -17,6 +17,12 @@ class Assignment extends Model
     protected $fillable = ['assigned_date', 'assigned_hour', 'mistaken'];
 
     /**
+     * Saving this bumps its issues' updated_at, and through them the ticket's,
+     * so "what changed" and "untouched" read straight off updated_at.
+     */
+    protected $touches = ['ticketIssues'];
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array

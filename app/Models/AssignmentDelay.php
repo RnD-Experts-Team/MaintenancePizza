@@ -23,6 +23,9 @@ class AssignmentDelay extends Model
         'mistaken',
     ];
 
+    /** A reschedule is a change to its booking (and so to the ticket). */
+    protected $touches = ['assignment'];
+
     /**
      * @return array<string, string>
      */
