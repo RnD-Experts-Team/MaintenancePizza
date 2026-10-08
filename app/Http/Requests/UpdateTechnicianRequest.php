@@ -6,7 +6,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * Edit a technician in place -- name, phone, trade category, coverage. Before this a
+ * Edit a technician in place -- name, phone, category, coverage. Before this a
  * technician could not be changed after creation at all; moving one to a
  * different category meant deleting and recreating them.
  */

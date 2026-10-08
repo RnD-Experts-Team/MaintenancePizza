@@ -103,7 +103,7 @@ class CatalogService
 
     // ------------------------------------------------------------- Technicians
 
-    /** A technician is shown with their trade and the stores they cover. */
+    /** A technician is shown with their category and the stores they cover. */
     private const TECHNICIAN_LOADS = ['category', 'coverageStores', ...self::CATALOG_LOADS];
 
     public function listTechnicians(?string $trashed, int $perPage): LengthAwarePaginator

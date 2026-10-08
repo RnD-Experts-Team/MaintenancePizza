@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * The Technicians page: what each technician was paid, and the work they did,
- * for a range, a set of stores, issues and trades.
+ * for a range, a set of stores, issues and categories.
  *
  * PAY comes from the daily pay sheets. Being on a sheet IS being paid, and the
  * pay date is the sheet's date (a DATE), so pay is filtered on local days.
