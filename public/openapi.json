@@ -6418,6 +6418,24 @@
                   "category_id": {
                     "type": "integer",
                     "nullable": true
+                  },
+                  "location": {
+                    "type": "string",
+                    "nullable": true,
+                    "maxLength": 255,
+                    "description": "Where the technician is based."
+                  },
+                  "coverage_notes": {
+                    "type": "string",
+                    "nullable": true,
+                    "maxLength": 2000
+                  },
+                  "coverage_stores": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Store numbers this technician can cover. The whole list; replaces the stored one."
                   }
                 }
               }
@@ -6475,7 +6493,7 @@
         "tags": [
           "Technicians"
         ],
-        "summary": "Edit technician (name, phone, category)",
+        "summary": "Edit technician (name, phone, category, location, coverage)",
         "description": "Partial update: send only the fields being changed. A sent field replaces the stored value; nullable fields accept null to clear.",
         "operationId": "updateTechnician",
         "parameters": [
@@ -6507,6 +6525,24 @@
                   "category_id": {
                     "type": "integer",
                     "nullable": true
+                  },
+                  "location": {
+                    "type": "string",
+                    "nullable": true,
+                    "maxLength": 255,
+                    "description": "Where the technician is based."
+                  },
+                  "coverage_notes": {
+                    "type": "string",
+                    "nullable": true,
+                    "maxLength": 2000
+                  },
+                  "coverage_stores": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Store numbers this technician can cover. The whole list; replaces the stored one."
                   }
                 }
               }
@@ -6532,6 +6568,41 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Technicians"
+        ],
+        "summary": "One technician (also soft-deleted ones), with coverage",
+        "operationId": "showTechnician",
+        "parameters": [
+          {
+            "name": "technician",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The technician",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TechnicianResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Not found"
           }
         }
       }
@@ -7404,7 +7475,7 @@
         "tags": [
           "Troubleshooting"
         ],
-        "summary": "The troubleshooting library",
+        "summary": "The library: every issue that has guides, with guide titles and counts",
         "operationId": "troubleshootingLibrary",
         "responses": {
           "200": {
@@ -7451,8 +7522,8 @@
         "tags": [
           "Troubleshooting"
         ],
-        "summary": "One issue's guide (null when none)",
-        "operationId": "getTroubleshootingGuide",
+        "summary": "One issue and all its troubleshooting guides",
+        "operationId": "getIssueTroubleshooting",
         "parameters": [
           {
             "name": "issue",
@@ -7465,19 +7536,14 @@
         ],
         "responses": {
           "200": {
-            "description": "The guide",
+            "description": "The issue and its guides",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
                     "data": {
-                      "allOf": [
-                        {
-                          "$ref": "#/components/schemas/TroubleshootingGuide"
-                        }
-                      ],
-                      "nullable": true
+                      "$ref": "#/components/schemas/IssueTroubleshooting"
                     }
                   }
                 }
@@ -7491,106 +7557,6 @@
             "description": "Unknown issue"
           }
         }
-      },
-      "put": {
-        "tags": [
-          "Troubleshooting"
-        ],
-        "summary": "Create or replace an issue's guide (a new version)",
-        "operationId": "putTroubleshootingGuide",
-        "parameters": [
-          {
-            "name": "issue",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "steps"
-                ],
-                "properties": {
-                  "steps": {
-                    "type": "array",
-                    "minItems": 1,
-                    "maxItems": 30,
-                    "items": {
-                      "type": "string",
-                      "maxLength": 1000
-                    },
-                    "description": "Blank rows are dropped; at least one real step."
-                  },
-                  "link_url": {
-                    "type": "string",
-                    "nullable": true,
-                    "description": "http(s) only"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "The guide",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "allOf": [
-                        {
-                          "$ref": "#/components/schemas/TroubleshootingGuide"
-                        }
-                      ],
-                      "nullable": true
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthenticated"
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "Troubleshooting"
-        ],
-        "summary": "Remove an issue's guide",
-        "operationId": "deleteTroubleshootingGuide",
-        "parameters": [
-          {
-            "name": "issue",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Removed"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthenticated"
-          }
-        }
       }
     },
     "/troubleshooting-guides/{guide}/attachments": {
@@ -7598,7 +7564,7 @@
         "tags": [
           "Troubleshooting"
         ],
-        "summary": "Add files to a guide",
+        "summary": "Add files to the whole guide",
         "operationId": "addTroubleshootingFiles",
         "parameters": [
           {
@@ -8012,6 +7978,937 @@
           },
           "404": {
             "description": "Unknown ticket at this store"
+          }
+        }
+      }
+    },
+    "/issues/{issue}/troubleshooting-guides": {
+      "post": {
+        "tags": [
+          "Troubleshooting"
+        ],
+        "summary": "Add a troubleshooting guide to an issue",
+        "operationId": "createTroubleshootingGuide",
+        "parameters": [
+          {
+            "name": "issue",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TroubleshootingGuideRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The guide",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/TroubleshootingGuide"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Unknown issue"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/troubleshooting-guides/{guide}": {
+      "put": {
+        "tags": [
+          "Troubleshooting"
+        ],
+        "summary": "Replace a guide (a new version)",
+        "operationId": "updateTroubleshootingGuide",
+        "parameters": [
+          {
+            "name": "guide",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TroubleshootingGuideRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The guide",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/TroubleshootingGuide"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Unknown guide"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Troubleshooting"
+        ],
+        "summary": "Remove a guide (its files are soft-deleted)",
+        "operationId": "deleteTroubleshootingGuide",
+        "parameters": [
+          {
+            "name": "guide",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Unknown guide"
+          }
+        }
+      }
+    },
+    "/troubleshooting-steps/{step}/attachments": {
+      "post": {
+        "tags": [
+          "Troubleshooting"
+        ],
+        "summary": "Add files to one step",
+        "operationId": "addTroubleshootingStepFiles",
+        "parameters": [
+          {
+            "name": "step",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachmentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentListResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/troubleshooting-steps/{step}/attachments/{attachment}": {
+      "delete": {
+        "tags": [
+          "Troubleshooting"
+        ],
+        "summary": "Remove a file from a step",
+        "operationId": "removeTroubleshootingStepFile",
+        "parameters": [
+          {
+            "name": "step",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "attachment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Not this guide's file"
+          }
+        }
+      }
+    },
+    "/stores/{store}/troubleshooting-fixes": {
+      "post": {
+        "tags": [
+          "Troubleshooting"
+        ],
+        "summary": "This fixed it: troubleshooting solved the problem, no ticket opened",
+        "operationId": "logTroubleshootingFix",
+        "parameters": [
+          {
+            "name": "store",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Store number, e.g. 03795-00001"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "issue_id"
+                ],
+                "properties": {
+                  "issue_id": {
+                    "type": "integer"
+                  },
+                  "troubleshooting_guide_id": {
+                    "type": "integer",
+                    "nullable": true,
+                    "description": "Optional: the guide that fixed it. Must be one of the issue's guides."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Logged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer"
+                        },
+                        "store_id": {
+                          "type": "integer"
+                        },
+                        "issue_id": {
+                          "type": "integer"
+                        },
+                        "troubleshooting_guide_id": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "snapshot": {
+                          "type": "object"
+                        },
+                        "created_by": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Unknown store"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/technician-analytics": {
+      "get": {
+        "tags": [
+          "Technicians",
+          "Analytics"
+        ],
+        "summary": "Every technician: paid, visits, hours, issues and stores in a range",
+        "operationId": "technicianAnalyticsOverview",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Instant: start of the viewer's first local day. Work (visits) is compared on from/to."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Instant, exclusive. At most 400 days after from."
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Local day, inclusive. Pay (the pay sheet's date) is compared on date_from/date_to."
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "stores[]",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Store numbers; none = all. Money is then read from the matching pay lines only."
+          },
+          {
+            "name": "issue_ids[]",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            "description": "Catalog issues; none = all. Money is then read from the pay lines that covered one of them (never split)."
+          },
+          {
+            "name": "category_ids[]",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            }
+          },
+          {
+            "name": "technician_ids[]",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One row per technician, plus totals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "range": {
+                          "type": "object"
+                        },
+                        "filtered_money": {
+                          "type": "boolean",
+                          "description": "True when a store or issue filter applies: money comes from matching pay lines only."
+                        },
+                        "technicians": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "phone": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "location": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "category": {
+                                "type": "object",
+                                "nullable": true,
+                                "properties": {
+                                  "id": {
+                                    "type": "integer"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "coverage_count": {
+                                "type": "integer"
+                              },
+                              "rating": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "deleted_at": {
+                                "type": "string",
+                                "format": "date-time",
+                                "nullable": true
+                              },
+                              "paid": {
+                                "type": "string",
+                                "description": "Decimal, 2 places"
+                              },
+                              "pay_days": {
+                                "type": "integer"
+                              },
+                              "visits": {
+                                "type": "integer"
+                              },
+                              "hours": {
+                                "type": "object",
+                                "properties": {
+                                  "work": {
+                                    "type": "number"
+                                  },
+                                  "travel": {
+                                    "type": "number"
+                                  },
+                                  "parts_run": {
+                                    "type": "number"
+                                  },
+                                  "break": {
+                                    "type": "number"
+                                  }
+                                }
+                              },
+                              "issues_worked": {
+                                "type": "integer"
+                              },
+                              "stores_served": {
+                                "type": "integer"
+                              },
+                              "last_worked_at": {
+                                "type": "string",
+                                "format": "date-time",
+                                "nullable": true
+                              }
+                            }
+                          }
+                        },
+                        "totals": {
+                          "type": "object",
+                          "properties": {
+                            "paid": {
+                              "type": "string",
+                              "description": "Decimal, 2 places"
+                            },
+                            "visits": {
+                              "type": "integer"
+                            },
+                            "hours": {
+                              "type": "object",
+                              "properties": {
+                                "work": {
+                                  "type": "number"
+                                },
+                                "travel": {
+                                  "type": "number"
+                                },
+                                "parts_run": {
+                                  "type": "number"
+                                },
+                                "break": {
+                                  "type": "number"
+                                }
+                              }
+                            },
+                            "technicians_worked": {
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/technicians/{technician}/analytics": {
+      "get": {
+        "tags": [
+          "Technicians",
+          "Analytics"
+        ],
+        "summary": "One technician in a range: pay by store and by kind, pay sheets, work by store and issue, work log",
+        "operationId": "technicianAnalytics",
+        "parameters": [
+          {
+            "name": "technician",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Instant: start of the viewer's first local day. Work (visits) is compared on from/to."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Instant, exclusive. At most 400 days after from."
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Local day, inclusive. Pay (the pay sheet's date) is compared on date_from/date_to."
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "stores[]",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Store numbers; none = all. Money is then read from the matching pay lines only."
+          },
+          {
+            "name": "issue_ids[]",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            "description": "Catalog issues; none = all. Money is then read from the pay lines that covered one of them (never split)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The technician's pay and work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "range": {
+                          "type": "object"
+                        },
+                        "filtered_money": {
+                          "type": "boolean"
+                        },
+                        "kpis": {
+                          "type": "object",
+                          "properties": {
+                            "paid": {
+                              "type": "string",
+                              "description": "Decimal, 2 places"
+                            },
+                            "paid_all_time": {
+                              "type": "string",
+                              "description": "Decimal, 2 places"
+                            },
+                            "pay_days": {
+                              "type": "integer"
+                            },
+                            "visits": {
+                              "type": "integer"
+                            },
+                            "hours": {
+                              "type": "object",
+                              "properties": {
+                                "work": {
+                                  "type": "number"
+                                },
+                                "travel": {
+                                  "type": "number"
+                                },
+                                "parts_run": {
+                                  "type": "number"
+                                },
+                                "break": {
+                                  "type": "number"
+                                }
+                              }
+                            },
+                            "issues_worked": {
+                              "type": "integer"
+                            },
+                            "issues_assigned": {
+                              "type": "integer"
+                            },
+                            "stores_served": {
+                              "type": "integer"
+                            },
+                            "parts_bought": {
+                              "type": "integer"
+                            },
+                            "parts_bought_amount": {
+                              "type": "string",
+                              "description": "Decimal, 2 places"
+                            },
+                            "last_worked_at": {
+                              "type": "string",
+                              "format": "date-time",
+                              "nullable": true
+                            }
+                          }
+                        },
+                        "paid_by_store": {
+                          "type": "array",
+                          "description": "Adds up to kpis.paid. payment_level = what no store carries.",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "store_id": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "store_number": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "other_store": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "payment_level": {
+                                "type": "boolean"
+                              },
+                              "amount": {
+                                "type": "string",
+                                "description": "Decimal, 2 places"
+                              },
+                              "lines": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        },
+                        "paid_by_kind": {
+                          "type": "object",
+                          "description": "Adds up to kpis.paid.",
+                          "properties": {
+                            "hourly_labour": {
+                              "type": "string",
+                              "description": "Decimal, 2 places"
+                            },
+                            "lump_sums": {
+                              "type": "string",
+                              "description": "Decimal, 2 places"
+                            },
+                            "gas": {
+                              "type": "string",
+                              "description": "Decimal, 2 places"
+                            },
+                            "money_owed": {
+                              "type": "string",
+                              "description": "Decimal, 2 places"
+                            },
+                            "parts_reimbursed": {
+                              "type": "string",
+                              "description": "Decimal, 2 places"
+                            }
+                          }
+                        },
+                        "pay_sheets": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "daily_pay_entry_id": {
+                                "type": "integer"
+                              },
+                              "daily_pay_payment_id": {
+                                "type": "integer"
+                              },
+                              "date": {
+                                "type": "string",
+                                "format": "date"
+                              },
+                              "stores": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "amount": {
+                                "type": "string",
+                                "description": "Decimal, 2 places"
+                              }
+                            }
+                          }
+                        },
+                        "work_by_store": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "store": {
+                                "type": "string"
+                              },
+                              "visits": {
+                                "type": "integer"
+                              },
+                              "hours": {
+                                "type": "number"
+                              },
+                              "issues": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        },
+                        "work_by_issue": {
+                          "type": "array",
+                          "description": "A visit covering several issues counts toward each.",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "issue_id": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "visits": {
+                                "type": "integer"
+                              },
+                              "tickets": {
+                                "type": "integer"
+                              },
+                              "hours": {
+                                "type": "number"
+                              }
+                            }
+                          }
+                        },
+                        "work_log": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "attendance_entry_id": {
+                                "type": "integer"
+                              },
+                              "start": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "end": {
+                                "type": "string",
+                                "format": "date-time",
+                                "nullable": true
+                              },
+                              "stores": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "tickets": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "ticket_id": {
+                                      "type": "integer"
+                                    },
+                                    "store_number": {
+                                      "type": "string",
+                                      "nullable": true
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              },
+                              "hours": {
+                                "type": "object",
+                                "properties": {
+                                  "work": {
+                                    "type": "number"
+                                  },
+                                  "travel": {
+                                    "type": "number"
+                                  },
+                                  "parts_run": {
+                                    "type": "number"
+                                  },
+                                  "break": {
+                                    "type": "number"
+                                  }
+                                }
+                              },
+                              "paid": {
+                                "type": "boolean"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Unknown technician"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
           }
         }
       }
@@ -9129,15 +10026,6 @@
             "type": "string",
             "nullable": true
           },
-          "troubleshooting": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/TroubleshootingGuide"
-              }
-            ],
-            "nullable": true,
-            "description": "Present on catalog issue reads."
-          },
           "notes": {
             "type": "array",
             "nullable": true,
@@ -9176,6 +10064,11 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "troubleshooting_guides_count": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Troubleshooting guides (with steps) for this issue. Present on catalog issue reads."
           }
         }
       },
@@ -9331,6 +10224,30 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "location": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverage_notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverage_stores": {
+            "type": "array",
+            "nullable": true,
+            "description": "The stores this technician can cover (null when not loaded on that read).",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "store_number": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },
@@ -10958,12 +11875,27 @@
             "type": "string",
             "format": "date-time",
             "nullable": true,
-            "description": "When the manager confirmed trying the issue's troubleshooting steps."
+            "description": "When the manager finished troubleshooting and chose to open the ticket."
           },
           "troubleshooting_snapshot": {
             "type": "object",
             "nullable": true,
-            "description": "The guide as it read when confirmed: guide_id, version, steps, link_url, files[{id,name}], confirmed_by."
+            "description": "Troubleshooting as it read then: outcome, guide_id, guide_title, version, steps[{body, files[{id,name}]}], link_url, files[{id,name}], guides_shown[{id,title,version}], confirmed_by."
+          },
+          "troubleshooting_outcome": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "tried",
+              "none_match",
+              null
+            ],
+            "description": "tried = tried the steps, still broken; none_match = none of the guides described the problem."
+          },
+          "troubleshooting_guide_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "The guide the manager said matched, when they picked one."
           }
         }
       },
@@ -11282,13 +12214,23 @@
                     }
                   }
                 },
-                "troubleshooting_confirmed": {
-                  "type": "boolean",
-                  "description": "The manager read the issue's troubleshooting steps and tried them. Required for an issue whose guide has steps."
-                },
                 "troubleshooting_version": {
                   "type": "integer",
-                  "description": "The guide version shown. A mismatch (the guide changed) is a 422."
+                  "nullable": true,
+                  "description": "The version of that guide shown. A mismatch (the guide changed) is a 422."
+                },
+                "troubleshooting": {
+                  "type": "string",
+                  "enum": [
+                    "tried",
+                    "none_match"
+                  ],
+                  "description": "How troubleshooting went. Required for an issue that has guides with steps."
+                },
+                "troubleshooting_guide_id": {
+                  "type": "integer",
+                  "nullable": true,
+                  "description": "Optional: the guide that matched the problem. Must be one of the issue's guides."
                 }
               }
             }
@@ -11389,13 +12331,23 @@
                 "description": {
                   "type": "string"
                 },
-                "troubleshooting_confirmed": {
-                  "type": "boolean",
-                  "description": "The manager read the issue's troubleshooting steps and tried them. Required for an issue whose guide has steps."
-                },
                 "troubleshooting_version": {
                   "type": "integer",
-                  "description": "The guide version shown. A mismatch (the guide changed) is a 422."
+                  "nullable": true,
+                  "description": "The version of that guide shown. A mismatch (the guide changed) is a 422."
+                },
+                "troubleshooting": {
+                  "type": "string",
+                  "enum": [
+                    "tried",
+                    "none_match"
+                  ],
+                  "description": "How troubleshooting went. Required for an issue that has guides with steps."
+                },
+                "troubleshooting_guide_id": {
+                  "type": "integer",
+                  "nullable": true,
+                  "description": "Optional: the guide that matched the problem. Must be one of the issue's guides."
                 }
               }
             }
@@ -11559,6 +12511,7 @@
       },
       "TroubleshootingGuide": {
         "type": "object",
+        "description": "What to try for one specific problem with a catalog issue. An issue can have several.",
         "properties": {
           "id": {
             "type": "integer"
@@ -11566,12 +12519,16 @@
           "issue_id": {
             "type": "integer"
           },
+          "title": {
+            "type": "string",
+            "description": "The specific problem, e.g. \"Won't heat\"."
+          },
           "steps": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/TroubleshootingStep"
             },
-            "description": "In order: what to try first, then next."
+            "description": "In order: what to try first, then next. Each step carries its own files."
           },
           "link_url": {
             "type": "string",
@@ -11579,13 +12536,14 @@
           },
           "version": {
             "type": "integer",
-            "description": "Goes up on every save. Send it back with the confirmation when opening a ticket."
+            "description": "Goes up on every save. Send it back when opening a ticket after trying this guide."
           },
           "attachments": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Attachment"
-            }
+            },
+            "description": "Files for the whole guide."
           },
           "updated_by": {
             "type": "integer",
@@ -11606,6 +12564,14 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "fixed_count": {
+            "type": "integer",
+            "description": "Times stores said this guide fixed the problem (no ticket opened)."
+          },
+          "not_fixed_count": {
+            "type": "integer",
+            "description": "Tickets opened after trying this guide."
           }
         }
       },
@@ -11729,6 +12695,84 @@
                 "type": "integer"
               }
             }
+          }
+        }
+      },
+      "TroubleshootingStep": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "position": {
+            "type": "integer"
+          },
+          "body": {
+            "type": "string"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Attachment"
+            }
+          }
+        }
+      },
+      "IssueTroubleshooting": {
+        "type": "object",
+        "properties": {
+          "issue_id": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "guides": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TroubleshootingGuide"
+            }
+          }
+        }
+      },
+      "TroubleshootingGuideRequest": {
+        "type": "object",
+        "required": [
+          "title",
+          "steps"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 30,
+            "description": "Blank rows are dropped; at least one real step. A step sent with its id is kept, with its files; steps left out are removed.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "nullable": true
+                },
+                "body": {
+                  "type": "string",
+                  "maxLength": 1000
+                }
+              }
+            }
+          },
+          "link_url": {
+            "type": "string",
+            "nullable": true,
+            "description": "http(s) only"
           }
         }
       }

@@ -9,10 +9,10 @@ use App\Enums\Priority;
 use App\Enums\TicketStatus;
 use App\Enums\TicketType;
 use App\Jobs\PublishOutboxEventJob;
+use App\Models\Issue;
 use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\TicketIssue;
-use App\Models\TroubleshootingGuide;
 use App\Services\MaintenanceEvents\MaintenanceEventFactory;
 use App\Services\MaintenanceEvents\MaintenanceOutboxService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -192,25 +192,34 @@ class TicketService
     }
 
     /**
-     * When the manager confirmed trying the issue's troubleshooting steps, keep
-     * that -- and the guide exactly as they saw it, since it may change later.
+     * How troubleshooting went before the ticket was opened -- tried and still
+     * broken, or none of the guides described the problem -- with the guide
+     * exactly as the manager saw it, since it may change later.
      *
      * @param  array<string, mixed>  $line
      */
     private function recordTroubleshooting(TicketIssue $issue, array $line): void
     {
-        if ($issue->issue_id === null || !filter_var($line['troubleshooting_confirmed'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+        $outcome = $line['troubleshooting'] ?? null;
+        if ($issue->issue_id === null || !in_array($outcome, ['tried', 'none_match'], true)) {
             return;
         }
 
-        $guide = TroubleshootingGuide::query()->where('issue_id', $issue->issue_id)->first();
-        if ($guide === null || !$guide->hasSteps()) {
+        $troubleshooting = app(TroubleshootingService::class);
+        if (!$troubleshooting->gatingGuides([$issue->issue_id])->exists()) {
             return;
         }
+
+        $guide = isset($line['troubleshooting_guide_id'])
+            ? $troubleshooting->gatingGuides([$issue->issue_id])->whereKey((int) $line['troubleshooting_guide_id'])->first()
+            : null;
+        $catalogIssue = Issue::withTrashed()->findOrFail($issue->issue_id);
 
         $issue->forceFill([
             'troubleshooting_confirmed_at' => now(),
-            'troubleshooting_snapshot' => app(TroubleshootingService::class)->snapshot($guide),
+            'troubleshooting_outcome' => $outcome,
+            'troubleshooting_guide_id' => $guide?->id,
+            'troubleshooting_snapshot' => $troubleshooting->snapshot($catalogIssue, $guide, $outcome),
         ])->save();
     }
 

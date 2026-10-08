@@ -2,22 +2,28 @@
 
 namespace App\Http\Requests\Concerns;
 
-use App\Models\TroubleshootingGuide;
+use App\Models\Issue;
+use App\Services\TroubleshootingService;
 use Illuminate\Validation\Validator;
 
 /**
  * The troubleshooting gate on opening a ticket.
  *
- * When a reported catalog issue has a troubleshooting guide, the manager must
- * confirm they read the steps and tried them -- one tick, per the owner -- or
- * the ticket is refused.
+ * When a reported catalog issue has troubleshooting guides, the manager goes
+ * through them on the issue's troubleshooting page first and says how it went
+ * (owner, 2026-10-08):
  *
- * The form also sends the guide version it showed. If the guide changed in the
- * meantime, the confirmation was for steps that are no longer the steps, so
- * the manager is asked to read them again.
+ *   tried       -- "I tried these steps", still broken
+ *   none_match  -- "None of these describe my problem"
  *
- * Issues without a guide, guides with no steps, and free-text "Other" issues
- * are never gated.
+ * ("This fixed it" never reaches here: no ticket is opened for it.) Naming
+ * which guide they tried is optional; when they do, it must be one of this
+ * issue's guides, and the version they read must still be current -- a
+ * confirmation for steps that have since changed is for steps that are no
+ * longer the steps.
+ *
+ * Issues without guides (or whose guides have no steps) and free-text "Other"
+ * issues are never gated.
  */
 trait ValidatesTroubleshootingConfirmation
 {
@@ -27,7 +33,8 @@ trait ValidatesTroubleshootingConfirmation
     protected function troubleshootingRules(): array
     {
         return [
-            'issues.*.troubleshooting_confirmed' => ['sometimes', 'boolean'],
+            'issues.*.troubleshooting' => ['sometimes', 'nullable', 'string', 'in:tried,none_match'],
+            'issues.*.troubleshooting_guide_id' => ['sometimes', 'nullable', 'integer'],
             'issues.*.troubleshooting_version' => ['sometimes', 'nullable', 'integer', 'min:1'],
         ];
     }
@@ -41,27 +48,40 @@ trait ValidatesTroubleshootingConfirmation
             return;
         }
 
-        $guides = TroubleshootingGuide::query()->whereIn('issue_id', $issueIds)->with('issue')->get()->keyBy('issue_id');
+        $guides = app(TroubleshootingService::class)->gatingGuides($issueIds)->get()->groupBy('issue_id');
+        $titles = Issue::withTrashed()->whereIn('id', $guides->keys())->pluck('title', 'id');
 
         foreach ($lines as $i => $line) {
-            $guide = $guides[(int) ($line['issue_id'] ?? 0)] ?? null;
-            if ($guide === null || !$guide->hasSteps()) {
+            $issueId = (int) ($line['issue_id'] ?? 0);
+            $own = $guides->get($issueId);
+            if ($own === null || $own->isEmpty()) {
                 continue;
             }
 
-            $title = $guide->issue?->title ?? 'this issue';
-            $confirmed = filter_var($line['troubleshooting_confirmed'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            $title = $titles[$issueId] ?? 'this issue';
 
-            if (!$confirmed) {
+            if (!in_array($line['troubleshooting'] ?? null, ['tried', 'none_match'], true)) {
                 $validator->errors()->add(
-                    "issues.{$i}.troubleshooting_confirmed",
-                    "Read the troubleshooting steps for {$title} and confirm you tried them before opening a ticket."
+                    "issues.{$i}.troubleshooting",
+                    "Go through the troubleshooting for {$title} before opening a ticket."
                 );
 
                 continue;
             }
 
-            if ($confirmed && isset($line['troubleshooting_version']) && (int) $line['troubleshooting_version'] !== (int) $guide->version) {
+            $guideId = $line['troubleshooting_guide_id'] ?? null;
+            if ($guideId === null) {
+                continue;
+            }
+
+            $guide = $own->firstWhere('id', (int) $guideId);
+            if ($guide === null) {
+                $validator->errors()->add("issues.{$i}.troubleshooting_guide_id", "This guide is not one of the guides for {$title}.");
+
+                continue;
+            }
+
+            if (isset($line['troubleshooting_version']) && (int) $line['troubleshooting_version'] !== (int) $guide->version) {
                 $validator->errors()->add(
                     "issues.{$i}.troubleshooting_version",
                     "The troubleshooting steps for {$title} were just updated. Read them again, then confirm."

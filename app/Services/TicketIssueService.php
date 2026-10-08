@@ -485,6 +485,8 @@ class TicketIssueService
             // The troubleshooting the manager confirmed trying before opening
             // the ticket, as it read then. Null when none was asked for.
             'troubleshooting_confirmed_at' => $issue->troubleshooting_confirmed_at,
+            'troubleshooting_outcome' => $issue->troubleshooting_outcome,
+            'troubleshooting_guide_id' => $issue->troubleshooting_guide_id,
             'troubleshooting_snapshot' => $issue->troubleshooting_snapshot,
             'created_by' => $issue->created_by,
             'creator' => $issue->relationLoaded('creator') && $issue->creator

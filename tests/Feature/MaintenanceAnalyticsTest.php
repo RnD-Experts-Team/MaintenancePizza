@@ -7,6 +7,8 @@ use App\Models\Issue;
 use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\TicketIssue;
+use App\Models\TroubleshootingFix;
+use App\Models\TroubleshootingGuide;
 use App\Services\TicketStatusService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\FakesAuthServer;
@@ -192,6 +194,38 @@ class MaintenanceAnalyticsTest extends TestCase
         $this->assertSame(1, $changes['notes'], 'the private note is not counted');
 
         $this->assertSame(1, $this->getJson($this->url('summary'), $this->headers())->json('data.kpis.changed_tickets'));
+    }
+
+    public function test_problems_fixed_by_troubleshooting_are_counted_and_listed(): void
+    {
+        $guide = TroubleshootingGuide::query()->create(['issue_id' => $this->oven->id, 'title' => "Won't heat"]);
+        $other = Store::factory()->create(['store_number' => '03795-00002']);
+
+        $fix = function (string $at, Store $store, ?TroubleshootingGuide $guide) {
+            $now = now();
+            $this->travelTo($at);
+            TroubleshootingFix::query()->create([
+                'store_id' => $store->id,
+                'issue_id' => $this->oven->id,
+                'troubleshooting_guide_id' => $guide?->id,
+                'snapshot' => ['outcome' => 'fixed', 'guide_title' => $guide?->title],
+            ]);
+            $this->travelTo($now);
+        };
+
+        $fix('2026-10-05 15:00:00', $this->store, $guide);
+        $fix('2026-10-06 03:30:00', $this->store, null);     // 11:30 PM Oct 5 in New York
+        $fix('2026-10-06 05:00:00', $this->store, $guide);   // Oct 6: outside
+        $fix('2026-10-05 15:00:00', $other, $guide);         // another store
+
+        $this->getJson($this->url('summary'), $this->headers())
+            ->assertOk()
+            ->assertJsonPath('data.kpis.fixed_by_troubleshooting', 2)
+            ->assertJsonCount(2, 'data.troubleshooting_fixes')
+            ->assertJsonPath('data.troubleshooting_fixes.0.guide_title', null)
+            ->assertJsonPath('data.troubleshooting_fixes.1.guide_title', "Won't heat")
+            ->assertJsonPath('data.troubleshooting_fixes.1.issue_title', 'Oven')
+            ->assertJsonPath('data.troubleshooting_fixes.1.store_number', '03795-00001');
     }
 
     public function test_several_stores_at_once(): void

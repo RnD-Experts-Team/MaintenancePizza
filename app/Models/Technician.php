@@ -21,7 +21,7 @@ class Technician extends Model
      * not fillable: it changes only through TechnicianAbilityService, which
      * moves the single overall "call first" pin.
      */
-    protected $fillable = ['name', 'phone', 'category_id'];
+    protected $fillable = ['name', 'phone', 'category_id', 'location', 'coverage_notes'];
 
     /**
      * @return array<string, string>
@@ -75,6 +75,16 @@ class Technician extends Model
     public function abilities(): HasMany
     {
         return $this->hasMany(TechnicianIssueAbility::class);
+    }
+
+    /**
+     * The stores this technician can cover.
+     *
+     * @return BelongsToMany<Store, $this>
+     */
+    public function coverageStores(): BelongsToMany
+    {
+        return $this->belongsToMany(Store::class, 'store_technician')->withTimestamps()->orderBy('store_number');
     }
 
     /** @return BelongsTo<User, $this> */

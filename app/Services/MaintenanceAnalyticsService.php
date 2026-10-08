@@ -9,6 +9,7 @@ use App\Models\Note;
 use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\TicketIssue;
+use App\Models\TroubleshootingFix;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
@@ -85,6 +86,15 @@ class MaintenanceAnalyticsService
         $completions = $this->completionsIn($storeIds, $from, $to);
         $recurring = $this->recurringMap($storeIds, $to, $recurringDays, $recurringMin);
 
+        // Problems troubleshooting fixed -- no ticket was ever opened for them.
+        $fixes = TroubleshootingFix::query()
+            ->whereIn('store_id', $storeIds)
+            ->where('created_at', '>=', $from)
+            ->where('created_at', '<', $to)
+            ->with(['store', 'issue', 'guide', 'creator'])
+            ->orderByDesc('created_at')
+            ->get();
+
         return [
             'range' => ['from' => $from, 'to' => $to],
             'stores' => $stores->map(fn (Store $s) => ['id' => $s->id, 'store_number' => $s->store_number])->values()->all(),
@@ -97,7 +107,18 @@ class MaintenanceAnalyticsService
                 'recurring_issues' => count($recurring),
                 'avg_hours_to_complete' => $completions->isEmpty() ? null : round($completions->avg('hours'), 1),
                 'changed_tickets' => $this->changedQuery($storeIds, $from, $to)->count(),
+                'fixed_by_troubleshooting' => $fixes->count(),
             ],
+            'troubleshooting_fixes' => $fixes->map(fn (TroubleshootingFix $f) => [
+                'id' => $f->id,
+                'store_number' => $f->store?->store_number,
+                'issue_id' => $f->issue_id,
+                'issue_title' => $f->issue?->title,
+                // The guide as it is now, else as it was when it fixed it.
+                'guide_title' => $f->guide?->title ?? ($f->snapshot['guide_title'] ?? null),
+                'by' => $f->creator ? ['id' => $f->creator->id, 'name' => $f->creator->name] : null,
+                'at' => $f->created_at,
+            ])->values()->all(),
             'created' => $created->map(fn (Ticket $t) => [
                 'ticket_id' => $t->id,
                 'store_number' => $t->store?->store_number,

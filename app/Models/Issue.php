@@ -8,7 +8,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Issue extends Model
@@ -31,12 +30,13 @@ class Issue extends Model
     }
 
     /**
-     * What a store should try before opening a ticket for this issue.
+     * What a store should try before opening a ticket for this issue: one
+     * guide per specific problem ("Won't heat", "Door won't close").
      *
-     * @return HasOne<TroubleshootingGuide, $this>
+     * @return HasMany<TroubleshootingGuide, $this>
      */
-    public function troubleshootingGuide(): HasOne
+    public function troubleshootingGuides(): HasMany
     {
-        return $this->hasOne(TroubleshootingGuide::class);
+        return $this->hasMany(TroubleshootingGuide::class)->orderBy('title')->orderBy('id');
     }
 }

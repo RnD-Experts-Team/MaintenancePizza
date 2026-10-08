@@ -66,6 +66,11 @@ class CatalogController extends Controller
         return $this->catalog->listTechnicians($request->query('trashed'), $request->integer('per_page', 15));
     }
 
+    public function techniciansShow(Technician $technician)
+    {
+        return ['data' => $this->catalog->showTechnician($technician)];
+    }
+
     public function techniciansStore(StoreTechnicianRequest $request)
     {
         return response()->json(['data' => $this->catalog->createTechnician($request->validated())], 201);

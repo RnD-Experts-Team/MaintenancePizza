@@ -34,6 +34,12 @@ class StoreTechnicianRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'phone' => self::PHONE_RULES,
             'category_id' => ['nullable', 'integer', 'exists:categories,id'],
+            // Where they are based, the stores they can cover, and notes about
+            // it. Coverage is the whole list, replaced on every save.
+            'location' => ['nullable', 'string', 'max:255'],
+            'coverage_notes' => ['nullable', 'string', 'max:2000'],
+            'coverage_stores' => ['array', 'max:500'],
+            'coverage_stores.*' => ['string', 'distinct', 'exists:stores,store_number'],
         ];
     }
 }

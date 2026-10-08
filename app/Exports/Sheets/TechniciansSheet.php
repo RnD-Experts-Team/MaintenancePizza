@@ -18,7 +18,7 @@ class TechniciansSheet implements FromCollection, WithHeadings, WithMapping, Wit
 
     public function collection(): Collection
     {
-        return Technician::withTrashed()->with('category')->orderBy('id')->get();
+        return Technician::withTrashed()->with(['category', 'coverageStores'])->orderBy('id')->get();
     }
 
     /**
@@ -26,7 +26,7 @@ class TechniciansSheet implements FromCollection, WithHeadings, WithMapping, Wit
      */
     public function headings(): array
     {
-        return ['ID', 'Name', 'Category', 'Created By', 'Created At', 'Deleted At'];
+        return ['ID', 'Name', 'Category', 'Phone', 'Location', 'Covers', 'Coverage Notes', 'Created By', 'Created At', 'Deleted At'];
     }
 
     /**
@@ -39,6 +39,10 @@ class TechniciansSheet implements FromCollection, WithHeadings, WithMapping, Wit
             $technician->id,
             $technician->name,
             $technician->category?->name,
+            $technician->phone,
+            $technician->location,
+            $technician->coverageStores->pluck('store_number')->implode(', '),
+            $technician->coverage_notes,
             $technician->created_by,
             (string) $technician->created_at,
             (string) $technician->deleted_at,

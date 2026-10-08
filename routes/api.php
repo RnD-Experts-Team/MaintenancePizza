@@ -27,6 +27,7 @@ use App\Http\Controllers\TicketIssueController;
 use App\Http\Controllers\TicketIssueDeferralController;
 use App\Http\Controllers\TicketIssueStatusController;
 use App\Http\Controllers\TicketIssueWaitingController;
+use App\Http\Controllers\TechnicianAnalyticsController;
 use App\Http\Controllers\TicketNoteController;
 use App\Http\Controllers\TroubleshootingController;
 use App\Http\Controllers\WarrantyController;
@@ -44,16 +45,24 @@ Route::middleware('auth.token.store')->group(function () {
     Route::delete('issues/{issue}', [CatalogController::class, 'issuesDestroy'])->name('issues.destroy');
     Route::post('issues/{issue}/restore', [CatalogController::class, 'issuesRestore'])->withTrashed()->name('issues.restore');
 
-    // Troubleshooting guides: what to try before opening a ticket for an issue.
+    // Troubleshooting guides: what to try before opening a ticket for an
+    // issue -- several per issue, one per specific problem.
     Route::get('troubleshooting-guides', [TroubleshootingController::class, 'index'])->name('troubleshooting.index');
     Route::get('issues/{issue}/troubleshooting', [TroubleshootingController::class, 'show'])->withTrashed()->name('issues.troubleshooting.show');
-    Route::put('issues/{issue}/troubleshooting', [TroubleshootingController::class, 'update'])->name('issues.troubleshooting.update');
-    Route::delete('issues/{issue}/troubleshooting', [TroubleshootingController::class, 'destroy'])->name('issues.troubleshooting.destroy');
+    Route::post('issues/{issue}/troubleshooting-guides', [TroubleshootingController::class, 'store'])->name('issues.troubleshooting.store');
+    Route::put('troubleshooting-guides/{guide}', [TroubleshootingController::class, 'update'])->name('troubleshooting.update');
+    Route::delete('troubleshooting-guides/{guide}', [TroubleshootingController::class, 'destroy'])->name('troubleshooting.destroy');
     Route::post('troubleshooting-guides/{guide}/attachments', [TroubleshootingController::class, 'attachmentsStore'])->name('troubleshooting.attachments.store');
     Route::delete('troubleshooting-guides/{guide}/attachments/{attachment}', [TroubleshootingController::class, 'attachmentsDestroy'])->name('troubleshooting.attachments.destroy');
+    Route::post('troubleshooting-steps/{step}/attachments', [TroubleshootingController::class, 'stepAttachmentsStore'])->name('troubleshooting.steps.attachments.store');
+    Route::delete('troubleshooting-steps/{step}/attachments/{attachment}', [TroubleshootingController::class, 'stepAttachmentsDestroy'])->name('troubleshooting.steps.attachments.destroy');
 
     Route::get('technicians', [CatalogController::class, 'techniciansIndex'])->name('technicians.index');
     Route::post('technicians', [CatalogController::class, 'techniciansStore'])->name('technicians.store');
+    // The Technicians page: one technician, and their pay and work in a range.
+    Route::get('technician-analytics', [TechnicianAnalyticsController::class, 'index'])->name('technician-analytics.index');
+    Route::get('technicians/{technician}', [CatalogController::class, 'techniciansShow'])->withTrashed()->name('technicians.show');
+    Route::get('technicians/{technician}/analytics', [TechnicianAnalyticsController::class, 'show'])->withTrashed()->name('technicians.analytics');
     Route::patch('technicians/{technician}', [CatalogController::class, 'techniciansUpdate'])->name('technicians.update');
     Route::delete('technicians/{technician}', [CatalogController::class, 'techniciansDestroy'])->name('technicians.destroy');
     Route::post('technicians/{technician}/restore', [CatalogController::class, 'techniciansRestore'])->withTrashed()->name('technicians.restore');
@@ -266,6 +275,9 @@ Route::middleware('auth.token.store')->group(function () {
         Route::get('issues/{issue}/history', [IssueHistoryController::class, 'index'])
             ->withTrashed()
             ->name('stores.issues.history');
+
+        // "This fixed it": troubleshooting solved the problem, no ticket opened.
+        Route::post('troubleshooting-fixes', [TroubleshootingController::class, 'fix'])->name('stores.troubleshooting-fixes.store');
     });
 
     /*

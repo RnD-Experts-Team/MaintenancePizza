@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Category;
 use App\Models\Issue;
 use App\Models\Part;
+use App\Models\Store;
 use App\Models\Technician;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -33,25 +34,34 @@ class CatalogService
         'attachments.creator',
     ];
 
-    /** Issues also carry their troubleshooting guide. */
-    private const ISSUE_LOADS = [
-        ...self::CATALOG_LOADS,
-        'troubleshootingGuide.attachments.creator',
-        'troubleshootingGuide.editor',
-    ];
+    /**
+     * Issues also say how many troubleshooting guides they have -- enough for
+     * the new-ticket window to know it must show them; the guides themselves
+     * are read from the issue's troubleshooting page.
+     */
+    private const ISSUE_LOADS = self::CATALOG_LOADS;
 
     public function __construct(
         private NoteService $notes,
         private AttachmentService $attachments,
-        private TroubleshootingService $troubleshooting,
         private TechnicianAbilityService $abilities,
     ) {}
 
     // ------------------------------------------------------------------ Issues
 
+    /**
+     * Only guides with steps count: one without asks nothing of the store.
+     *
+     * @return array<string, \Closure>
+     */
+    private function guideCount(): array
+    {
+        return ['troubleshootingGuides' => fn ($q) => $q->whereHas('steps')];
+    }
+
     public function listIssues(?string $trashed, int $perPage): LengthAwarePaginator
     {
-        $query = $this->trashed(Issue::query()->with(self::ISSUE_LOADS)->latest(), $trashed);
+        $query = $this->trashed(Issue::query()->with(self::ISSUE_LOADS)->withCount($this->guideCount())->latest(), $trashed);
 
         return $query->paginate($perPage)->through(fn (Issue $i) => $this->presentIssue($i));
     }
@@ -62,7 +72,7 @@ class CatalogService
      */
     public function createIssue(array $data): array
     {
-        return $this->presentIssue($this->persist(new Issue($data))->load(self::ISSUE_LOADS));
+        return $this->presentIssue($this->persist(new Issue($data))->load(self::ISSUE_LOADS)->loadCount($this->guideCount()));
     }
 
     public function deleteIssue(Issue $issue): void
@@ -77,7 +87,7 @@ class CatalogService
     {
         $issue->restore();
 
-        return $this->presentIssue($issue->load(self::ISSUE_LOADS));
+        return $this->presentIssue($issue->load(self::ISSUE_LOADS)->loadCount($this->guideCount()));
     }
 
     /**
@@ -88,14 +98,17 @@ class CatalogService
     {
         $issue->fill($data)->save();
 
-        return $this->presentIssue($issue->load(self::ISSUE_LOADS));
+        return $this->presentIssue($issue->load(self::ISSUE_LOADS)->loadCount($this->guideCount()));
     }
 
     // ------------------------------------------------------------- Technicians
 
+    /** A technician is shown with their trade and the stores they cover. */
+    private const TECHNICIAN_LOADS = ['category', 'coverageStores', ...self::CATALOG_LOADS];
+
     public function listTechnicians(?string $trashed, int $perPage): LengthAwarePaginator
     {
-        $query = $this->trashed(Technician::query()->with(['category', ...self::CATALOG_LOADS])->latest(), $trashed);
+        $query = $this->trashed(Technician::query()->with(self::TECHNICIAN_LOADS)->latest(), $trashed);
 
         return $query->paginate($perPage)->through(fn (Technician $t) => $this->presentTechnician($t));
     }
@@ -106,7 +119,39 @@ class CatalogService
      */
     public function createTechnician(array $data): array
     {
-        return $this->presentTechnician($this->persist(new Technician($data))->load(['category', ...self::CATALOG_LOADS]));
+        $technician = DB::transaction(function () use ($data) {
+            $technician = $this->persist(new Technician($data));
+            $this->syncCoverage($technician, $data);
+
+            return $technician;
+        });
+
+        return $this->showTechnician($technician);
+    }
+
+    /**
+     * One technician, with everything the technician page shows about them.
+     *
+     * @return array<string, mixed>
+     */
+    public function showTechnician(Technician $technician): array
+    {
+        return $this->presentTechnician($technician->load(self::TECHNICIAN_LOADS));
+    }
+
+    /**
+     * Coverage is the whole list of stores, replaced when sent.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function syncCoverage(Technician $technician, array $data): void
+    {
+        if (!array_key_exists('coverage_stores', $data)) {
+            return;
+        }
+
+        $ids = Store::query()->whereIn('store_number', (array) $data['coverage_stores'])->pluck('id')->all();
+        $technician->coverageStores()->sync($ids);
     }
 
     /**
@@ -128,7 +173,7 @@ class CatalogService
     {
         $technician->restore();
 
-        return $this->presentTechnician($technician->load(['category', ...self::CATALOG_LOADS]));
+        return $this->showTechnician($technician);
     }
 
     /**
@@ -137,9 +182,12 @@ class CatalogService
      */
     public function updateTechnician(Technician $technician, array $data): array
     {
-        $technician->fill($data)->save();
+        DB::transaction(function () use ($technician, $data) {
+            $technician->fill($data)->save();
+            $this->syncCoverage($technician, $data);
+        });
 
-        return $this->presentTechnician($technician->load(['category', ...self::CATALOG_LOADS]));
+        return $this->showTechnician($technician);
     }
 
     // -------------------------------------------------------------- Categories
@@ -231,9 +279,10 @@ class CatalogService
             'id' => $issue->id,
             'title' => $issue->title,
             'description' => $issue->description,
-            // What to try before opening a ticket for it (null when none).
-            'troubleshooting' => $issue->relationLoaded('troubleshootingGuide')
-                ? $this->troubleshooting->present($issue->troubleshootingGuide)
+            // Guides to go through before opening a ticket for it (null when
+            // not counted on this read).
+            'troubleshooting_guides_count' => array_key_exists('troubleshooting_guides_count', $issue->getAttributes())
+                ? (int) $issue->troubleshooting_guides_count
                 : null,
             'notes' => $this->notes->presentMany($issue),
             'attachments' => $this->attachments->presentMany($issue),
@@ -256,6 +305,12 @@ class CatalogService
             'id' => $technician->id,
             'name' => $technician->name,
             'phone' => $technician->phone,
+            'location' => $technician->location,
+            'coverage_notes' => $technician->coverage_notes,
+            // The stores they can cover (null when not loaded on this read).
+            'coverage_stores' => $technician->relationLoaded('coverageStores')
+                ? $technician->coverageStores->map(fn (Store $s) => ['id' => $s->id, 'store_number' => $s->store_number])->values()->all()
+                : null,
             'category_id' => $technician->category_id,
             'category' => $technician->relationLoaded('category') && $technician->category
                 ? $this->presentCategory($technician->category)
