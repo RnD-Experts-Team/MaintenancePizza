@@ -8464,7 +8464,8 @@
                                 "type": "integer"
                               },
                               "visits": {
-                                "type": "integer"
+                                "type": "integer",
+                                "description": "From the pay-sheet lines (a day's work at a store) plus clocked visits no sheet has claimed yet."
                               },
                               "hours": {
                                 "type": "object",
@@ -8484,15 +8485,24 @@
                                 }
                               },
                               "issues_worked": {
-                                "type": "integer"
+                                "type": "integer",
+                                "description": "From the pay-sheet lines (a day's work at a store) plus clocked visits no sheet has claimed yet."
                               },
                               "stores_served": {
-                                "type": "integer"
+                                "type": "integer",
+                                "description": "From the pay-sheet lines (a day's work at a store) plus clocked visits no sheet has claimed yet."
                               },
                               "last_worked_at": {
                                 "type": "string",
                                 "format": "date-time",
-                                "nullable": true
+                                "nullable": true,
+                                "description": "The latest clocked visit not on a pay sheet yet."
+                              },
+                              "last_pay_date": {
+                                "type": "string",
+                                "format": "date",
+                                "nullable": true,
+                                "description": "The latest pay sheet with work on it."
                               }
                             }
                           }
@@ -8697,6 +8707,11 @@
                               "type": "string",
                               "format": "date-time",
                               "nullable": true
+                            },
+                            "last_pay_date": {
+                              "type": "string",
+                              "format": "date",
+                              "nullable": true
                             }
                           }
                         },
@@ -8835,12 +8850,33 @@
                           "items": {
                             "type": "object",
                             "properties": {
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "pay_sheet",
+                                  "visit"
+                                ],
+                                "description": "pay_sheet = a day's work at a store from a pay sheet; visit = clocked in, not on a pay sheet yet."
+                              },
                               "attendance_entry_id": {
-                                "type": "integer"
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "daily_pay_entry_id": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "date": {
+                                "type": "string",
+                                "format": "date",
+                                "nullable": true,
+                                "description": "The pay sheet's day (pay_sheet only)."
                               },
                               "start": {
                                 "type": "string",
-                                "format": "date-time"
+                                "format": "date-time",
+                                "nullable": true,
+                                "description": "Clock-in (visit only)."
                               },
                               "end": {
                                 "type": "string",
@@ -8892,7 +8928,8 @@
                                 "type": "boolean"
                               }
                             }
-                          }
+                          },
+                          "description": "Pay-sheet lines plus clocked visits not paid yet, newest first; a visit a sheet claimed is represented by its line, never twice."
                         }
                       }
                     }

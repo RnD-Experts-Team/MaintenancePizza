@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AttendanceEntry;
+use App\Models\DailyPayLine;
 use App\Models\Store;
 use App\Models\Technician;
 use App\Models\TicketIssue;
@@ -30,8 +31,9 @@ use Illuminate\Support\Facades\DB;
  * A line's labour is read back from what it stored (line_total less its gas,
  * money owed and parts), never recomputed, so these figures are the sheets'.
  *
- * WORK comes from attendance: every non-mistaken visit whose clock-in falls in
- * the range (instants -- the viewer's local midnights). Hours come from
+ * WORK comes from the pay-sheet lines (a day's work at a store, by pay date)
+ * and from clocked-in visits no sheet has claimed yet (by clock-in instant --
+ * the viewer's local midnights); see work(). A visit's hours come from
  * AttendanceEntry::durations(), the one place clock events become hours.
  */
 class TechnicianAnalyticsService
@@ -75,7 +77,10 @@ class TechnicianAnalyticsService
                 'hours' => $w['hours'] ?? $this->noHours(),
                 'issues_worked' => $w['issues'] ?? 0,
                 'stores_served' => $w['stores'] ?? 0,
-                'last_worked_at' => $w['last_at'] ?? null,
+                // The latest clocked visit not yet paid (an instant), and the
+                // latest pay sheet with work on it (a day).
+                'last_worked_at' => $w['last_visit_at'] ?? null,
+                'last_pay_date' => $w['last_pay_date'] ?? null,
             ];
         })->values();
 
@@ -137,7 +142,8 @@ class TechnicianAnalyticsService
                 'stores_served' => $w['stores'] ?? 0,
                 'parts_bought' => (int) ($parts->n ?? 0),
                 'parts_bought_amount' => number_format((float) ($parts->amount ?? 0), 2, '.', ''),
-                'last_worked_at' => $w['last_at'] ?? null,
+                'last_worked_at' => $w['last_visit_at'] ?? null,
+                'last_pay_date' => $w['last_pay_date'] ?? null,
             ],
             'paid_by_store' => $p['by_store'] ?? [],
             'paid_by_kind' => $p['by_kind'] ?? $this->noKinds(),
@@ -293,6 +299,15 @@ class TechnicianAnalyticsService
     // -------------------------------------------------------------------- Work
 
     /**
+     * The work, from two places, never counting the same work twice:
+     *
+     *   pay-sheet lines   each line is a day's work at one store, with the hours
+     *                     and the issues the sheet records (by pay date). Most
+     *                     work only ever exists here: hours typed onto the sheet.
+     *   unpaid visits     clocked-in visits (by clock-in instant) that no pay
+     *                     sheet has claimed yet. Once a sheet claims a visit, its
+     *                     hours are on that sheet's line, so the line stands for it.
+     *
      * @param  array<int, int>  $technicianIds
      * @param  array<string, mixed>  $f
      * @return array{by_technician: array<int, array<string, mixed>>}
@@ -303,57 +318,121 @@ class TechnicianAnalyticsService
             return ['by_technician' => []];
         }
 
-        $entries = AttendanceEntry::query()
+        $jobs = [];
+
+        $lines = DailyPayLine::query()
+            ->whereIn('technician_id', $technicianIds)
+            ->whereHas('entry', fn ($q) => $q->whereDate('date', '>=', $f['date_from'])->whereDate('date', '<=', $f['date_to']))
+            ->when($f['store_ids'] !== [], fn ($q) => $q->whereIn('store_id', $f['store_ids']))
+            ->when($f['issue_ids'] !== [], fn ($q) => $q->whereHas('ticketIssues', fn ($t) => $t->whereIn('issue_id', $f['issue_ids'])))
+            ->with(['entry', 'store', 'ticketIssues.issue', 'ticketIssues.ticket.store'])
+            ->get();
+
+        foreach ($lines as $line) {
+            $date = $line->entry->date->format('Y-m-d');
+            $jobs[] = [
+                'technician_id' => (int) $line->technician_id,
+                'sort' => $date.'T23:59:59',
+                'source' => 'pay_sheet',
+                'attendance_entry_id' => null,
+                'daily_pay_entry_id' => (int) $line->daily_pay_entry_id,
+                'date' => $date,
+                'start' => null,
+                'end' => null,
+                'store' => $line->store?->store_number ?? ($line->other_store ?: 'Other location'),
+                'issues' => $line->ticketIssues
+                    ->filter(fn (TicketIssue $ti) => $f['issue_ids'] === [] || in_array((int) $ti->issue_id, $f['issue_ids'], true))
+                    ->values(),
+                'hours' => [
+                    'work' => round((float) $line->total_working_hours, 2),
+                    'travel' => round((float) $line->travel_time, 2),
+                    'parts_run' => round((float) $line->parts_run_time, 2),
+                    'break' => round((float) $line->total_break_time, 2),
+                ],
+                'paid' => true,
+            ];
+        }
+
+        $visits = AttendanceEntry::query()
             ->whereIn('technician_id', $technicianIds)
             ->where('mistaken', false)
             ->where('start_clock', '>=', $f['from'])
             ->where('start_clock', '<', $f['to'])
+            ->whereDoesntHave('dailyPayPayments')
             ->with(['events', 'ticketIssues.issue', 'ticketIssues.ticket.store'])
-            ->withExists('dailyPayPayments')
-            ->orderByDesc('start_clock')
             ->get();
+
+        foreach ($visits as $entry) {
+            /** @var Collection<int, TicketIssue> $matching */
+            $matching = $entry->ticketIssues->filter(fn (TicketIssue $ti) => $this->matches($ti, $f))->values();
+            if ($matching->isEmpty() && ($f['store_ids'] !== [] || $f['issue_ids'] !== [])) {
+                continue;
+            }
+
+            $d = $entry->durations();
+            $jobs[] = [
+                'technician_id' => (int) $entry->technician_id,
+                'sort' => $entry->start_clock->copy()->utc()->format('Y-m-d\TH:i:s'),
+                'source' => 'visit',
+                'attendance_entry_id' => $entry->id,
+                'daily_pay_entry_id' => null,
+                'date' => null,
+                'start' => $entry->start_clock,
+                'end' => $entry->end_clock,
+                // A visit can span stores; each of its issues says where.
+                'store' => null,
+                'issues' => $matching,
+                'hours' => [
+                    'work' => round($d['work'] / 60, 2),
+                    'travel' => round($d['travel'] / 60, 2),
+                    'parts_run' => round($d['parts_run'] / 60, 2),
+                    'break' => round($d['break'] / 60, 2),
+                ],
+                'paid' => false,
+            ];
+        }
 
         $out = [];
 
-        foreach ($entries->groupBy('technician_id') as $technicianId => $own) {
-            $visits = 0;
+        foreach (collect($jobs)->groupBy('technician_id') as $technicianId => $own) {
             $hours = $this->noHours();
             $issues = [];
             $stores = [];
             $byStore = [];
             $byIssue = [];
             $log = [];
-            $lastAt = null;
+            $lastVisitAt = null;
+            $lastPayDate = null;
 
-            foreach ($own as $entry) {
-                /** @var Collection<int, TicketIssue> $matching */
-                $matching = $entry->ticketIssues->filter(fn (TicketIssue $ti) => $this->matches($ti, $f))->values();
-                if ($matching->isEmpty() && ($f['store_ids'] !== [] || $f['issue_ids'] !== [])) {
-                    continue;
-                }
-
-                $d = $entry->durations();
-                $h = [
-                    'work' => round($d['work'] / 60, 2),
-                    'travel' => round($d['travel'] / 60, 2),
-                    'parts_run' => round($d['parts_run'] / 60, 2),
-                    'break' => round($d['break'] / 60, 2),
-                ];
+            foreach ($own->sortByDesc('sort') as $job) {
+                $h = $job['hours'];
                 $paidHours = round($h['work'] + $h['travel'] + $h['parts_run'], 2);
-
-                $visits++;
                 foreach ($h as $k => $v) {
                     $hours[$k] = round($hours[$k] + $v, 2);
                 }
-                $lastAt ??= $entry->start_clock;
+                if ($job['source'] === 'visit') {
+                    $lastVisitAt ??= $job['start'];
+                } else {
+                    $lastPayDate ??= $job['date'];
+                }
 
-                $visitStores = [];
-                foreach ($matching as $ti) {
-                    $issues[$ti->id] = true;
-                    $storeKey = $this->storeLabel($ti);
+                // Where: the line's store, or each of the visit's issues' stores.
+                $jobStores = $job['store'] !== null
+                    ? [$job['store'] => $job['issues']->pluck('id')->all()]
+                    : $job['issues']->groupBy(fn (TicketIssue $ti) => $this->storeLabel($ti))->map(fn ($g) => $g->pluck('id')->all())->all();
+
+                foreach ($jobStores as $storeKey => $issueIds) {
                     $stores[$storeKey] = true;
-                    $visitStores[$storeKey] = true;
+                    $byStore[$storeKey] ??= ['store' => (string) $storeKey, 'visits' => 0, 'hours' => 0.0, 'issues' => []];
+                    $byStore[$storeKey]['visits']++;
+                    $byStore[$storeKey]['hours'] = round($byStore[$storeKey]['hours'] + $paidHours, 2);
+                    foreach ($issueIds as $id) {
+                        $byStore[$storeKey]['issues'][$id] = true;
+                    }
+                }
 
+                foreach ($job['issues'] as $ti) {
+                    $issues[$ti->id] = true;
                     $issueKey = $ti->issue_id !== null ? "i:{$ti->issue_id}" : 'other';
                     $byIssue[$issueKey] ??= [
                         'issue_id' => $ti->issue_id,
@@ -367,42 +446,31 @@ class TechnicianAnalyticsService
                     $byIssue[$issueKey]['hours'] = round($byIssue[$issueKey]['hours'] + $paidHours, 2);
                 }
 
-                foreach (array_keys($visitStores) as $storeKey) {
-                    $byStore[$storeKey] ??= ['store' => $storeKey, 'visits' => 0, 'hours' => 0.0, 'issues' => []];
-                    $byStore[$storeKey]['visits']++;
-                    $byStore[$storeKey]['hours'] = round($byStore[$storeKey]['hours'] + $paidHours, 2);
-                    foreach ($matching as $ti) {
-                        if ($this->storeLabel($ti) === $storeKey) {
-                            $byStore[$storeKey]['issues'][$ti->id] = true;
-                        }
-                    }
-                }
-
                 $log[] = [
-                    'attendance_entry_id' => $entry->id,
-                    'start' => $entry->start_clock,
-                    'end' => $entry->end_clock,
-                    'stores' => array_keys($visitStores),
-                    'tickets' => $matching->map(fn (TicketIssue $ti) => [
+                    'source' => $job['source'],
+                    'attendance_entry_id' => $job['attendance_entry_id'],
+                    'daily_pay_entry_id' => $job['daily_pay_entry_id'],
+                    'date' => $job['date'],
+                    'start' => $job['start'],
+                    'end' => $job['end'],
+                    'stores' => array_map('strval', array_keys($jobStores)),
+                    'tickets' => $job['issues']->map(fn (TicketIssue $ti) => [
                         'ticket_id' => $ti->ticket_id,
                         'store_number' => $ti->ticket?->store?->store_number,
                         'title' => $ti->displayTitle(),
                     ])->values()->all(),
                     'hours' => $h,
-                    'paid' => (bool) $entry->daily_pay_payments_exists,
+                    'paid' => $job['paid'],
                 ];
             }
 
-            if ($visits === 0) {
-                continue;
-            }
-
             $out[(int) $technicianId] = [
-                'visits' => $visits,
+                'visits' => count($log),
                 'hours' => $hours,
                 'issues' => count($issues),
                 'stores' => count($stores),
-                'last_at' => $lastAt,
+                'last_visit_at' => $lastVisitAt,
+                'last_pay_date' => $lastPayDate,
                 'by_store' => collect($byStore)->map(fn (array $r) => [
                     'store' => $r['store'],
                     'visits' => $r['visits'],
