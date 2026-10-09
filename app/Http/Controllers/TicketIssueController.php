@@ -35,6 +35,16 @@ class TicketIssueController extends Controller
      */
     public function globalIndex(Ticket $ticket)
     {
+        // pizzasys checked the caller against the store named in ?store_id=
+        // (its number); the ticket must be that store's, or one store's access
+        // would read every store's tickets by id. Off-system tickets have no
+        // store to compare.
+        $named = request()->query('store_id');
+        if ($named !== null && $ticket->store_id !== null) {
+            $ticket->loadMissing('store');
+            abort_unless(in_array((string) $named, [(string) $ticket->store?->store_number, (string) $ticket->store_id], true), 404);
+        }
+
         // Ships the ticket alongside its issues, which the store-scoped twin
         // does not need to: that route already told the caller which store it
         // was, in the URL. Here there is no store segment by design, and a

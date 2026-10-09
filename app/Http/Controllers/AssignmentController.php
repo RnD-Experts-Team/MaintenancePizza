@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ChangeTechniciansRequest;
 use App\Http\Requests\StoreAssignmentRequest;
+use App\Http\Requests\TicketRecordRequest;
 use App\Models\Assignment;
 use App\Models\Store;
 use App\Models\Ticket;
@@ -32,7 +33,7 @@ class AssignmentController extends Controller
     /**
      * Flag an assignment as entered in error.
      */
-    public function mistaken(Store $store, Ticket $ticket, Assignment $assignment)
+    public function mistaken(TicketRecordRequest $request, Store $store, Ticket $ticket, Assignment $assignment)
     {
         return ['data' => $this->assignments->markAssignmentMistaken($assignment)];
     }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreDiagnosisRequest;
+use App\Http\Requests\TicketRecordRequest;
 use App\Models\Diagnosis;
 use App\Models\Store;
 use App\Models\Ticket;
@@ -25,7 +26,7 @@ class DiagnosisController extends Controller
         ], 201);
     }
 
-    public function mistaken(Store $store, Ticket $ticket, Diagnosis $diagnosis)
+    public function mistaken(TicketRecordRequest $request, Store $store, Ticket $ticket, Diagnosis $diagnosis)
     {
         return ['data' => $this->workflow->markDiagnosisMistaken($diagnosis)];
     }

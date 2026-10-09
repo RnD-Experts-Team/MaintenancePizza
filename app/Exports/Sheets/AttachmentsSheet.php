@@ -3,6 +3,7 @@
 namespace App\Exports\Sheets;
 
 use App\Models\Attachment;
+use App\Models\Note;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
@@ -18,7 +19,13 @@ class AttachmentsSheet implements FromCollection, WithHeadings, WithMapping, Wit
 
     public function collection(): Collection
     {
-        return Attachment::query()->orderBy('id')->get();
+        // Files on a private (locked) note are hidden with the note.
+        return Attachment::query()
+            ->whereNot(fn ($q) => $q
+                ->where('attachable_type', (new Note())->getMorphClass())
+                ->whereIn('attachable_id', Note::query()->where('is_private', true)->select('id')))
+            ->orderBy('id')
+            ->get();
     }
 
     /**

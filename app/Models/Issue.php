@@ -28,4 +28,15 @@ class Issue extends Model
     {
         return $this->belongsTo(User::class, 'created_by');
     }
+
+    /**
+     * What a store should try before opening a ticket for this issue: one
+     * guide per specific problem ("Won't heat", "Door won't close").
+     *
+     * @return HasMany<TroubleshootingGuide, $this>
+     */
+    public function troubleshootingGuides(): HasMany
+    {
+        return $this->hasMany(TroubleshootingGuide::class)->orderBy('title')->orderBy('id');
+    }
 }

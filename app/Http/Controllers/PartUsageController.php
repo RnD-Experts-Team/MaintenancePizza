@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StorePartUsageRequest;
+use App\Http\Requests\TicketRecordRequest;
 use App\Models\PartUsage;
 use App\Models\Store;
 use App\Models\Ticket;
@@ -30,7 +31,7 @@ class PartUsageController extends Controller
         ], 201);
     }
 
-    public function mistaken(Store $store, Ticket $ticket, PartUsage $partUsage)
+    public function mistaken(TicketRecordRequest $request, Store $store, Ticket $ticket, PartUsage $partUsage)
     {
         return ['data' => $this->workflow->markPartUsageMistaken($partUsage)];
     }

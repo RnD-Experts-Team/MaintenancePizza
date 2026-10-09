@@ -104,7 +104,7 @@ class StoragePlaceTest extends TestCase
         $this->deleteJson("/api/storage-locations/{$location->id}/place-levels/{$level->id}")
             ->assertNoContent();
 
-        $this->assertSoftDeleted('storage_place_levels', ['id' => $level->id]);
+        $this->assertDatabaseMissing('storage_place_levels', ['id' => $level->id]);
     }
 
     public function test_a_value_can_be_created_updated_and_deleted_over_http(): void
@@ -126,7 +126,7 @@ class StoragePlaceTest extends TestCase
             "/api/storage-locations/{$location->id}/place-levels/{$level->id}/values/{$created['id']}"
         )->assertNoContent();
 
-        $this->assertSoftDeleted('storage_place_values', ['id' => $created['id']]);
+        $this->assertDatabaseMissing('storage_place_values', ['id' => $created['id']]);
     }
 
     /** scopeBindings is not decoration: one location's level must not be
@@ -346,7 +346,7 @@ class StoragePlaceTest extends TestCase
             ->assertNoContent();
 
         $this->assertDatabaseCount('stock_balance_places', 0);
-        $this->assertSoftDeleted('storage_place_values', ['id' => $c->id]);
+        $this->assertDatabaseMissing('storage_place_values', ['id' => $c->id]);
         $this->assertSame('12.00', $balance->fresh()->quantity);
     }
 

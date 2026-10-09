@@ -28,6 +28,7 @@ class TicketFinalNoteController extends Controller
             $data['body'],
             $data['type'],
             (array) $request->file('files', []),
+            $request->boolean('is_private'),
         );
 
         return ['data' => $this->tickets->presentFresh($ticket)];

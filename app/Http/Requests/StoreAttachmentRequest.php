@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\ChecksTicketRecord;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -11,8 +12,12 @@ use Illuminate\Foundation\Http\FormRequest;
  */
 class StoreAttachmentRequest extends FormRequest
 {
+    use ChecksTicketRecord;
+
     public function authorize(): bool
     {
+        $this->checkTicketRecord();
+
         return true;
     }
 

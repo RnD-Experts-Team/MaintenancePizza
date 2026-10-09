@@ -25,6 +25,30 @@ class Note extends Model
 
     protected $fillable = ['type', 'body'];
 
+    /** A new or removed note is a change to whatever holds it. */
+    protected $touches = ['notable'];
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'is_private' => 'boolean',
+            'locked_at' => 'datetime',
+        ];
+    }
+
+    /**
+     * Who last locked (or unlocked) the note.
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function locker(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'locked_by');
+    }
+
     /** @return MorphTo<Model, $this> */
     public function notable(): MorphTo
     {

@@ -27,6 +27,6 @@ return new class extends Migration {
      */
     public function down(): void
     {
-        Schema::dropIfExists('hiring_outbox_events');
+        Schema::dropIfExists('maintenance_outbox_events');
     }
 };

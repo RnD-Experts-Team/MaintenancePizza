@@ -45,6 +45,10 @@ class MaintenanceEventFactory
             return $subject;
         }
 
+        // Only transform maintenance + notifications domains
+        if (str_starts_with($subject, 'maintenance.v1.')) {
+            return str_replace('maintenance.v1.', 'maintenance.testing.v1.', $subject);
+        }
 
         if (str_starts_with($subject, 'notifications.v1.')) {
             return str_replace('notifications.v1.', 'notifications.testing.v1.', $subject);

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\ChecksTicketRecord;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -12,8 +13,12 @@ use Illuminate\Foundation\Http\FormRequest;
  */
 class StoreNoteRequest extends FormRequest
 {
+    use ChecksTicketRecord;
+
     public function authorize(): bool
     {
+        $this->checkTicketRecord();
+
         return true;
     }
 
@@ -25,6 +30,9 @@ class StoreNoteRequest extends FormRequest
         return [
             'body' => ['required', 'string'],
             'type' => ['nullable', 'string', 'max:255'],
+            // Private ("locked", MOS only) note. Honoured for notes on a
+            // ticket only; see NoteController::make().
+            'is_private' => ['sometimes', 'boolean'],
             'files' => ['nullable', 'array'],
             'files.*' => ['file', 'max:10240'],
         ];

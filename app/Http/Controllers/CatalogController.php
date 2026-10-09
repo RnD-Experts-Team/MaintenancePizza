@@ -6,6 +6,10 @@ use App\Http\Requests\StoreCategoryRequest;
 use App\Http\Requests\StoreIssueRequest;
 use App\Http\Requests\StorePartRequest;
 use App\Http\Requests\StoreTechnicianRequest;
+use App\Http\Requests\UpdateCategoryRequest;
+use App\Http\Requests\UpdateIssueRequest;
+use App\Http\Requests\UpdatePartRequest;
+use App\Http\Requests\UpdateTechnicianRequest;
 use App\Models\Category;
 use App\Models\Issue;
 use App\Models\Part;
@@ -38,6 +42,11 @@ class CatalogController extends Controller
         return response()->json(['data' => $this->catalog->createIssue($request->validated())], 201);
     }
 
+    public function issuesUpdate(UpdateIssueRequest $request, Issue $issue)
+    {
+        return ['data' => $this->catalog->updateIssue($issue, $request->validated())];
+    }
+
     public function issuesDestroy(Issue $issue): Response
     {
         $this->catalog->deleteIssue($issue);
@@ -57,9 +66,19 @@ class CatalogController extends Controller
         return $this->catalog->listTechnicians($request->query('trashed'), $request->integer('per_page', 15));
     }
 
+    public function techniciansShow(Technician $technician)
+    {
+        return ['data' => $this->catalog->showTechnician($technician)];
+    }
+
     public function techniciansStore(StoreTechnicianRequest $request)
     {
         return response()->json(['data' => $this->catalog->createTechnician($request->validated())], 201);
+    }
+
+    public function techniciansUpdate(UpdateTechnicianRequest $request, Technician $technician)
+    {
+        return ['data' => $this->catalog->updateTechnician($technician, $request->validated())];
     }
 
     public function techniciansDestroy(Technician $technician): Response
@@ -86,6 +105,11 @@ class CatalogController extends Controller
         return response()->json(['data' => $this->catalog->createCategory($request->validated())], 201);
     }
 
+    public function categoriesUpdate(UpdateCategoryRequest $request, Category $category)
+    {
+        return ['data' => $this->catalog->updateCategory($category, $request->validated())];
+    }
+
     public function categoriesDestroy(Category $category): Response
     {
         $this->catalog->deleteCategory($category);
@@ -103,6 +127,11 @@ class CatalogController extends Controller
     public function partsStore(StorePartRequest $request)
     {
         return response()->json(['data' => $this->catalog->createPart($request->validated())], 201);
+    }
+
+    public function partsUpdate(UpdatePartRequest $request, Part $part)
+    {
+        return ['data' => $this->catalog->updatePart($part, $request->validated())];
     }
 
     public function partsDestroy(Part $part): Response

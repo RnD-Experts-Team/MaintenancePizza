@@ -16,7 +16,24 @@ class Technician extends Model
     /** @use HasFactory<TechnicianFactory> */
     use HasFactory, HasNotesAndAttachments, SoftDeletes;
 
-    protected $fillable = ['name', 'category_id'];
+    /**
+     * The overall rating (rating, rating_notes, call_first) is deliberately
+     * not fillable: it changes only through TechnicianAbilityService, which
+     * moves the single overall "call first" pin.
+     */
+    protected $fillable = ['name', 'phone', 'category_id', 'location', 'coverage_notes'];
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'rating' => 'integer',
+            'call_first' => 'boolean',
+            'rating_updated_at' => 'datetime',
+        ];
+    }
 
     /** @return BelongsTo<Category, $this> */
     public function category(): BelongsTo
@@ -48,5 +65,31 @@ class Technician extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * How good this technician is at each catalog issue.
+     *
+     * @return HasMany<TechnicianIssueAbility, $this>
+     */
+    public function abilities(): HasMany
+    {
+        return $this->hasMany(TechnicianIssueAbility::class);
+    }
+
+    /**
+     * The stores this technician can cover.
+     *
+     * @return BelongsToMany<Store, $this>
+     */
+    public function coverageStores(): BelongsToMany
+    {
+        return $this->belongsToMany(Store::class, 'store_technician')->withTimestamps()->orderBy('store_number');
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function ratingEditor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'rating_updated_by');
     }
 }

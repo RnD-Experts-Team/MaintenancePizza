@@ -6,6 +6,7 @@ use App\Http\Requests\StoreAttendanceEntryRequest;
 use App\Http\Requests\StoreGlobalAttendanceEntryRequest;
 use App\Enums\AttendanceEventKind;
 use App\Http\Requests\AttendanceEventRequest;
+use App\Http\Requests\TicketRecordRequest;
 use App\Models\AttendanceEntry;
 use App\Models\AttendanceEvent;
 use App\Models\Store;
@@ -140,6 +141,7 @@ class AttendanceEntryController extends Controller
     }
 
     public function eventsMistaken(
+        TicketRecordRequest $request,
         Store $store,
         Ticket $ticket,
         AttendanceEntry $attendanceEntry,
@@ -148,7 +150,7 @@ class AttendanceEntryController extends Controller
         return $this->eventsMistakenGlobal($attendanceEntry, $event);
     }
 
-    public function mistaken(Store $store, Ticket $ticket, AttendanceEntry $attendanceEntry)
+    public function mistaken(TicketRecordRequest $request, Store $store, Ticket $ticket, AttendanceEntry $attendanceEntry)
     {
         return ['data' => $this->workflow->markAttendanceMistaken($attendanceEntry)];
     }

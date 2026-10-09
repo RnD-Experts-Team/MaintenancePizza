@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Enums\AttendanceEventKind;
+use App\Http\Requests\Concerns\ChecksTicketRecord;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -21,8 +22,12 @@ use Illuminate\Validation\Rule;
  */
 class AttendanceEventRequest extends FormRequest
 {
+    use ChecksTicketRecord;
+
     public function authorize(): bool
     {
+        $this->checkTicketRecord();
+
         return true;
     }
 

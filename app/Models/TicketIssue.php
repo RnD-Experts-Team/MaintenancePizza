@@ -30,6 +30,9 @@ class TicketIssue extends Model
         'parent_id',
     ];
 
+    /** Any change to an issue is a change to its ticket. */
+    protected $touches = ['ticket'];
+
     /**
      * @return array<string, string>
      */
@@ -39,6 +42,8 @@ class TicketIssue extends Model
             'priority' => Priority::class,
             'assigned_priority' => Priority::class,
             'status' => IssueStatus::class,
+            'troubleshooting_confirmed_at' => 'datetime',
+            'troubleshooting_snapshot' => 'array',
         ];
     }
 

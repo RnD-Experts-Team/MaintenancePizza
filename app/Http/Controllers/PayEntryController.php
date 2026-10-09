@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StorePayEntryRequest;
+use App\Http\Requests\TicketRecordRequest;
 use App\Models\PayEntry;
 use App\Models\Store;
 use App\Models\Ticket;
@@ -17,7 +18,7 @@ class PayEntryController extends Controller
         return response()->json(['data' => $this->workflow->createPayEntry($request->validated())], 201);
     }
 
-    public function mistaken(Store $store, Ticket $ticket, PayEntry $payEntry)
+    public function mistaken(TicketRecordRequest $request, Store $store, Ticket $ticket, PayEntry $payEntry)
     {
         return ['data' => $this->workflow->markPayEntryMistaken($payEntry)];
     }

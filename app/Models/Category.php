@@ -13,7 +13,7 @@ class Category extends Model
     /** @use HasFactory<CategoryFactory> */
     use HasFactory, HasNotesAndAttachments;
 
-    protected $fillable = ['name'];
+    protected $fillable = ['name', 'description'];
 
     /**
      * Technicians in this category. Deleting the category nulls their
