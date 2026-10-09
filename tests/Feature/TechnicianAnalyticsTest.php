@@ -178,18 +178,39 @@ class TechnicianAnalyticsTest extends TestCase
             ->assertJsonPath('data.paid_by_kind.parts_reimbursed', '10.00');
     }
 
-    public function test_work_counts_visits_in_the_range_and_never_mistaken_ones(): void
+    public function test_work_is_the_pay_sheet_lines_plus_visits_not_paid_yet(): void
     {
         $data = $this->getJson($this->url("technicians/{$this->ahmad->id}/analytics"), $this->headers())
             ->assertOk()->json('data');
 
-        $this->assertSame(1, $data['kpis']['visits']);
+        // Oct 5's two pay lines (A and B) and the unpaid Oct 5 visit at A. The
+        // mistaken visit and the Oct 6 visit do not count.
+        $this->assertSame(3, $data['kpis']['visits']);
+        $this->assertEquals(4.0, $data['kpis']['hours']['work'], '2 h on the sheet + 2 h clocked');
+        $this->assertSame(2, $data['kpis']['stores_served']);
+        $this->assertSame(2, $data['kpis']['issues_worked']);
+        $this->assertSame('2026-10-05', $data['kpis']['last_pay_date']);
+        $this->assertNotNull($data['kpis']['last_worked_at']);
+
+        $this->assertSame(['title' => 'Oven', 'visits' => 2], array_intersect_key($data['work_by_issue'][0], ['title' => 0, 'visits' => 0]));
+        $this->assertSame(['store' => '03795-00001', 'visits' => 2], array_intersect_key($data['work_by_store'][0], ['store' => 0, 'visits' => 0]));
+
+        $this->assertCount(3, $data['work_log']);
+        // Newest first; a pay-sheet day sorts at its end, after a visit that day.
+        $this->assertSame(['pay_sheet', 'pay_sheet', 'visit'], array_column($data['work_log'], 'source'));
+        $this->assertSame([true, true, false], array_column($data['work_log'], 'paid'));
+    }
+
+    public function test_a_visit_a_pay_sheet_claimed_is_counted_once_through_its_line(): void
+    {
+        $visit = AttendanceEntry::query()->where('mistaken', false)->where('start_clock', '2026-10-05 14:00:00')->sole();
+        $line = DailyPayLine::query()->where('store_id', $this->a->id)->whereHas('entry', fn ($q) => $q->whereDate('date', '2026-10-05'))->sole();
+        $visit->dailyPayPayments()->attach($line->daily_pay_payment_id, ['daily_pay_line_id' => $line->id, 'work_minutes' => 120]);
+
+        $data = $this->getJson($this->url("technicians/{$this->ahmad->id}/analytics"), $this->headers())->assertOk()->json('data');
+
+        $this->assertSame(2, $data['kpis']['visits']);
         $this->assertEquals(2.0, $data['kpis']['hours']['work']);
-        $this->assertSame(1, $data['kpis']['stores_served']);
-        $this->assertSame('Oven', $data['work_by_issue'][0]['title']);
-        $this->assertSame('03795-00001', $data['work_by_store'][0]['store']);
-        $this->assertCount(1, $data['work_log']);
-        $this->assertFalse($data['work_log'][0]['paid']);
     }
 
     public function test_the_overview_lists_every_technician(): void
@@ -198,7 +219,8 @@ class TechnicianAnalyticsTest extends TestCase
 
         $rows = collect($data['technicians'])->keyBy('name');
         $this->assertSame('160.00', $rows['Ahmad']['paid']);
-        $this->assertSame(1, $rows['Ahmad']['visits']);
+        $this->assertSame(3, $rows['Ahmad']['visits']);
+        $this->assertSame(2, $rows['Ahmad']['stores_served']);
         $this->assertSame('0.00', $rows['Ben']['paid']);
         $this->assertSame(0, $rows['Ben']['visits']);
         $this->assertSame('160.00', $data['totals']['paid']);
