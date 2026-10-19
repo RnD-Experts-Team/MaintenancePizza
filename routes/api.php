@@ -33,7 +33,12 @@ use App\Http\Controllers\TroubleshootingController;
 use App\Http\Controllers\WarrantyController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('auth.token.store')->group(function () {
+/*
+| Rate limits (AppServiceProvider): `throttle:api` covers every route, ahead of
+| the pizzasys call. Routes that upload, export or run analytics add their own
+| tier on top.
+*/
+Route::middleware(['throttle:api', 'auth.token.store'])->group(function () {
     /*
     |--------------------------------------------------------------------------
     | Controlled reference catalogs (global, not store-scoped)
@@ -52,9 +57,9 @@ Route::middleware('auth.token.store')->group(function () {
     Route::post('issues/{issue}/troubleshooting-guides', [TroubleshootingController::class, 'store'])->name('issues.troubleshooting.store');
     Route::put('troubleshooting-guides/{guide}', [TroubleshootingController::class, 'update'])->name('troubleshooting.update');
     Route::delete('troubleshooting-guides/{guide}', [TroubleshootingController::class, 'destroy'])->name('troubleshooting.destroy');
-    Route::post('troubleshooting-guides/{guide}/attachments', [TroubleshootingController::class, 'attachmentsStore'])->name('troubleshooting.attachments.store');
+    Route::post('troubleshooting-guides/{guide}/attachments', [TroubleshootingController::class, 'attachmentsStore'])->middleware('throttle:api-upload')->name('troubleshooting.attachments.store');
     Route::delete('troubleshooting-guides/{guide}/attachments/{attachment}', [TroubleshootingController::class, 'attachmentsDestroy'])->name('troubleshooting.attachments.destroy');
-    Route::post('troubleshooting-steps/{step}/attachments', [TroubleshootingController::class, 'stepAttachmentsStore'])->name('troubleshooting.steps.attachments.store');
+    Route::post('troubleshooting-steps/{step}/attachments', [TroubleshootingController::class, 'stepAttachmentsStore'])->middleware('throttle:api-upload')->name('troubleshooting.steps.attachments.store');
     Route::delete('troubleshooting-steps/{step}/attachments/{attachment}', [TroubleshootingController::class, 'stepAttachmentsDestroy'])->name('troubleshooting.steps.attachments.destroy');
 
     Route::get('technicians', [CatalogController::class, 'techniciansIndex'])->name('technicians.index');
@@ -93,14 +98,14 @@ Route::middleware('auth.token.store')->group(function () {
     | (one note + optional files per note call; one or many files per upload).
     |--------------------------------------------------------------------------
     */
-    Route::post('issues/{issue}/notes', [NoteController::class, 'catalogIssue'])->name('issues.notes');
-    Route::post('issues/{issue}/attachments', [AttachmentController::class, 'catalogIssue'])->name('issues.attachments');
-    Route::post('technicians/{technician}/notes', [NoteController::class, 'technician'])->name('technicians.notes');
-    Route::post('technicians/{technician}/attachments', [AttachmentController::class, 'technician'])->name('technicians.attachments');
-    Route::post('categories/{category}/notes', [NoteController::class, 'category'])->name('categories.notes');
-    Route::post('categories/{category}/attachments', [AttachmentController::class, 'category'])->name('categories.attachments');
-    Route::post('parts/{part}/notes', [NoteController::class, 'part'])->name('parts.notes');
-    Route::post('parts/{part}/attachments', [AttachmentController::class, 'part'])->name('parts.attachments');
+    Route::post('issues/{issue}/notes', [NoteController::class, 'catalogIssue'])->middleware('throttle:api-upload')->name('issues.notes');
+    Route::post('issues/{issue}/attachments', [AttachmentController::class, 'catalogIssue'])->middleware('throttle:api-upload')->name('issues.attachments');
+    Route::post('technicians/{technician}/notes', [NoteController::class, 'technician'])->middleware('throttle:api-upload')->name('technicians.notes');
+    Route::post('technicians/{technician}/attachments', [AttachmentController::class, 'technician'])->middleware('throttle:api-upload')->name('technicians.attachments');
+    Route::post('categories/{category}/notes', [NoteController::class, 'category'])->middleware('throttle:api-upload')->name('categories.notes');
+    Route::post('categories/{category}/attachments', [AttachmentController::class, 'category'])->middleware('throttle:api-upload')->name('categories.attachments');
+    Route::post('parts/{part}/notes', [NoteController::class, 'part'])->middleware('throttle:api-upload')->name('parts.notes');
+    Route::post('parts/{part}/attachments', [AttachmentController::class, 'part'])->middleware('throttle:api-upload')->name('parts.attachments');
 
     /*
     |--------------------------------------------------------------------------
@@ -139,15 +144,15 @@ Route::middleware('auth.token.store')->group(function () {
         Route::patch('{placeLevel}/values/{placeValue}', [StorageLocationController::class, 'placeValuesUpdate'])->name('storage-locations.place-values.update');
         Route::delete('{placeLevel}/values/{placeValue}', [StorageLocationController::class, 'placeValuesDestroy'])->name('storage-locations.place-values.destroy');
     });
-    Route::post('storage-locations/{storageLocation}/notes', [NoteController::class, 'storageLocation'])->name('storage-locations.notes');
-    Route::post('storage-locations/{storageLocation}/attachments', [AttachmentController::class, 'storageLocation'])->name('storage-locations.attachments');
+    Route::post('storage-locations/{storageLocation}/notes', [NoteController::class, 'storageLocation'])->middleware('throttle:api-upload')->name('storage-locations.notes');
+    Route::post('storage-locations/{storageLocation}/attachments', [AttachmentController::class, 'storageLocation'])->middleware('throttle:api-upload')->name('storage-locations.attachments');
 
     Route::get('stock-movements', [StockMovementController::class, 'index'])->name('stock-movements.index');
     Route::post('stock-movements', [StockMovementController::class, 'store'])->name('stock-movements.store');
     Route::get('stock-movements/{stockMovement}', [StockMovementController::class, 'show'])->name('stock-movements.show');
     Route::post('stock-movements/{stockMovement}/mistaken', [StockMovementController::class, 'mistaken'])->name('stock-movements.mistaken');
-    Route::post('stock-movements/{stockMovement}/notes', [NoteController::class, 'stockMovement'])->name('stock-movements.notes');
-    Route::post('stock-movements/{stockMovement}/attachments', [AttachmentController::class, 'stockMovement'])->name('stock-movements.attachments');
+    Route::post('stock-movements/{stockMovement}/notes', [NoteController::class, 'stockMovement'])->middleware('throttle:api-upload')->name('stock-movements.notes');
+    Route::post('stock-movements/{stockMovement}/attachments', [AttachmentController::class, 'stockMovement'])->middleware('throttle:api-upload')->name('stock-movements.attachments');
 
     Route::get('stock-balances', [StockBalanceController::class, 'index'])->name('stock-balances.index');
     // Where a part sits inside its location. The complete address each time --
@@ -161,7 +166,7 @@ Route::middleware('auth.token.store')->group(function () {
     | route below stays for the ordinary single-ticket case.
     |--------------------------------------------------------------------------
     */
-    Route::post('attendance-entries', [AttendanceEntryController::class, 'storeGlobal'])->name('attendance.store-global');
+    Route::post('attendance-entries', [AttendanceEntryController::class, 'storeGlobal'])->middleware('throttle:api-upload')->name('attendance.store-global');
 
     /*
      | The event ledger, unscoped for the same reason creation is: a visit
@@ -193,7 +198,7 @@ Route::middleware('auth.token.store')->group(function () {
     |--------------------------------------------------------------------------
     */
     Route::get('tickets', [TicketController::class, 'globalIndex'])->name('tickets.global');
-    Route::get('tickets/analytics', [TicketController::class, 'globalAnalytics'])->name('tickets.analytics');
+    Route::get('tickets/analytics', [TicketController::class, 'globalAnalytics'])->middleware('throttle:api-heavy')->name('tickets.analytics');
     Route::post('tickets', [TicketController::class, 'storeOther'])->name('tickets.store-other');
     // Unscoped read. Declared AFTER tickets/analytics so the literal segment
     // still wins over {ticket}. The store-scoped twin stays the canonical route;
@@ -204,7 +209,7 @@ Route::middleware('auth.token.store')->group(function () {
     Route::get('maintenance-analytics/{section}', MaintenanceAnalyticsController::class)
         ->whereIn('section', ['summary', 'activity', 'watchlist'])
         ->name('maintenance-analytics.show');
-    Route::get('export/excel', ExportController::class)->name('export.excel')->withoutMiddleware('auth.token.store')->middleware('auth.secret.key');
+    Route::get('export/excel', ExportController::class)->name('export.excel')->withoutMiddleware('auth.token.store')->middleware(['throttle:service-secret', 'throttle:api-export', 'auth.secret.key']);
 
     /*
     |--------------------------------------------------------------------------
@@ -215,7 +220,7 @@ Route::middleware('auth.token.store')->group(function () {
     */
     Route::prefix('stores/{store}')->scopeBindings()->group(function () {
         Route::get('tickets', [TicketController::class, 'index'])->name('stores.tickets.index');
-        Route::get('tickets/analytics', [TicketController::class, 'analytics'])->name('stores.tickets.analytics');
+        Route::get('tickets/analytics', [TicketController::class, 'analytics'])->middleware('throttle:api-heavy')->name('stores.tickets.analytics');
         Route::post('tickets', [TicketController::class, 'store'])->name('stores.tickets.store');
         Route::delete('tickets/{ticket}', [TicketController::class, 'destroy'])->name('stores.tickets.destroy');
         Route::post('tickets/{ticket}/restore', [TicketController::class, 'restore'])->withTrashed()->name('stores.tickets.restore');
@@ -224,15 +229,15 @@ Route::middleware('auth.token.store')->group(function () {
         Route::post('tickets/{ticket}/final-note', TicketFinalNoteController::class)->name('stores.tickets.final-note');
 
         // Generic notes & attachments on the ticket and on the store itself.
-        Route::post('tickets/{ticket}/notes', [NoteController::class, 'ticket'])->name('stores.tickets.notes');
+        Route::post('tickets/{ticket}/notes', [NoteController::class, 'ticket'])->middleware('throttle:api-upload')->name('stores.tickets.notes');
         // Every note on the ticket, its issues and records: the normal notes,
         // or all of them (private ones too). The auth rules decide who gets
         // which; the screen asks for /all when they allow it.
         Route::get('tickets/{ticket}/notes', [TicketNoteController::class, 'index'])->name('stores.tickets.notes.index');
         Route::get('tickets/{ticket}/notes/all', [TicketNoteController::class, 'all'])->name('stores.tickets.notes.all');
-        Route::post('tickets/{ticket}/attachments', [AttachmentController::class, 'ticket'])->name('stores.tickets.attachments');
-        Route::post('notes', [NoteController::class, 'store'])->name('stores.notes');
-        Route::post('attachments', [AttachmentController::class, 'store'])->name('stores.attachments');
+        Route::post('tickets/{ticket}/attachments', [AttachmentController::class, 'ticket'])->middleware('throttle:api-upload')->name('stores.tickets.attachments');
+        Route::post('notes', [NoteController::class, 'store'])->middleware('throttle:api-upload')->name('stores.notes');
+        Route::post('attachments', [AttachmentController::class, 'store'])->middleware('throttle:api-upload')->name('stores.attachments');
 
         Route::prefix('tickets/{ticket}')->group(function () {
             // The "one look" lifecycle views.
@@ -248,13 +253,13 @@ Route::middleware('auth.token.store')->group(function () {
             Route::post('issues/{ticketIssue}/assigned-priority', [TicketIssueController::class, 'assignPriority'])->name('tickets.issues.assigned-priority');
 
             // Generic notes & attachments on an individual issue.
-            Route::post('issues/{ticketIssue}/notes', [NoteController::class, 'ticketIssue'])->name('tickets.issues.notes');
-            Route::post('issues/{ticketIssue}/attachments', [AttachmentController::class, 'ticketIssue'])->name('tickets.issues.attachments');
+            Route::post('issues/{ticketIssue}/notes', [NoteController::class, 'ticketIssue'])->middleware('throttle:api-upload')->name('tickets.issues.notes');
+            Route::post('issues/{ticketIssue}/attachments', [AttachmentController::class, 'ticketIssue'])->middleware('throttle:api-upload')->name('tickets.issues.attachments');
 
             // Creating workflow records (each targets one-or-many issues).
             Route::post('assignments', [AssignmentController::class, 'store'])->name('tickets.assignments.store');
             Route::post('diagnoses', [DiagnosisController::class, 'store'])->name('tickets.diagnoses.store');
-            Route::post('attendance-entries', [AttendanceEntryController::class, 'store'])->name('tickets.attendance.store');
+            Route::post('attendance-entries', [AttendanceEntryController::class, 'store'])->middleware('throttle:api-upload')->name('tickets.attendance.store');
             Route::post('part-usages', [PartUsageController::class, 'store'])->name('tickets.part-usages.store');
             Route::post('pay-entries', [PayEntryController::class, 'store'])->name('tickets.pay-entries.store');
             Route::post('warranties', [WarrantyController::class, 'store'])->name('tickets.warranties.store');
@@ -325,17 +330,17 @@ Route::middleware('auth.token.store')->group(function () {
         Route::patch('notes/{note}/privacy', [TicketNoteController::class, 'privacy'])->name('stores.tickets.notes.privacy');
 
         // Notes & attachments for each leaf workflow record (any number).
-        Route::post('diagnoses/{diagnosis}/notes', [NoteController::class, 'diagnosis'])->name('tickets.diagnoses.notes');
-        Route::post('diagnoses/{diagnosis}/attachments', [AttachmentController::class, 'diagnosis'])->name('tickets.diagnoses.attachments');
-        Route::post('attendance-entries/{attendanceEntry}/notes', [NoteController::class, 'attendance'])->name('tickets.attendance.notes');
-        Route::post('attendance-entries/{attendanceEntry}/attachments', [AttachmentController::class, 'attendance'])->name('tickets.attendance.attachments');
-        Route::post('part-usages/{partUsage}/notes', [NoteController::class, 'partUsage'])->name('tickets.part-usages.notes');
-        Route::post('part-usages/{partUsage}/attachments', [AttachmentController::class, 'partUsage'])->name('tickets.part-usages.attachments');
-        Route::post('pay-entries/{payEntry}/notes', [NoteController::class, 'payEntry'])->name('tickets.pay-entries.notes');
-        Route::post('pay-entries/{payEntry}/attachments', [AttachmentController::class, 'payEntry'])->name('tickets.pay-entries.attachments');
-        Route::post('warranties/{warranty}/notes', [NoteController::class, 'warranty'])->name('tickets.warranties.notes');
-        Route::post('warranties/{warranty}/attachments', [AttachmentController::class, 'warranty'])->name('tickets.warranties.attachments');
-        Route::post('assignments/{assignment}/notes', [NoteController::class, 'assignment'])->name('tickets.assignments.notes');
-        Route::post('assignments/{assignment}/attachments', [AttachmentController::class, 'assignment'])->name('tickets.assignments.attachments');
+        Route::post('diagnoses/{diagnosis}/notes', [NoteController::class, 'diagnosis'])->middleware('throttle:api-upload')->name('tickets.diagnoses.notes');
+        Route::post('diagnoses/{diagnosis}/attachments', [AttachmentController::class, 'diagnosis'])->middleware('throttle:api-upload')->name('tickets.diagnoses.attachments');
+        Route::post('attendance-entries/{attendanceEntry}/notes', [NoteController::class, 'attendance'])->middleware('throttle:api-upload')->name('tickets.attendance.notes');
+        Route::post('attendance-entries/{attendanceEntry}/attachments', [AttachmentController::class, 'attendance'])->middleware('throttle:api-upload')->name('tickets.attendance.attachments');
+        Route::post('part-usages/{partUsage}/notes', [NoteController::class, 'partUsage'])->middleware('throttle:api-upload')->name('tickets.part-usages.notes');
+        Route::post('part-usages/{partUsage}/attachments', [AttachmentController::class, 'partUsage'])->middleware('throttle:api-upload')->name('tickets.part-usages.attachments');
+        Route::post('pay-entries/{payEntry}/notes', [NoteController::class, 'payEntry'])->middleware('throttle:api-upload')->name('tickets.pay-entries.notes');
+        Route::post('pay-entries/{payEntry}/attachments', [AttachmentController::class, 'payEntry'])->middleware('throttle:api-upload')->name('tickets.pay-entries.attachments');
+        Route::post('warranties/{warranty}/notes', [NoteController::class, 'warranty'])->middleware('throttle:api-upload')->name('tickets.warranties.notes');
+        Route::post('warranties/{warranty}/attachments', [AttachmentController::class, 'warranty'])->middleware('throttle:api-upload')->name('tickets.warranties.attachments');
+        Route::post('assignments/{assignment}/notes', [NoteController::class, 'assignment'])->middleware('throttle:api-upload')->name('tickets.assignments.notes');
+        Route::post('assignments/{assignment}/attachments', [AttachmentController::class, 'assignment'])->middleware('throttle:api-upload')->name('tickets.assignments.attachments');
     });
 });
