@@ -197,6 +197,10 @@ Route::middleware(['throttle:api', 'auth.token.store'])->group(function () {
     | Tickets — global index + Excel export
     |--------------------------------------------------------------------------
     */
+    // Unified calendar feed. Stores are in the query (stores=a,b): the pizzasys
+    // rule must read store_id_sources.query ["stores"] with policy "all".
+    Route::get('calendar/feed', \App\Http\Controllers\CalendarFeedController::class)->name('calendar.feed');
+
     Route::get('tickets', [TicketController::class, 'globalIndex'])->name('tickets.global');
     Route::get('tickets/analytics', [TicketController::class, 'globalAnalytics'])->middleware('throttle:api-heavy')->name('tickets.analytics');
     Route::post('tickets', [TicketController::class, 'storeOther'])->name('tickets.store-other');
