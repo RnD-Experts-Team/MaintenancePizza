@@ -298,8 +298,8 @@ class MaintenanceAnalyticsService
     // ------------------------------------------------------------------ Pieces
 
     /**
-     * Tickets with at least one issue still open (not complete, cancelled or
-     * deferred), not archived.
+     * Tickets with at least one issue still open (not closed or cancelled), not
+     * archived.
      *
      * @param  array<int, int>  $storeIds
      * @return Builder<Ticket>
@@ -404,7 +404,7 @@ class MaintenanceAnalyticsService
     }
 
     /**
-     * Issues that reached Complete inside the range, with how long each took
+     * Issues that reached Closed inside the range, with how long each took
      * from being reported. First completion per issue in the range.
      *
      * @param  array<int, int>  $storeIds
@@ -418,7 +418,7 @@ class MaintenanceAnalyticsService
             ->leftJoin('issues', 'issues.id', '=', 'ticket_issues.issue_id')
             ->whereIn('tickets.store_id', $storeIds)
             ->whereNull('tickets.deleted_at')
-            ->where('issue_status_changes.to_status', IssueStatus::Complete->value)
+            ->where('issue_status_changes.to_status', IssueStatus::Closed->value)
             ->where('issue_status_changes.created_at', '>=', $from)
             ->where('issue_status_changes.created_at', '<', $to)
             ->orderBy('issue_status_changes.created_at')

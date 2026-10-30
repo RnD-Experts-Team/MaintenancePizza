@@ -18,7 +18,9 @@ class AssignmentFactory extends Factory
     public function definition(): array
     {
         return [
-            //
+            'kind' => 'work',
+            'assigned_date' => fake()->dateTimeBetween('-1 month', '+1 month')->format('Y-m-d'),
+            'assigned_hour' => null,
         ];
     }
 }

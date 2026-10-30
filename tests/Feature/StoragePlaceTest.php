@@ -66,7 +66,7 @@ class StoragePlaceTest extends TestCase
         app(StockService::class)->record(
             [
                 'moved_at' => '2026-01-01 09:00:00',
-                'type' => StockMovementType::Purchase,
+                'type' => StockMovementType::Bought,
                 'storage_location_id' => $location->id,
             ],
             [[

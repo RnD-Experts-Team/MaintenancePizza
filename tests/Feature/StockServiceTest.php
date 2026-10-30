@@ -38,7 +38,7 @@ class StockServiceTest extends TestCase
     {
         return $this->stock->record([
             'moved_at' => now(),
-            'type' => StockMovementType::Purchase,
+            'type' => StockMovementType::Bought,
             'storage_location_id' => $location->id,
         ], [[
             'part_id' => $this->part->id,
@@ -86,7 +86,7 @@ class StockServiceTest extends TestCase
 
         $this->stock->record([
             'moved_at' => now(),
-            'type' => StockMovementType::Draw,
+            'type' => StockMovementType::Used,
             'storage_location_id' => $this->locationA->id,
         ], [[
             'part_id' => $this->part->id,
@@ -107,7 +107,7 @@ class StockServiceTest extends TestCase
         try {
             $this->stock->record([
                 'moved_at' => now(),
-                'type' => StockMovementType::Draw,
+                'type' => StockMovementType::Used,
                 'storage_location_id' => $this->locationA->id,
             ], [[
                 'part_id' => $this->part->id,
@@ -134,7 +134,7 @@ class StockServiceTest extends TestCase
 
         $this->stock->record([
             'moved_at' => now(),
-            'type' => StockMovementType::Draw,
+            'type' => StockMovementType::Used,
             'storage_location_id' => $this->locationA->id,
         ], [[
             'part_id' => $this->part->id,
@@ -165,7 +165,7 @@ class StockServiceTest extends TestCase
 
         $this->stock->record([
             'moved_at' => now(),
-            'type' => StockMovementType::TransferOut,
+            'type' => StockMovementType::Moved,
         ], [
             ['part_id' => $this->part->id, 'storage_location_id' => $this->locationA->id, 'quantity' => '4', 'direction' => -1],
             ['part_id' => $this->part->id, 'storage_location_id' => $this->locationB->id, 'quantity' => '4', 'direction' => 1],
@@ -182,7 +182,7 @@ class StockServiceTest extends TestCase
 
         $draw = $this->stock->record([
             'moved_at' => now(),
-            'type' => StockMovementType::Draw,
+            'type' => StockMovementType::Used,
             'storage_location_id' => $this->locationA->id,
         ], [[
             'part_id' => $this->part->id,
@@ -194,7 +194,7 @@ class StockServiceTest extends TestCase
         $reversal = $this->stock->reverse($draw);
 
         $this->assertSame('10.00', $this->balance($this->locationA));
-        $this->assertSame(StockMovementType::Reversal, $reversal->type);
+        $this->assertSame(StockMovementType::Undone, $reversal->type);
         $this->assertSame($draw->id, $reversal->reverses_stock_movement_id);
 
         // The original is still there, flagged but not edited.
@@ -212,7 +212,7 @@ class StockServiceTest extends TestCase
     {
         $return = $this->stock->record([
             'moved_at' => now(),
-            'type' => StockMovementType::Return,
+            'type' => StockMovementType::Returned,
             'storage_location_id' => $this->locationA->id,
         ], [[
             'part_id' => $this->part->id,
@@ -224,7 +224,7 @@ class StockServiceTest extends TestCase
         // Everything that came in has since been consumed elsewhere.
         $this->stock->record([
             'moved_at' => now(),
-            'type' => StockMovementType::Draw,
+            'type' => StockMovementType::Used,
             'storage_location_id' => $this->locationA->id,
         ], [[
             'part_id' => $this->part->id,
@@ -268,7 +268,7 @@ class StockServiceTest extends TestCase
 
         $this->stock->record([
             'moved_at' => now(),
-            'type' => StockMovementType::Adjustment,
+            'type' => StockMovementType::StockCount,
         ], [
             ['part_id' => $this->part->id, 'storage_location_id' => $this->locationA->id, 'quantity' => '3', 'direction' => -1],
             ['part_id' => $this->part->id, 'storage_location_id' => $this->locationA->id, 'quantity' => '1', 'direction' => 1],
@@ -286,7 +286,7 @@ class StockServiceTest extends TestCase
 
         $this->stock->record([
             'moved_at' => now(),
-            'type' => StockMovementType::Draw,
+            'type' => StockMovementType::Used,
             'storage_location_id' => $this->locationA->id,
         ], [[
             'part_id' => $this->part->id,

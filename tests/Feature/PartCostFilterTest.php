@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\Part;
-use App\Models\PartUsage;
+use App\Models\Payment;
+use App\Models\PaymentLine;
+use App\Models\Technician;
 use App\Models\Ticket;
 use App\Models\TicketIssue;
 use App\Services\TicketService;
@@ -12,12 +14,10 @@ use Illuminate\Http\Request;
 use Tests\TestCase;
 
 /**
- * Characterization tests for the two part-cost ticket filters in
- * TicketService::applyFilters(). One PartUsage can attach to MANY ticket
- * issues, so a naive SUM double-counts a shared part. These tests pin the
- * existing behaviour down before the part-usage schema grows quantity /
- * unit_cost / returns, so that `cost` keeping its "gross total outlay"
- * meaning is a verified fact rather than an assertion.
+ * The two part-cost ticket filters in TicketService::applyFilters(), on v2
+ * payments: what counts is the parts payment lines linked to the issues, on
+ * payments not marked mistaken. One line can be linked to MANY issues, so a
+ * naive SUM would double-count it.
  */
 class PartCostFilterTest extends TestCase
 {
@@ -32,47 +32,65 @@ class PartCostFilterTest extends TestCase
     }
 
     /**
-     * A part shared across two issues of the same ticket must count ONCE
-     * toward the whole-ticket total. This is what the DISTINCT pu.id
-     * subquery in part_cost_total_gt exists for.
+     * @param  array<int, TicketIssue>  $issues
      */
-    public function test_shared_part_usage_counts_once_toward_the_ticket_total(): void
+    private function partsLine(array $issues, string $amount, bool $mistaken = false, string $type = 'parts'): PaymentLine
+    {
+        $payment = Payment::query()->create([
+            'paid_at' => '2026-10-01',
+            'technician_id' => Technician::factory()->create()->id,
+            'total' => $amount,
+            'mistaken' => $mistaken,
+        ]);
+
+        $line = $payment->lines()->create([
+            'type' => $type,
+            'other_store' => 'Somewhere',
+            'amount' => $amount,
+            'part_id' => $type === 'parts' ? Part::factory()->create()->id : null,
+            'quantity' => $type === 'parts' ? 1 : null,
+            'unit_cost' => $type === 'parts' ? $amount : null,
+        ]);
+        $line->ticketIssues()->attach(array_map(fn (TicketIssue $i) => $i->id, $issues));
+
+        return $line;
+    }
+
+    /**
+     * A line shared across two issues of the same ticket must count ONCE
+     * toward the whole-ticket total.
+     */
+    public function test_a_shared_line_counts_once_toward_the_ticket_total(): void
     {
         $ticket = Ticket::factory()->create();
         $issueA = TicketIssue::factory()->for($ticket)->create();
         $issueB = TicketIssue::factory()->for($ticket)->create();
 
-        $usage = PartUsage::factory()->create(['part_id' => Part::factory(), 'cost' => 100.00]);
-        $usage->ticketIssues()->attach([$issueA->id, $issueB->id]);
+        $this->partsLine([$issueA, $issueB], '100.00');
 
-        // Counted once => 100, so a > 150 threshold must exclude the ticket.
         $this->assertNotContains($ticket->id, $this->filter(['part_cost_total_gt' => 150]));
-
-        // ...and a > 50 threshold must include it.
         $this->assertContains($ticket->id, $this->filter(['part_cost_total_gt' => 50]));
     }
 
-    public function test_distinct_part_usages_on_one_ticket_are_summed(): void
+    public function test_distinct_lines_on_one_ticket_are_summed(): void
     {
         $ticket = Ticket::factory()->create();
         $issue = TicketIssue::factory()->for($ticket)->create();
 
-        foreach ([60.00, 60.00] as $cost) {
-            $usage = PartUsage::factory()->create(['part_id' => Part::factory(), 'cost' => $cost]);
-            $usage->ticketIssues()->attach($issue->id);
-        }
+        $this->partsLine([$issue], '60.00');
+        $this->partsLine([$issue], '60.00');
 
         $this->assertContains($ticket->id, $this->filter(['part_cost_total_gt' => 100]));
         $this->assertNotContains($ticket->id, $this->filter(['part_cost_total_gt' => 120]));
     }
 
-    public function test_mistaken_part_usages_are_excluded_from_both_filters(): void
+    public function test_mistaken_payments_and_other_line_types_are_left_out(): void
     {
         $ticket = Ticket::factory()->create();
         $issue = TicketIssue::factory()->for($ticket)->create();
 
-        $usage = PartUsage::factory()->mistaken()->create(['part_id' => Part::factory(), 'cost' => 500.00]);
-        $usage->ticketIssues()->attach($issue->id);
+        $this->partsLine([$issue], '500.00', mistaken: true);
+        $this->partsLine([$issue], '500.00', type: 'fixed');
 
         $this->assertNotContains($ticket->id, $this->filter(['part_cost_total_gt' => 10]));
         $this->assertNotContains($ticket->id, $this->filter(['part_cost_single_gt' => 10]));
@@ -80,7 +98,7 @@ class PartCostFilterTest extends TestCase
 
     /**
      * part_cost_single_gt is per-issue: it matches when at least ONE issue's
-     * own summed cost exceeds the threshold, not the ticket's total.
+     * own parts spend exceeds the threshold, not the ticket's total.
      */
     public function test_single_issue_filter_is_scoped_to_one_issue(): void
     {
@@ -88,12 +106,9 @@ class PartCostFilterTest extends TestCase
         $issueA = TicketIssue::factory()->for($ticket)->create();
         $issueB = TicketIssue::factory()->for($ticket)->create();
 
-        foreach ([$issueA, $issueB] as $issue) {
-            $usage = PartUsage::factory()->create(['part_id' => Part::factory(), 'cost' => 60.00]);
-            $usage->ticketIssues()->attach($issue->id);
-        }
+        $this->partsLine([$issueA], '60.00');
+        $this->partsLine([$issueB], '60.00');
 
-        // Ticket total is 120, but no single issue exceeds 100.
         $this->assertNotContains($ticket->id, $this->filter(['part_cost_single_gt' => 100]));
         $this->assertContains($ticket->id, $this->filter(['part_cost_total_gt' => 100]));
     }

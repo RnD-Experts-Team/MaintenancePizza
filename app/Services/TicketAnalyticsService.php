@@ -36,7 +36,7 @@ class TicketAnalyticsService
                 'time_to_complete_or_cancelled' => $this->averageDuration(
                     $request,
                     $store,
-                    [IssueStatus::Complete->value, IssueStatus::Cancelled->value]
+                    [IssueStatus::Closed->value, IssueStatus::Cancelled->value]
                 ),
             ],
             'avg_tickets_per_week' => $this->weeklyAverage($request, $store),
@@ -59,10 +59,10 @@ class TicketAnalyticsService
     }
 
     /**
-     * Issue counts per IssueStatus (all 7 values always present, zero-filled)
+     * Issue counts per IssueStatus (all 9 values always present, zero-filled)
      * plus a total. total = "how many issues" match the active filters
      * (i.e. "new" when scoped via created_from/changed_from etc.);
-     * status_breakdown[complete] = "how many completed".
+     * status_breakdown[closed] = "how many closed".
      *
      * @return array<string, mixed>
      */
@@ -91,7 +91,7 @@ class TicketAnalyticsService
      *
      * overdue = a non-terminal issue whose LATEST non-mistaken assignment is
      *           dated before today.
-     * stuck   = an issue sitting in `waiting`.
+     * stuck   = an issue sitting in `waiting_on_store`.
      *
      * Costs exactly one extra query: `stuck` is read straight off the status
      * breakdown summarize() already computed. Both figures ride along on
@@ -99,8 +99,8 @@ class TicketAnalyticsService
      * them.
      *
      * "Latest assignment" is MAX(assignments.id), NOT MAX(assigned_date).
-     * These genuinely differ: AssignmentService::delay() mutates assigned_date
-     * in place, so if a second assignment is later created for an EARLIER date,
+     * These genuinely differ: moving a booking (AssignmentService::move())
+     * changes assigned_date in place, so if a second assignment is later created for an EARLIER date,
      * MAX(assigned_date) would report the superseded one. Creation order is
      * what "latest" means here, and it is tie-free.
      *
@@ -128,7 +128,7 @@ class TicketAnalyticsService
             ->where('a.assigned_date', '<', $today)
             ->count();
 
-        $waiting = IssueStatus::Waiting->value;
+        $waiting = IssueStatus::WaitingOnStore->value;
         $stuck = 0;
         foreach ($breakdown['status_breakdown'] as $row) {
             if ($row['status'] === $waiting) {

@@ -1,37 +1,52 @@
 <?php
 
-use App\Http\Controllers\AssignmentController;
-use App\Http\Controllers\DailyPayEntryController;
-use App\Http\Controllers\DailyPayEntryRecalculationController;
-use App\Http\Controllers\AssignmentDelayController;
 use App\Http\Controllers\AttachmentController;
-use App\Http\Controllers\AttendanceEntryController;
 use App\Http\Controllers\CatalogController;
-use App\Http\Controllers\DiagnosisController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\IssueHistoryController;
 use App\Http\Controllers\MaintenanceAnalyticsController;
+use App\Http\Controllers\MaintenanceSettingController;
 use App\Http\Controllers\NoteController;
-use App\Http\Controllers\PartUsageController;
-use App\Http\Controllers\PayEntryController;
 use App\Http\Controllers\StockBalanceController;
 use App\Http\Controllers\StockMovementController;
 use App\Http\Controllers\StorageLocationController;
 use App\Http\Controllers\TechnicianAbilityController;
-use App\Http\Controllers\TechnicianAssignmentController;
+use App\Http\Controllers\TechnicianAnalyticsController;
 use App\Http\Controllers\TicketCancellationController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TicketFinalNoteController;
 use App\Http\Controllers\TicketIssueCancellationController;
 use App\Http\Controllers\TicketIssueController;
-use App\Http\Controllers\TicketIssueDeferralController;
-use App\Http\Controllers\TicketIssueStatusController;
-use App\Http\Controllers\TicketIssueWaitingController;
-use App\Http\Controllers\TechnicianAnalyticsController;
 use App\Http\Controllers\TicketNoteController;
 use App\Http\Controllers\TroubleshootingController;
-use App\Http\Controllers\WarrantyController;
 use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| Maintenance v2 route files (docs/MAINTENANCE-V2.md)
+|--------------------------------------------------------------------------
+| Each v2 area keeps its routes in its own file under routes/api/, so the
+| areas can grow without touching each other. Every file is REQUIRED from a
+| fixed place below, and that place decides its prefix and middleware:
+|
+|   v2-public-trips.php  OUTSIDE auth.token.store: the technician's trip
+|                        link (`public/trips/{token}/...`). The file applies
+|                        its own token middleware and throttle.
+|   v2-catalog.php       inside the auth group (suppliers, part units,
+|                        settings ...).
+|   v2-trips.php         inside the auth group (trips, sessions, events).
+|   v2-payments.php      inside the auth group (payments, technician
+|                        purchases, unpaid work).
+|   v2-storage.php       inside the auth group (stock counts ...).
+|   v2-analytics.php     inside the auth group.
+|   v2-workflow.php      inside the auth group, within the
+|                        `stores/{store}` (scopeBindings) → `tickets/{ticket}`
+|                        prefix group, so its paths are written from
+|                        `issues/{ticketIssue}/...` on.
+*/
+
+require __DIR__.'/api/v2-public-trips.php';
+
 
 Route::middleware('auth.token.store')->group(function () {
     /*
@@ -72,12 +87,16 @@ Route::middleware('auth.token.store')->group(function () {
     Route::get('technician-abilities', [TechnicianAbilityController::class, 'index'])->name('technician-abilities.index');
     Route::put('technicians/{technician}/abilities/{issue}', [TechnicianAbilityController::class, 'update'])->name('technicians.abilities.update');
     Route::delete('technicians/{technician}/abilities/{issue}', [TechnicianAbilityController::class, 'destroy'])->withTrashed()->name('technicians.abilities.destroy');
-    Route::patch('technicians/{technician}/rating', [TechnicianAbilityController::class, 'rating'])->name('technicians.rating');
 
     Route::get('categories', [CatalogController::class, 'categoriesIndex'])->name('categories.index');
     Route::post('categories', [CatalogController::class, 'categoriesStore'])->name('categories.store');
     Route::patch('categories/{category}', [CatalogController::class, 'categoriesUpdate'])->name('categories.update');
     Route::delete('categories/{category}', [CatalogController::class, 'categoriesDestroy'])->name('categories.destroy');
+
+    // The owner's settings: approval thresholds, how long an idle trip link
+    // lives (docs/MAINTENANCE-V2.md §2 "Settings").
+    Route::get('maintenance-settings', [MaintenanceSettingController::class, 'show'])->name('maintenance-settings.show');
+    Route::put('maintenance-settings', [MaintenanceSettingController::class, 'update'])->name('maintenance-settings.update');
 
     Route::get('parts', [CatalogController::class, 'partsIndex'])->name('parts.index');
     Route::post('parts', [CatalogController::class, 'partsStore'])->name('parts.store');
@@ -156,36 +175,14 @@ Route::middleware('auth.token.store')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Cross-ticket attendance. One visit can cover issues on several tickets,
-    | so this entry point is not scoped to any of them. The ticket-nested
-    | route below stays for the ordinary single-ticket case.
+    | Maintenance v2 areas (see the table at the top of this file).
     |--------------------------------------------------------------------------
     */
-    Route::post('attendance-entries', [AttendanceEntryController::class, 'storeGlobal'])->name('attendance.store-global');
-
-    /*
-     | The event ledger, unscoped for the same reason creation is: a visit
-     | covering several tickets has no one ticket its URL could honestly name.
-     | The ticket-nested equivalents below stay for the single-ticket case.
-     */
-    Route::prefix('attendance-entries/{attendanceEntry}/events')->group(function () {
-        Route::post('/', [AttendanceEntryController::class, 'eventsStoreGlobal'])->name('attendance.events.store-global');
-        Route::patch('{event}', [AttendanceEntryController::class, 'eventsUpdateGlobal'])->name('attendance.events.update-global');
-        Route::post('{event}/mistaken', [AttendanceEntryController::class, 'eventsMistakenGlobal'])->name('attendance.events.mistaken-global');
-    });
-
-    /*
-    |--------------------------------------------------------------------------
-    | Daily Pay Entries (global, not store-scoped)
-    |--------------------------------------------------------------------------
-    */
-    Route::get('daily-pay-entries', [DailyPayEntryController::class, 'index'])->name('daily-pay-entries.index');
-    Route::post('daily-pay-entries', [DailyPayEntryController::class, 'store'])->name('daily-pay-entries.store');
-    Route::get('daily-pay-entries/{dailyPayEntry}', [DailyPayEntryController::class, 'show'])->name('daily-pay-entries.show');
-    Route::post('daily-pay-entries/{dailyPayEntry}/edit', [DailyPayEntryController::class, 'edit'])->name('daily-pay-entries.edit');
-    Route::post('daily-pay-entries/{dailyPayEntry}/recalculate', DailyPayEntryRecalculationController::class)->name('daily-pay-entries.recalculate');
-    // Recorded but never claimed by a payment: what we still owe, per payee.
-    Route::get('unpaid-work', [DailyPayEntryController::class, 'unpaidWork'])->name('unpaid-work');
+    require __DIR__.'/api/v2-catalog.php';
+    require __DIR__.'/api/v2-trips.php';
+    require __DIR__.'/api/v2-payments.php';
+    require __DIR__.'/api/v2-storage.php';
+    require __DIR__.'/api/v2-analytics.php';
 
     /*
     |--------------------------------------------------------------------------
@@ -202,7 +199,7 @@ Route::middleware('auth.token.store')->group(function () {
 
     // The analytics page: one or many stores, a range of instants.
     Route::get('maintenance-analytics/{section}', MaintenanceAnalyticsController::class)
-        ->whereIn('section', ['summary', 'activity', 'watchlist'])
+        ->whereIn('section', ['summary', 'activity', 'watchlist', 'finances', 'coverage'])
         ->name('maintenance-analytics.show');
     Route::get('export/excel', ExportController::class)->name('export.excel')->withoutMiddleware('auth.token.store')->middleware('auth.secret.key');
 
@@ -240,25 +237,26 @@ Route::middleware('auth.token.store')->group(function () {
             Route::get('issues/{ticketIssue}', [TicketIssueController::class, 'show'])->name('tickets.issues.show');
             Route::patch('issues/{ticketIssue}', [TicketIssueController::class, 'update'])->name('tickets.issues.update');
 
-            // Issue state transitions.
-            Route::post('issues/status', [TicketIssueStatusController::class, 'store'])->name('tickets.issues.status');
-            Route::post('issues/{ticketIssue}/defer', TicketIssueDeferralController::class)->name('tickets.issues.defer');
             Route::post('issues/{ticketIssue}/cancel', TicketIssueCancellationController::class)->name('tickets.issues.cancel');
-            Route::post('issues/{ticketIssue}/wait', TicketIssueWaitingController::class)->name('tickets.issues.wait');
             Route::post('issues/{ticketIssue}/assigned-priority', [TicketIssueController::class, 'assignPriority'])->name('tickets.issues.assigned-priority');
 
             // Generic notes & attachments on an individual issue.
             Route::post('issues/{ticketIssue}/notes', [NoteController::class, 'ticketIssue'])->name('tickets.issues.notes');
             Route::post('issues/{ticketIssue}/attachments', [AttachmentController::class, 'ticketIssue'])->name('tickets.issues.attachments');
 
-            // Creating workflow records (each targets one-or-many issues).
-            Route::post('assignments', [AssignmentController::class, 'store'])->name('tickets.assignments.store');
-            Route::post('diagnoses', [DiagnosisController::class, 'store'])->name('tickets.diagnoses.store');
-            Route::post('attendance-entries', [AttendanceEntryController::class, 'store'])->name('tickets.attendance.store');
-            Route::post('part-usages', [PartUsageController::class, 'store'])->name('tickets.part-usages.store');
-            Route::post('pay-entries', [PayEntryController::class, 'store'])->name('tickets.pay-entries.store');
-            Route::post('warranties', [WarrantyController::class, 'store'])->name('tickets.warranties.store');
-            Route::post('technicians', [TechnicianAssignmentController::class, 'store'])->name('tickets.technicians.attach');
+            /*
+             | The v2 issue workflow (review, info requests, inspections,
+             | approvals, schedule, work done, confirmation, close, jump).
+             |
+             | Still inside scopeBindings(), so every nested parameter is
+             | resolved as a child of the one before it, through the relation
+             | Str::plural(Str::camel($param)) on the parent. PARAMETER NAMES
+             | ARE LOAD-BEARING: {infoRequest} → TicketIssue::infoRequests(),
+             | {inspection} → TicketIssue::inspections(), {approval} →
+             | TicketIssue::approvals(), {assignment} → TicketIssue::assignments().
+             | A parameter named after no relation (e.g. {request}) 500s.
+             */
+            require __DIR__.'/api/v2-workflow.php';
         });
     });
 
@@ -282,57 +280,18 @@ Route::middleware('auth.token.store')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Leaf-record actions. Not scope-bound, because these records (assignment,
-    | diagnosis, ...) are not direct children of the ticket — they are bound by id.
-    | Their FormRequests check the record is the ticket's and the ticket the
-    | store's (Requests\Concerns\ChecksTicketRecord).
+    | Leaf-record actions. Not scope-bound, because these records (a booking,
+    | a warranty) are not direct children of the ticket — they reach it
+    | through its issues and are bound by id. Their FormRequests check the
+    | record is the ticket's and the ticket the store's
+    | (Requests\Concerns\ChecksTicketRecord).
     |--------------------------------------------------------------------------
     */
     Route::prefix('stores/{store}/tickets/{ticket}')->group(function () {
-        Route::post('assignments/{assignment}/delays', [AssignmentDelayController::class, 'store'])->name('tickets.assignments.delays');
-        Route::post('assignments/{assignment}/change-technicians', [AssignmentController::class, 'changeTechnicians'])->name('tickets.assignments.change-technicians');
-
-        Route::post('diagnoses/{diagnosis}/mistaken', [DiagnosisController::class, 'mistaken'])->name('tickets.diagnoses.mistaken');
-        Route::post('attendance-entries/{attendanceEntry}/mistaken', [AttendanceEntryController::class, 'mistaken'])->name('tickets.attendance.mistaken');
-
-
-        /*
-         | The attendance event ledger. Each of these appends or amends ONE
-         | thing that happened, which is what makes adding to a saved session an
-         | insert rather than a correction -- the complaint that prompted it.
-         |
-         | DELIBERATELY NOT scopeBindings(), for the reason this whole group
-         | exists: an attendance entry is not a child of a ticket. It reaches
-         | issues through a pivot and one entry can span several tickets, so
-         | scoping would make Laravel look for Ticket::attendanceEntries() and
-         | 500. The event-belongs-to-entry check that scoping would have given
-         | us is done explicitly in the controller instead, where it can also
-         | say what it means.
-         */
-        Route::prefix('attendance-entries/{attendanceEntry}/events')->group(function () {
-            Route::post('/', [AttendanceEntryController::class, 'eventsStore'])->name('tickets.attendance.events.store');
-            Route::patch('{event}', [AttendanceEntryController::class, 'eventsUpdate'])->name('tickets.attendance.events.update');
-            Route::post('{event}/mistaken', [AttendanceEntryController::class, 'eventsMistaken'])->name('tickets.attendance.events.mistaken');
-        });
-
-        Route::post('part-usages/{partUsage}/mistaken', [PartUsageController::class, 'mistaken'])->name('tickets.part-usages.mistaken');
-        Route::post('pay-entries/{payEntry}/mistaken', [PayEntryController::class, 'mistaken'])->name('tickets.pay-entries.mistaken');
-        Route::post('warranties/{warranty}/mistaken', [WarrantyController::class, 'mistaken'])->name('tickets.warranties.mistaken');
-        Route::post('assignments/{assignment}/mistaken', [AssignmentController::class, 'mistaken'])->name('tickets.assignments.mistaken');
-        Route::post('assignments/{assignment}/delays/{delay}/mistaken', [AssignmentDelayController::class, 'mistaken'])->name('tickets.assignments.delays.mistaken');
-
         // Lock / unlock any note on this ticket (private = MOS only).
         Route::patch('notes/{note}/privacy', [TicketNoteController::class, 'privacy'])->name('stores.tickets.notes.privacy');
 
         // Notes & attachments for each leaf workflow record (any number).
-        Route::post('diagnoses/{diagnosis}/notes', [NoteController::class, 'diagnosis'])->name('tickets.diagnoses.notes');
-        Route::post('diagnoses/{diagnosis}/attachments', [AttachmentController::class, 'diagnosis'])->name('tickets.diagnoses.attachments');
-        Route::post('attendance-entries/{attendanceEntry}/notes', [NoteController::class, 'attendance'])->name('tickets.attendance.notes');
-        Route::post('attendance-entries/{attendanceEntry}/attachments', [AttachmentController::class, 'attendance'])->name('tickets.attendance.attachments');
-        Route::post('part-usages/{partUsage}/notes', [NoteController::class, 'partUsage'])->name('tickets.part-usages.notes');
-        Route::post('part-usages/{partUsage}/attachments', [AttachmentController::class, 'partUsage'])->name('tickets.part-usages.attachments');
-        Route::post('pay-entries/{payEntry}/notes', [NoteController::class, 'payEntry'])->name('tickets.pay-entries.notes');
-        Route::post('pay-entries/{payEntry}/attachments', [AttachmentController::class, 'payEntry'])->name('tickets.pay-entries.attachments');
         Route::post('warranties/{warranty}/notes', [NoteController::class, 'warranty'])->name('tickets.warranties.notes');
         Route::post('warranties/{warranty}/attachments', [AttachmentController::class, 'warranty'])->name('tickets.warranties.attachments');
         Route::post('assignments/{assignment}/notes', [NoteController::class, 'assignment'])->name('tickets.assignments.notes');

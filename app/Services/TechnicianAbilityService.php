@@ -15,11 +15,13 @@ use Illuminate\Support\Facades\DB;
  * Who is good at what, and who to call first.
  *
  * A technician gets 1-5 stars and notes per catalog issue ("great with Ovens,
- * slow on POS"), and the same overall. One technician per issue can be the
- * one to "call first", and one overall -- the person to ring for anything.
+ * slow on POS"); the issues they have an entry for are the issues they COVER.
+ * One technician per issue can be the one to "call first". There is no typed
+ * overall rating any more: it is the average of the per-issue stars
+ * (Technician::averageRating()).
  * Pinning someone moves the pin off whoever had it.
  *
- * The database itself allows only one pin per issue and one overall (see the
+ * The database itself allows only one pin per issue (see the
  * migration), so two people pinning at the same moment cannot both win: the
  * loser gets a 409 and reloads.
  *
@@ -90,55 +92,6 @@ class TechnicianAbilityService
     }
 
     /**
-     * The overall rating. Only the fields sent change.
-     *
-     * @param  array{rating?: int|string|null, notes?: string|null, call_first?: bool|int|string}  $data
-     * @return array{technician: Technician, moved_from: Technician|null}
-     */
-    public function setOverall(Technician $technician, array $data): array
-    {
-        return $this->refusingRaces(fn () => DB::transaction(function () use ($technician, $data) {
-            $technician = Technician::query()->lockForUpdate()->findOrFail($technician->id);
-            $movedFrom = null;
-
-            if (array_key_exists('rating', $data)) {
-                $technician->rating = $this->rating($data['rating']);
-            }
-
-            if (array_key_exists('notes', $data)) {
-                $technician->rating_notes = $this->text($data['notes']);
-            }
-
-            if (array_key_exists('call_first', $data)) {
-                $callFirst = (bool) $data['call_first'];
-
-                if ($callFirst && ! $technician->call_first) {
-                    // withTrashed: a pin left on a deleted technician would
-                    // still hold the unique index.
-                    $holder = Technician::withTrashed()
-                        ->where('call_first', true)
-                        ->whereKeyNot($technician->id)
-                        ->lockForUpdate()
-                        ->first();
-
-                    if ($holder !== null) {
-                        $movedFrom = $holder;
-                        $this->stampRating($holder, ['call_first' => null]);
-                    }
-                }
-
-                $technician->call_first = $callFirst ? true : null;
-            }
-
-            if ($technician->isDirty(['rating', 'rating_notes', 'call_first'])) {
-                $this->stampRating($technician, []);
-            }
-
-            return ['technician' => $technician->load('ratingEditor'), 'moved_from' => $movedFrom];
-        }));
-    }
-
-    /**
      * A deleted technician cannot be the one to call first for anything. The
      * stars and notes stay and come back on restore; the pins do not -- by
      * then someone else may well be the go-to.
@@ -150,31 +103,17 @@ class TechnicianAbilityService
             ->where('call_first', true)
             ->get()
             ->each(fn (TechnicianIssueAbility $ability) => $this->unpinAbility($ability));
-
-        if ($technician->call_first) {
-            $this->stampRating($technician, ['call_first' => null]);
-        }
     }
 
     /**
-     * Everything the pickers and the editor need, in one read: the overall
-     * rating of every technician that has one, and every per-issue entry
-     * (or one issue's). Deleted technicians are left out -- nobody can pick
+     * Everything the pickers and the editor need, in one read: every
+     * per-issue entry (or one issue's). Deleted technicians are left out -- nobody can pick
      * them.
      *
-     * @return array{overall: array<int, array<string, mixed>>, by_issue: array<int, array<string, mixed>>}
+     * @return array{by_issue: array<int, array<string, mixed>>}
      */
     public function board(?int $issueId = null): array
     {
-        $overall = Technician::query()
-            ->where(fn ($q) => $q->whereNotNull('rating')->orWhereNotNull('rating_notes')->orWhereNotNull('call_first'))
-            ->with('ratingEditor')
-            ->orderBy('id')
-            ->get()
-            ->map(fn (Technician $t) => $this->presentOverall($t))
-            ->values()
-            ->all();
-
         $byIssue = TechnicianIssueAbility::query()
             ->whereIn('technician_id', Technician::query()->select('id'))
             ->when($issueId !== null, fn ($q) => $q->where('issue_id', $issueId))
@@ -186,7 +125,7 @@ class TechnicianAbilityService
             ->values()
             ->all();
 
-        return ['overall' => $overall, 'by_issue' => $byIssue];
+        return ['by_issue' => $byIssue];
     }
 
     /**
@@ -203,24 +142,6 @@ class TechnicianAbilityService
             'updated_by' => $ability->updated_by,
             'editor' => $this->presentUser($ability->relationLoaded('editor') ? $ability->editor : null),
             'updated_at' => $ability->updated_at,
-        ];
-    }
-
-    /**
-     * Same shape as a per-issue entry, without the issue.
-     *
-     * @return array<string, mixed>
-     */
-    public function presentOverall(Technician $technician): array
-    {
-        return [
-            'technician_id' => $technician->id,
-            'rating' => $technician->rating,
-            'notes' => $technician->rating_notes,
-            'call_first' => (bool) $technician->call_first,
-            'updated_by' => $technician->rating_updated_by,
-            'editor' => $this->presentUser($technician->relationLoaded('ratingEditor') ? $technician->ratingEditor : null),
-            'updated_at' => $technician->rating_updated_at,
         ];
     }
 
@@ -246,18 +167,6 @@ class TechnicianAbilityService
         $ability->call_first = null;
         $ability->updated_by = Auth::id();
         $ability->save();
-    }
-
-    /**
-     * @param  array<string, mixed>  $changes
-     */
-    private function stampRating(Technician $technician, array $changes): void
-    {
-        $technician->forceFill([
-            ...$changes,
-            'rating_updated_by' => Auth::id(),
-            'rating_updated_at' => now(),
-        ])->save();
     }
 
     /**

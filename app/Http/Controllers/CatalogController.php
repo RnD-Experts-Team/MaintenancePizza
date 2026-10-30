@@ -63,7 +63,16 @@ class CatalogController extends Controller
 
     public function techniciansIndex(Request $request)
     {
-        return $this->catalog->listTechnicians($request->query('trashed'), $request->integer('per_page', 15));
+        return $this->catalog->listTechnicians($request->only([
+            'trashed',
+            'with_trashed',
+            'search',
+            'category_id',
+            'emergency',
+            'store',
+            'issue_id',
+            'urgent',
+        ]), $request->integer('per_page', 15));
     }
 
     public function techniciansShow(Technician $technician)

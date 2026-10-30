@@ -5,11 +5,10 @@ namespace App\Services;
 use App\Enums\FinalNoteType;
 use App\Models\Assignment;
 use App\Models\AssignmentDelay;
-use App\Models\AttendanceEntry;
-use App\Models\Diagnosis;
+use App\Models\IssueApproval;
+use App\Models\IssueInfoRequest;
+use App\Models\IssueInspection;
 use App\Models\Note;
-use App\Models\PartUsage;
-use App\Models\PayEntry;
 use App\Models\Ticket;
 use App\Models\TicketIssue;
 use App\Models\Warranty;
@@ -38,10 +37,9 @@ class NoteService
         TicketIssue::class => 'ticket_issue',
         Assignment::class => 'assignment',
         AssignmentDelay::class => 'assignment_delay',
-        Diagnosis::class => 'diagnosis',
-        AttendanceEntry::class => 'attendance_entry',
-        PartUsage::class => 'part_usage',
-        PayEntry::class => 'pay_entry',
+        IssueInfoRequest::class => 'info_request',
+        IssueInspection::class => 'inspection',
+        IssueApproval::class => 'approval',
         Warranty::class => 'warranty',
     ];
 
@@ -188,16 +186,16 @@ class NoteService
     {
         $onTicket = fn (Builder $q) => $q->where('ticket_issues.ticket_id', $ticket->id);
         $assignmentIds = Assignment::query()->whereHas('ticketIssues', $onTicket)->pluck('id')->all();
+        $issueIds = $ticket->ticketIssues()->pluck('id')->all();
 
         return [
             Ticket::class => [$ticket->id],
-            TicketIssue::class => $ticket->ticketIssues()->pluck('id')->all(),
+            TicketIssue::class => $issueIds,
             Assignment::class => $assignmentIds,
             AssignmentDelay::class => AssignmentDelay::query()->whereIn('assignment_id', $assignmentIds)->pluck('id')->all(),
-            Diagnosis::class => Diagnosis::query()->whereHas('ticketIssues', $onTicket)->pluck('id')->all(),
-            AttendanceEntry::class => AttendanceEntry::query()->whereHas('ticketIssues', $onTicket)->pluck('id')->all(),
-            PartUsage::class => PartUsage::query()->whereHas('ticketIssues', $onTicket)->pluck('id')->all(),
-            PayEntry::class => PayEntry::query()->whereHas('ticketIssues', $onTicket)->pluck('id')->all(),
+            IssueInfoRequest::class => IssueInfoRequest::query()->whereIn('ticket_issue_id', $issueIds)->pluck('id')->all(),
+            IssueInspection::class => IssueInspection::query()->whereIn('ticket_issue_id', $issueIds)->pluck('id')->all(),
+            IssueApproval::class => IssueApproval::query()->whereIn('ticket_issue_id', $issueIds)->pluck('id')->all(),
             Warranty::class => Warranty::query()->whereHas('ticketIssues', $onTicket)->pluck('id')->all(),
         ];
     }

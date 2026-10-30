@@ -11,8 +11,9 @@ use Tests\Concerns\FakesAuthServer;
 use Tests\TestCase;
 
 /**
- * Who is good at what: 1-5 stars and notes per issue and overall, and the
- * "call first" pin -- one technician per issue, one overall.
+ * Who is good at what: 1-5 stars and notes per issue, and the "call first"
+ * pin -- one technician per issue. The overall rating is no longer typed: it
+ * is the average of the per-issue stars.
  */
 class TechnicianAbilityTest extends TestCase
 {
@@ -57,7 +58,7 @@ class TechnicianAbilityTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data.by_issue')
             ->assertJsonPath('data.by_issue.0.rating', 4)
-            ->assertJsonCount(0, 'data.overall');
+            ->assertJsonMissingPath('data.overall');
     }
 
     public function test_pinning_a_second_technician_moves_the_issue_pin(): void
@@ -112,39 +113,28 @@ class TechnicianAbilityTest extends TestCase
         foreach ([0, 6, 'great', 3.5] as $bad) {
             $this->rate($this->ahmed, ['rating' => $bad])->assertUnprocessable()->assertJsonValidationErrors('rating');
         }
-
-        $this->patchJson("/api/technicians/{$this->ahmed->id}/rating", ['rating' => 9], $this->headers())
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors('rating');
     }
 
-    public function test_the_overall_rating_and_the_goat_pin(): void
+    public function test_the_overall_rating_is_the_average_of_the_rated_issues(): void
     {
-        $this->patchJson("/api/technicians/{$this->ahmed->id}/rating", ['rating' => 5, 'notes' => 'Our man', 'call_first' => true], $this->headers())
+        $sink = Issue::factory()->create(['title' => 'Sink']);
+        $fryer = Issue::factory()->create(['title' => 'Fryer']);
+        $this->rate($this->ahmed, ['rating' => 4])->assertOk();
+        $this->rate($this->ahmed, ['rating' => 3], $sink)->assertOk();
+        $this->rate($this->ahmed, ['notes' => 'Has the manual'], $fryer)->assertOk();   // covered, not rated
+
+        $this->getJson("/api/technicians/{$this->ahmed->id}", $this->headers())
             ->assertOk()
-            ->assertJsonPath('data.technician_id', $this->ahmed->id)
-            ->assertJsonPath('data.rating', 5)
-            ->assertJsonPath('data.notes', 'Our man')
-            ->assertJsonPath('data.call_first', true)
-            ->assertJsonPath('data.editor.name', 'Dana Whitfield')
-            ->assertJsonPath('moved_from', null);
+            ->assertJsonPath('data.average_rating', '3.5')
+            ->assertJsonPath('data.covered_issue_count', 3);
 
-        // Partial: only the stars change.
-        $this->patchJson("/api/technicians/{$this->ahmed->id}/rating", ['rating' => 4], $this->headers())
+        $this->getJson("/api/technicians/{$this->bilal->id}", $this->headers())
             ->assertOk()
-            ->assertJsonPath('data.rating', 4)
-            ->assertJsonPath('data.notes', 'Our man')
-            ->assertJsonPath('data.call_first', true);
+            ->assertJsonPath('data.average_rating', null)
+            ->assertJsonPath('data.covered_issue_count', 0);
 
-        $this->patchJson("/api/technicians/{$this->bilal->id}/rating", ['call_first' => true], $this->headers())
-            ->assertOk()
-            ->assertJsonPath('moved_from.name', 'Ahmed');
-
-        $this->assertNull($this->ahmed->fresh()->call_first);
-        $this->assertTrue($this->bilal->fresh()->call_first);
-
-        $board = $this->getJson('/api/technician-abilities', $this->headers())->assertOk()->json('data.overall');
-        $this->assertSame([$this->ahmed->id, $this->bilal->id], array_column($board, 'technician_id'));
+        // The typed overall rating is gone with its route.
+        $this->patchJson("/api/technicians/{$this->ahmed->id}/rating", ['rating' => 5], $this->headers())->assertNotFound();
     }
 
     public function test_the_issue_filter_narrows_the_per_issue_list(): void
@@ -162,19 +152,15 @@ class TechnicianAbilityTest extends TestCase
     public function test_deleting_a_technician_clears_their_pins_but_keeps_their_stars(): void
     {
         $this->rate($this->ahmed, ['rating' => 5, 'call_first' => true])->assertOk();
-        $this->patchJson("/api/technicians/{$this->ahmed->id}/rating", ['rating' => 5, 'call_first' => true], $this->headers())->assertOk();
 
         $this->deleteJson("/api/technicians/{$this->ahmed->id}", [], $this->headers())->assertNoContent();
 
         $board = $this->getJson('/api/technician-abilities', $this->headers())->assertOk()->json('data');
-        $this->assertSame([], $board['overall'], 'a deleted technician is not on the board');
-        $this->assertSame([], $board['by_issue']);
+        $this->assertSame([], $board['by_issue'], 'a deleted technician is not on the board');
 
         $this->postJson("/api/technicians/{$this->ahmed->id}/restore", [], $this->headers())->assertOk();
 
         $board = $this->getJson('/api/technician-abilities', $this->headers())->assertOk()->json('data');
-        $this->assertSame(5, $board['overall'][0]['rating']);
-        $this->assertFalse($board['overall'][0]['call_first']);
         $this->assertSame(5, $board['by_issue'][0]['rating']);
         $this->assertFalse($board['by_issue'][0]['call_first']);
 
@@ -182,9 +168,9 @@ class TechnicianAbilityTest extends TestCase
         $this->rate($this->bilal, ['call_first' => true])->assertOk()->assertJsonPath('moved_from', null);
     }
 
-    public function test_ratings_never_appear_in_the_technician_list(): void
+    public function test_rating_notes_never_appear_in_the_technician_list(): void
     {
-        $this->patchJson("/api/technicians/{$this->ahmed->id}/rating", ['rating' => 1, 'notes' => 'Never again'], $this->headers())->assertOk();
+        $this->rate($this->ahmed, ['rating' => 1, 'notes' => 'Never again'])->assertOk();
 
         $row = collect($this->getJson('/api/technicians', $this->headers())->assertOk()->json('data'))
             ->firstWhere('id', $this->ahmed->id);
@@ -193,15 +179,18 @@ class TechnicianAbilityTest extends TestCase
             $this->assertArrayNotHasKey($key, $row);
         }
         $this->assertStringNotContainsString('Never again', json_encode($row));
+        $this->assertSame('1.0', $row['average_rating']);
     }
 
     public function test_the_technician_edit_route_cannot_set_a_rating(): void
     {
         $this->patchJson("/api/technicians/{$this->ahmed->id}", ['name' => 'Ahmed S.', 'rating' => 5, 'call_first' => true], $this->headers())
-            ->assertOk();
+            ->assertOk()
+            ->assertJsonPath('data.name', 'Ahmed S.')
+            ->assertJsonPath('data.average_rating', null);
 
-        $this->assertNull($this->ahmed->fresh()->rating);
-        $this->assertNull($this->ahmed->fresh()->call_first);
+        $this->assertArrayNotHasKey('rating', $this->ahmed->fresh()->getAttributes());
+        $this->assertDatabaseCount('technician_issue_abilities', 0);
     }
 
     public function test_the_database_allows_one_pin_per_issue(): void
@@ -212,15 +201,6 @@ class TechnicianAbilityTest extends TestCase
             $ability = new TechnicianIssueAbility(['technician_id' => $technician->id, 'issue_id' => $this->oven->id]);
             $ability->call_first = true;
             $ability->save();
-        }
-    }
-
-    public function test_the_database_allows_one_overall_pin(): void
-    {
-        $this->expectException(UniqueConstraintViolationException::class);
-
-        foreach ([$this->ahmed, $this->bilal] as $technician) {
-            $technician->forceFill(['call_first' => true])->save();
         }
     }
 }

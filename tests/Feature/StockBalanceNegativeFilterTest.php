@@ -36,7 +36,7 @@ class StockBalanceNegativeFilterTest extends TestCase
         app(StockService::class)->record(
             [
                 'moved_at' => '2026-01-01 09:00:00',
-                'type' => StockMovementType::Purchase,
+                'type' => StockMovementType::Bought,
                 'storage_location_id' => $location->id,
             ],
             [[
@@ -54,7 +54,7 @@ class StockBalanceNegativeFilterTest extends TestCase
         app(StockService::class)->record(
             [
                 'moved_at' => '2026-01-02 09:00:00',
-                'type' => StockMovementType::Draw,
+                'type' => StockMovementType::Used,
                 'storage_location_id' => $location->id,
             ],
             [[
@@ -74,7 +74,7 @@ class StockBalanceNegativeFilterTest extends TestCase
     private function short(Part $part, StorageLocation $location, string $quantity = '3'): void
     {
         app(StockService::class)->record(
-            ['moved_at' => '2026-01-03 09:00:00', 'type' => StockMovementType::Adjustment],
+            ['moved_at' => '2026-01-03 09:00:00', 'type' => StockMovementType::StockCount],
             [[
                 'part_id' => $part->id,
                 'storage_location_id' => $location->id,

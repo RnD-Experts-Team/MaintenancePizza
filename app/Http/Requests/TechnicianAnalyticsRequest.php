@@ -15,7 +15,7 @@ use Illuminate\Validation\Validator;
  *   from=2026-10-01T04:00:00Z  to=2026-11-01T04:00:00Z   required, INSTANTS --
  *       the viewer's local midnights; work (visits) is compared on these.
  *   date_from=2026-10-01  date_to=2026-10-31             required, local DAYS,
- *       inclusive -- pay is compared on these, a pay sheet's date being a day.
+ *       inclusive -- pay is compared on these, a payment's paid_at being a day.
  *   stores[]=03795-00001  issue_ids[]=3  category_ids[]=2  technician_ids[]=7
  *       optional filters; none means all.
  */

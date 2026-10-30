@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\UpdateTechnicianRatingRequest;
 use App\Http\Requests\UpsertTechnicianAbilityRequest;
 use App\Models\Issue;
 use App\Models\Technician;
@@ -13,10 +12,9 @@ use Illuminate\Http\Response;
 /**
  * Technician abilities: stars, notes and the "call first" pin.
  *
- *   GET    /technician-abilities?issue_id=                 overall + per-issue entries
+ *   GET    /technician-abilities?issue_id=                 per-issue entries
  *   PUT    /technicians/{technician}/abilities/{issue}     rate on one issue (replaces)
  *   DELETE /technicians/{technician}/abilities/{issue}     forget that entry
- *   PATCH  /technicians/{technician}/rating                the overall rating
  *
  * Writes that move a pin say whose it was in `moved_from`, so the screen can
  * tell the coordinator.
@@ -49,15 +47,5 @@ class TechnicianAbilityController extends Controller
         $this->abilities->removeForIssue($technician, $issue);
 
         return response()->noContent();
-    }
-
-    public function rating(UpdateTechnicianRatingRequest $request, Technician $technician)
-    {
-        $result = $this->abilities->setOverall($technician, $request->validated());
-
-        return [
-            'data' => $this->abilities->presentOverall($result['technician']),
-            'moved_from' => $this->abilities->presentMover($result['moved_from']),
-        ];
     }
 }

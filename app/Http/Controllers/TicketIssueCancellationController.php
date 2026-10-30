@@ -13,7 +13,7 @@ class TicketIssueCancellationController extends Controller
     public function __construct(private TicketIssueService $issues) {}
 
     /**
-     * Cancel an issue (records the reason). Unlike deferral it spawns no child.
+     * Cancel an issue (records the reason in its status history).
      */
     public function __invoke(CancelIssueRequest $request, Store $store, Ticket $ticket, TicketIssue $ticketIssue)
     {
