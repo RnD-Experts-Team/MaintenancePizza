@@ -10,6 +10,7 @@ use App\Jobs\PublishOutboxEventJob;
 use App\Models\Issue;
 use App\Models\Store;
 use App\Models\Ticket;
+use App\Models\Technician;
 use App\Models\TicketIssue;
 use App\Services\MaintenanceEvents\MaintenanceEventFactory;
 use App\Services\MaintenanceEvents\MaintenanceOutboxService;
@@ -29,7 +30,10 @@ use Illuminate\Support\Facades\DB;
 class TicketService
 {
     /**
-     * @var list<string>
+     * Eager loads of a presented ticket. The constructor adds the issues'
+     * technicians (a closure, which a property default cannot hold).
+     *
+     * @var array<int|string, string|\Closure>
      */
     private array $listWith = [
         'store',
@@ -48,6 +52,10 @@ class TicketService
         private NoteService $notes,
         private AttachmentService $attachments,
     ) {
+        // Who each issue is assigned to, for the list's light `technicians`
+        // (one query for the whole page; see presentListIssue()). Removed
+        // technicians too, as on the issue's own read.
+        $this->listWith['ticketIssues.technicians'] = fn ($q) => $q->withTrashed();
     }
 
     /**
@@ -321,7 +329,7 @@ class TicketService
             'notes'       => $this->notes->presentMany($ticket),
             'attachments' => $this->attachments->presentMany($ticket),
             'issues'      => $ticket->relationLoaded('ticketIssues')
-                ? $ticket->ticketIssues->map(fn(TicketIssue $i) => $this->issues->present($i))->all()
+                ? $ticket->ticketIssues->map(fn(TicketIssue $i) => $this->presentListIssue($i))->all()
                 : null,
             'issues_count' => $ticket->ticket_issues_count ?? null,
             'created_by'   => $ticket->created_by,
@@ -332,6 +340,27 @@ class TicketService
             'updated_at'  => $ticket->updated_at,
             'deleted_at'  => $ticket->deleted_at,
         ];
+    }
+
+    /**
+     * An issue row of a ticket: the core read, with `technicians` cut down
+     * to [{id, name}] -- the list only says who it is assigned to; the full
+     * read (phone, category) is the issue's own.
+     *
+     * @return array<string, mixed>
+     */
+    private function presentListIssue(TicketIssue $issue): array
+    {
+        $row = $this->issues->present($issue);
+
+        if ($issue->relationLoaded('technicians')) {
+            $row['technicians'] = $issue->technicians
+                ->map(fn (Technician $t) => ['id' => $t->id, 'name' => $t->name])
+                ->values()
+                ->all();
+        }
+
+        return $row;
     }
 
     /**

@@ -130,7 +130,12 @@ class CatalogController extends Controller
 
     public function partsIndex(Request $request)
     {
-        return $this->catalog->listParts($request->query('trashed'), $request->integer('per_page', 15));
+        return $this->catalog->listParts($request->query('trashed'), $request->integer('per_page', 15), $request->query('search'));
+    }
+
+    public function partsShow(Part $part)
+    {
+        return ['data' => $this->catalog->showPart($part)];
     }
 
     public function partsStore(StorePartRequest $request)

@@ -122,6 +122,35 @@ class TripsDashboardTest extends TestCase
         $this->getJson('/api/trips?search=ola', $this->headers())->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $theirs['id']);
     }
 
+    public function test_list_rows_and_show_carry_his_state_as_the_link_reads_it(): void
+    {
+        $trip = $this->makeTrip();
+        $states = fn () => [
+            $this->getJson('/api/trips', $this->headers())->assertOk()->json('data.0.state'),
+            $this->getJson("/api/trips/{$trip['id']}", $this->headers())->assertOk()->json('data.state'),
+            $this->getJson("/api/public/trips/{$trip['token']}")->assertOk()->json('data.state'),
+        ];
+
+        $this->assertSame(['off_clock', 'off_clock', 'off_clock'], $states());
+
+        $this->postJson("/api/public/trips/{$trip['token']}/clock-in", [])->assertCreated();
+        $this->assertSame(['on_clock', 'on_clock', 'on_clock'], $states());
+
+        $this->postJson("/api/public/trips/{$trip['token']}/events", ['kind' => 'travel_start'])->assertCreated();
+        $this->assertSame(['travelling', 'travelling', 'travelling'], $states());
+
+        $this->postJson("/api/public/trips/{$trip['token']}/events", ['kind' => 'travel_end'])->assertCreated();
+        $this->postJson("/api/public/trips/{$trip['token']}/events", ['kind' => 'parts_run_start'])->assertCreated();
+        $this->assertSame(['parts_run', 'parts_run', 'parts_run'], $states());
+
+        $this->postJson("/api/public/trips/{$trip['token']}/events", ['kind' => 'parts_run_end'])->assertCreated();
+        $this->postJson("/api/public/trips/{$trip['token']}/events", ['kind' => 'break_start'])->assertCreated();
+        $this->assertSame(['on_break', 'on_break', 'on_break'], $states());
+
+        $this->postJson("/api/public/trips/{$trip['token']}/clock-out", [])->assertOk();
+        $this->assertSame(['off_clock', 'off_clock', 'off_clock'], $states());
+    }
+
     public function test_the_presented_trip_adds_up_durations_paid_minutes_and_miles(): void
     {
         $trip = $this->makeTrip();

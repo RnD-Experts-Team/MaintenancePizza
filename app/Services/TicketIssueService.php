@@ -291,4 +291,62 @@ class TicketIssueService
     {
         return $this->presenter->statusChange($change);
     }
+
+    /**
+     * The issue pickers' lookup (`GET ticket-issues`): a light row per issue,
+     * newest first, across every store -- never the full read.
+     *
+     *   search    the catalog title, the free-text title, the description, or
+     *             the ticket id (digits, a leading # allowed)
+     *   store     a store number
+     *   statuses  any of IssueStatus
+     *   limit     default 20, at most 100
+     *
+     * Issues of a deleted ticket are left out.
+     *
+     * @param  array{search?: string|null, store?: string|null, statuses?: array<int, string>|null, limit?: int|string|null}  $filters
+     * @return array<int, array<string, mixed>>
+     */
+    public function lookup(array $filters): array
+    {
+        $query = TicketIssue::query()
+            ->whereHas('ticket')
+            ->with(['issue', 'ticket.store']);
+
+        $store = trim((string) ($filters['store'] ?? ''));
+        if ($store !== '') {
+            $query->whereHas('ticket.store', fn ($q) => $q->where('store_number', $store));
+        }
+
+        if (! empty($filters['statuses'])) {
+            $query->whereIn('status', array_values((array) $filters['statuses']));
+        }
+
+        $search = trim((string) ($filters['search'] ?? ''));
+        if ($search !== '') {
+            $like = '%'.mb_strtolower(str_replace(['%', '_'], ['\%', '\_'], $search)).'%';
+            $number = ltrim($search, '#');
+
+            $query->where(fn ($q) => $q
+                ->whereRaw('LOWER(other_title) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(description) LIKE ?', [$like])
+                ->orWhereHas('issue', fn ($c) => $c->whereRaw('LOWER(title) LIKE ?', [$like]))
+                ->when(ctype_digit($number), fn ($id) => $id->orWhere('ticket_id', (int) $number)));
+        }
+
+        $limit = max(1, min(100, (int) ($filters['limit'] ?? 20)));
+
+        return $query->orderByDesc('id')->limit($limit)->get()
+            ->map(fn (TicketIssue $i) => [
+                'id' => $i->id,
+                'ticket_id' => $i->ticket_id,
+                'title' => $i->displayTitle(),
+                'status' => $i->status->value,
+                'status_label' => $i->status->label(),
+                'priority' => $i->priority === null ? null : ['value' => $i->priority->value, 'label' => $i->priority->label()],
+                'store' => $i->ticket?->store ? ['id' => $i->ticket->store->id, 'store_number' => $i->ticket->store->store_number] : null,
+                'other_store' => $i->ticket?->other_store,
+            ])
+            ->all();
+    }
 }

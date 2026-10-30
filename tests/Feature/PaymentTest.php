@@ -284,6 +284,46 @@ class PaymentTest extends TestCase
         $this->assertSame('2.00', $this->balance($part));
     }
 
+    public function test_a_storage_parts_line_shows_where_the_part_sits_now(): void
+    {
+        $part = Part::factory()->create(['name' => 'Air filter']);
+        $shelfLevel = $this->shelf->placeLevels()->create(['name' => 'Shelf', 'sort_order' => 1]);
+        $rowLevel = $this->shelf->placeLevels()->create(['name' => 'Row', 'sort_order' => 2]);
+        $c = $shelfLevel->placeValues()->create(['value' => 'C', 'sort_order' => 1]);
+        $d = $shelfLevel->placeValues()->create(['value' => 'D', 'sort_order' => 2]);
+        $eight = $rowLevel->placeValues()->create(['value' => '8', 'sort_order' => 1]);
+        $issue = $this->issueAt($this->store);
+
+        $data = $this->pay([
+            [
+                'type' => 'parts', 'storage_location_id' => $this->shelf->id, 'destination' => 'storage',
+                'part_id' => $part->id, 'quantity' => 2, 'unit_cost' => '3',
+                'place' => [['level_id' => $rowLevel->id, 'value_id' => $eight->id], ['level_id' => $shelfLevel->id, 'value_id' => $c->id]],
+            ],
+            ['type' => 'parts', 'store_id' => $this->store->id, 'destination' => 'ticket', 'ticket_issue_ids' => [$issue->id], 'part_id' => $part->id, 'quantity' => 1, 'unit_cost' => '3'],
+            ['type' => 'fixed', 'store_id' => $this->store->id, 'amount' => 10],
+        ])['data'];
+
+        $this->assertSame([
+            ['level_id' => $shelfLevel->id, 'level' => 'Shelf', 'value_id' => $c->id, 'value' => 'C'],
+            ['level_id' => $rowLevel->id, 'level' => 'Row', 'value_id' => $eight->id, 'value' => '8'],
+        ], $data['lines'][0]['place']);
+        $this->assertNull($data['lines'][1]['place']);
+        $this->assertNull($data['lines'][2]['place']);
+
+        // Re-shelved since: the payment shows the place it has now.
+        $balance = StockBalance::query()->where('part_id', $part->id)->where('storage_location_id', $this->shelf->id)->firstOrFail();
+        $this->putJson("/api/stock-balances/{$balance->id}/place", ['place_value_ids' => [$d->id]], $this->headers())->assertOk();
+
+        $this->getJson("/api/payments/{$data['id']}", $this->headers())->assertOk()
+            ->assertJsonPath('data.lines.0.place', [['level_id' => $shelfLevel->id, 'level' => 'Shelf', 'value_id' => $d->id, 'value' => 'D']]);
+
+        // A storage line nobody placed is an empty address, not null.
+        $other = Part::factory()->create(['name' => 'Belt']);
+        $unplaced = $this->pay([['type' => 'parts', 'storage_location_id' => $this->shelf->id, 'part_id' => $other->id, 'quantity' => 1, 'unit_cost' => '1']])['data'];
+        $this->assertSame([], $unplaced['lines'][0]['place']);
+    }
+
     public function test_parts_for_a_ticket_link_the_issue_and_install_the_units_without_stock(): void
     {
         $issue = $this->issueAt($this->store, 'Walk-in cooler');
@@ -439,9 +479,12 @@ class PaymentTest extends TestCase
 
         $this->postJson("/api/payments/{$data['id']}/mistaken", [], $this->headers())->assertUnprocessable()->assertJsonValidationErrors('reason');
 
+        $this->getJson("/api/payments/{$data['id']}", $this->headers())->assertJsonPath('data.mistaken_reason', null);
+
         $this->postJson("/api/payments/{$data['id']}/mistaken", ['reason' => 'Paid twice'], $this->headers())
             ->assertOk()
             ->assertJsonPath('data.mistaken', true)
+            ->assertJsonPath('data.mistaken_reason', 'Paid twice')
             ->assertJsonCount(2, 'data.lines')
             ->assertJsonPath('data.notes.0.body', 'Paid twice');
 
@@ -461,7 +504,10 @@ class PaymentTest extends TestCase
 
         // The list hides mistaken payments unless asked.
         $this->getJson('/api/payments', $this->headers())->assertJsonCount(1, 'data')->assertJsonPath('meta.totals.count', 1);
-        $this->getJson('/api/payments?include_mistaken=1', $this->headers())->assertJsonCount(2, 'data');
+        $rows = collect($this->getJson('/api/payments?include_mistaken=1', $this->headers())->assertJsonCount(2, 'data')->json('data'));
+        $this->assertSame('Paid twice', $rows->firstWhere('id', $data['id'])['mistaken_reason']);
+        $this->assertNull($rows->firstWhere('id', '!=', $data['id'])['mistaken_reason']);
+        $this->getJson("/api/payments/{$data['id']}", $this->headers())->assertJsonPath('data.mistaken_reason', 'Paid twice');
     }
 
     // ------------------------------------------------------- List, multipart

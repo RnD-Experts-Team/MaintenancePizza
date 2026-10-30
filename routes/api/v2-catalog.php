@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\PartUnitController;
 use App\Http\Controllers\SupplierController;
+use App\Http\Controllers\TicketIssueController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -25,3 +26,6 @@ Route::post('suppliers/{supplier}/attachments', [SupplierController::class, 'att
 // The pieces of serial-tracked parts.
 Route::get('parts/{part}/units', [PartUnitController::class, 'index'])->withTrashed()->name('parts.units.index');
 Route::patch('part-units/{unit}', [PartUnitController::class, 'update'])->name('part-units.update');
+
+// The issue pickers: a light lookup across every store (not the full read).
+Route::get('ticket-issues', [TicketIssueController::class, 'lookup'])->name('ticket-issues.lookup');

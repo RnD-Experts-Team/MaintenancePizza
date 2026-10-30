@@ -93,7 +93,40 @@ class PaymentService
      */
     public function show(Payment $payment): array
     {
-        return $this->presenter->show($payment->load(PaymentPresenter::SHOW_LOADS));
+        $payment->load(PaymentPresenter::SHOW_LOADS);
+
+        return $this->presenter->show($payment, $this->placesOf($payment));
+    }
+
+    /**
+     * Where the parts its storage lines bought sit now: the address of each
+     * part's stock balance at the line's location, keyed
+     * "part_id:storage_location_id". One query for all the lines. The place
+     * belongs to the balance, not the line, so it is the current one -- it
+     * moves when someone re-shelves the part.
+     *
+     * @return array<string, array<int, array<string, mixed>>>
+     */
+    private function placesOf(Payment $payment): array
+    {
+        $lines = $payment->lines->filter(fn (PaymentLine $l) => $l->type === PaymentLineType::Parts
+            && $l->storage_location_id !== null
+            && $l->part_id !== null);
+
+        if ($lines->isEmpty()) {
+            return [];
+        }
+
+        $wanted = $lines->map(fn (PaymentLine $l) => $l->part_id.':'.$l->storage_location_id)->unique()->all();
+
+        return StockBalance::query()
+            ->whereIn('part_id', $lines->pluck('part_id')->unique()->all())
+            ->whereIn('storage_location_id', $lines->pluck('storage_location_id')->unique()->all())
+            ->with(['places.placeLevel', 'places.placeValue'])
+            ->get()
+            ->filter(fn (StockBalance $b) => in_array($b->part_id.':'.$b->storage_location_id, $wanted, true))
+            ->mapWithKeys(fn (StockBalance $b) => [$b->part_id.':'.$b->storage_location_id => $this->stock->presentPlace($b)])
+            ->all();
     }
 
     /**

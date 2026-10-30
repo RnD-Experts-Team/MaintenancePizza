@@ -6,6 +6,7 @@ use App\Models\Payment;
 use App\Models\Supplier;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Tests\Concerns\FakesAuthServer;
 use Tests\TestCase;
 
@@ -95,5 +96,35 @@ class SupplierTest extends TestCase
             ->assertJsonPath('data.total_paid', '100.50')
             ->assertJsonPath('data.notes.0.body', 'Ask for Joe')
             ->assertJsonCount(1, 'data.attachments');
+    }
+
+    public function test_list_rows_carry_total_paid_without_a_query_per_row(): void
+    {
+        $depot = Supplier::query()->create(['name' => 'Home Depot']);
+        Supplier::query()->create(['name' => 'Amazon']);
+        Payment::query()->create(['paid_at' => '2026-10-01', 'supplier_id' => $depot->id, 'total' => '100.50']);
+        Payment::query()->create(['paid_at' => '2026-10-03', 'supplier_id' => $depot->id, 'total' => '9.50']);
+        Payment::query()->create(['paid_at' => '2026-10-02', 'supplier_id' => $depot->id, 'total' => '20.00', 'mistaken' => true]);
+
+        $list = function (): array {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $rows = $this->getJson('/api/suppliers', $this->headers())->assertOk()->json('data');
+            $n = count(DB::getQueryLog());
+            DB::disableQueryLog();
+
+            return [$rows, $n];
+        };
+
+        [$rows, $few] = $list();
+        $this->assertSame(['Amazon' => '0.00', 'Home Depot' => '110.00'], array_column($rows, 'total_paid', 'name'));
+
+        foreach (range(1, 5) as $i) {
+            $s = Supplier::query()->create(['name' => "Supplier {$i}"]);
+            Payment::query()->create(['paid_at' => '2026-10-01', 'supplier_id' => $s->id, 'total' => $i]);
+        }
+        [$rows, $more] = $list();
+        $this->assertSame('3.00', collect($rows)->firstWhere('name', 'Supplier 3')['total_paid']);
+        $this->assertSame($few, $more, 'The supplier list ran more queries with more suppliers.');
     }
 }

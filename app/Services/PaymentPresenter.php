@@ -23,6 +23,7 @@ class PaymentPresenter
         'supplier',
         'lines.store',
         'attachments',
+        'mistakenNote',
     ];
 
     /** Everything the payment page shows. */
@@ -50,6 +51,7 @@ class PaymentPresenter
         'notes.attachments.creator',
         'attachments.creator',
         'revisions.editor',
+        'mistakenNote',
     ];
 
     /** What an unpaid session needs: its events (durations) and its trip's stops. */
@@ -113,6 +115,8 @@ class PaymentPresenter
             'types' => $lines->map(fn (PaymentLine $l) => $l->type->value)->unique()->values()->all(),
             'has_invoice' => $payment->attachments->isNotEmpty(),
             'mistaken' => (bool) $payment->mistaken,
+            // The reason given when it was marked mistaken (null otherwise).
+            'mistaken_reason' => $payment->mistaken ? $payment->mistakenNote?->body : null,
             'created_at' => $payment->created_at,
             'updated_at' => $payment->updated_at,
         ];
@@ -121,14 +125,16 @@ class PaymentPresenter
     /**
      * The payment page: the row plus its lines, notes, files and revisions.
      *
+     * @param  array<string, array<int, array<string, mixed>>>  $places  where each part sits
+     *         now, keyed "part_id:storage_location_id" (PaymentService::placesOf)
      * @return array<string, mixed>
      */
-    public function show(Payment $payment): array
+    public function show(Payment $payment, array $places = []): array
     {
         return $this->row($payment) + [
             'technician_id' => $payment->technician_id,
             'supplier_id' => $payment->supplier_id,
-            'lines' => $payment->lines->map(fn (PaymentLine $l) => $this->line($l))->values()->all(),
+            'lines' => $payment->lines->map(fn (PaymentLine $l) => $this->line($l, $places))->values()->all(),
             'notes' => $this->notes->presentMany($payment),
             'attachments' => $this->attachments->presentMany($payment),
             'revisions' => $payment->relationLoaded('revisions')
@@ -145,11 +151,13 @@ class PaymentPresenter
     }
 
     /**
+     * @param  array<string, array<int, array<string, mixed>>>  $places  see show()
      * @return array<string, mixed>
      */
-    public function line(PaymentLine $line): array
+    public function line(PaymentLine $line, array $places = []): array
     {
         $isParts = $line->type === PaymentLineType::Parts;
+        $toStorage = $isParts && $line->storage_location_id !== null;
 
         return [
             'id' => $line->id,
@@ -171,7 +179,11 @@ class PaymentPresenter
             'unit_cost' => $line->unit_cost === null ? null : number_format((float) $line->unit_cost, 4, '.', ''),
             'bought_from_supplier_id' => $line->bought_from_supplier_id,
             'bought_from' => $line->boughtFrom ? ['id' => $line->boughtFrom->id, 'name' => $line->boughtFrom->name] : null,
-            'destination' => $isParts ? ($line->storage_location_id !== null ? 'storage' : 'ticket') : null,
+            'destination' => $isParts ? ($toStorage ? 'storage' : 'ticket') : null,
+            // Parts into storage: where that part sits in the location NOW
+            // (the stock balance's address, [{level_id, level, value_id,
+            // value}], [] when nobody has said). Null for every other line.
+            'place' => $toStorage ? ($places[$line->part_id.':'.$line->storage_location_id] ?? []) : null,
             'miles' => $line->miles === null ? null : $this->money($line->miles),
             'issue_inspection_id' => $line->issue_inspection_id,
             'ticket_issues' => $line->ticketIssues->map(fn (TicketIssue $i) => $this->ticketIssue($i))->values()->all(),

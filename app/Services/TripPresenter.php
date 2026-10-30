@@ -20,7 +20,10 @@ use Illuminate\Database\Eloquent\Model;
  *  - the dashboard (MOS): everything, private notes included, and the audit
  *    trail on show;
  *  - the technician's link (`public`): never the audits, never a private
- *    note, plus his `state` and the stores he may add a visit to.
+ *    note, plus the stores he may add a visit to.
+ *
+ * Both carry `state` (off_clock | on_clock | on_break | travelling |
+ * parts_run), computed once by TripService::state.
  */
 class TripPresenter
 {
@@ -88,6 +91,11 @@ class TripPresenter
             ],
             'on_clock' => $open !== null,
             'open_session_id' => $open?->id,
+            // What he is doing right now -- the same reading as his own link
+            // (TripService::state, over the loaded session and its events).
+            // No open session is off_clock without asking the database again,
+            // so a list does not query per row.
+            'state' => $open === null ? 'off_clock' : $this->trips->state($trip, $open),
             'totals' => [
                 'paid_minutes' => (int) $durations->sum('paid'),
                 'break_minutes' => (int) $durations->sum('break'),
@@ -120,6 +128,7 @@ class TripPresenter
         $data = $this->present($trip);
 
         $open = $trip->sessions->first(fn (TripSession $s) => $s->clock_out === null && ! $s->mistaken);
+        // `state` comes from present(), so the dashboard and the link agree.
         $elsewhere = $open === null ? $this->trips->openSessionOf($trip->technician_id) : null;
 
         $data['notes'] = $this->presentNotes($trip, true);
@@ -127,7 +136,6 @@ class TripPresenter
             ->map(fn (TripStop $s) => $this->presentStop($s, true))->values()->all();
         $data['sessions'] = collect($data['sessions'])->where('mistaken', false)->values()->all();
         $data['purchases'] = collect($data['purchases'])->where('mistaken', false)->values()->all();
-        $data['state'] = $this->trips->state($trip, $open);
         $data['clocked_in_elsewhere'] = $elsewhere !== null;
         $data['stores'] = $this->trips->availableStores($trip)
             ->map(fn (Store $s) => ['id' => $s->id, 'store_number' => $s->store_number])->values()->all();

@@ -21,3 +21,6 @@ Route::post('payments/{payment}/attachments', [\App\Http\Controllers\PaymentCont
 
 // What has not been paid yet, per technician: unpaid sessions and purchases.
 Route::get('unpaid-work', [\App\Http\Controllers\PaymentController::class, 'unpaidWork'])->name('unpaid-work.index');
+
+// Inspections to pick on an Inspection line, with whether each is paid yet.
+Route::get('issue-inspections', [\App\Http\Controllers\IssueInspectionController::class, 'index'])->name('issue-inspections.index');

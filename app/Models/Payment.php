@@ -7,6 +7,7 @@ use App\Models\Concerns\HasNotesAndAttachments;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 /**
  * The record of one invoice we paid: when, to whom (exactly one technician
@@ -69,6 +70,19 @@ class Payment extends Model
     public function revisions(): HasMany
     {
         return $this->hasMany(PaymentRevision::class)->latest('id');
+    }
+
+    /**
+     * Why it was marked mistaken: the `mistaken` note markMistaken() writes
+     * (the latest one, should there ever be more). Its own relation so a
+     * list row can read the reason without loading every note.
+     *
+     * @return MorphOne<Note, $this>
+     */
+    public function mistakenNote(): MorphOne
+    {
+        return $this->morphOne(Note::class, 'notable')
+            ->ofMany(['id' => 'max'], fn ($q) => $q->where('type', 'mistaken'));
     }
 
     /** @return BelongsTo<User, $this> */

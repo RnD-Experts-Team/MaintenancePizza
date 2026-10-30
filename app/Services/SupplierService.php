@@ -30,7 +30,8 @@ class SupplierService
 
     /**
      * `search` matches name, phone and website; `with_trashed=1` includes
-     * deleted ones. Alphabetical.
+     * deleted ones. Alphabetical. Each row carries `total_paid`, summed in
+     * the same query (one aggregate subquery, never a query per row).
      *
      * @param  array<string, mixed>  $filters
      */
@@ -51,9 +52,9 @@ class SupplierService
                 ->orWhere('website', 'like', $like));
         }
 
-        return $query->orderBy('name')->orderBy('id')
+        return $this->withTotalPaid($query)->orderBy('name')->orderBy('id')
             ->paginate($perPage)
-            ->through(fn (Supplier $s) => $this->present($s));
+            ->through(fn (Supplier $s) => $this->present($s) + ['total_paid' => $this->money($s->total_paid)]);
     }
 
     /**
@@ -103,8 +104,25 @@ class SupplierService
         $total = (string) $supplier->payments()->where('mistaken', false)->sum('total');
 
         return $this->present($supplier) + [
-            'total_paid' => number_format((float) $total, 2, '.', ''),
+            'total_paid' => $this->money($total),
         ];
+    }
+
+    /**
+     * What we have paid each supplier directly -- payments to them that are
+     * not mistaken -- as a `total_paid` column on the rows.
+     *
+     * @param  Builder<Supplier>  $query
+     * @return Builder<Supplier>
+     */
+    private function withTotalPaid(Builder $query): Builder
+    {
+        return $query->withSum(['payments as total_paid' => fn ($q) => $q->where('mistaken', false)], 'total');
+    }
+
+    private function money(mixed $value): string
+    {
+        return number_format((float) $value, 2, '.', '');
     }
 
     /**

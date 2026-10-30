@@ -452,6 +452,14 @@ class TicketIssuePresenter
                 'amount' => $this->money($l->amount),
                 'invoice_number' => $l->payment->invoice_number,
                 'has_invoice' => $l->payment->relationLoaded('attachments') && $l->payment->attachments->isNotEmpty(),
+                // The files on that payment (the invoice and anything else).
+                'invoices' => $l->payment->relationLoaded('attachments')
+                    ? $l->payment->attachments->map(fn ($a) => [
+                        'id' => $a->id,
+                        'original_name' => $a->original_name,
+                        'url' => $a->url,
+                    ])->values()->all()
+                    : [],
             ])
             ->values()
             ->all();

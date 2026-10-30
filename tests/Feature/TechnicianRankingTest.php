@@ -4,10 +4,12 @@ namespace Tests\Feature;
 
 use App\Models\Category;
 use App\Models\Issue;
+use App\Models\Payment;
 use App\Models\Store;
 use App\Models\Technician;
 use App\Models\TechnicianIssueAbility;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\Concerns\FakesAuthServer;
 use Tests\TestCase;
 
@@ -133,5 +135,37 @@ class TechnicianRankingTest extends TestCase
             ->assertJsonPath('data.covered_issues.1.call_first', true);
 
         $this->assertArrayNotHasKey('covered_issues', $this->getJson('/api/technicians', $this->headers())->json('data.0'));
+    }
+
+    public function test_rows_carry_what_they_were_paid_this_calendar_month(): void
+    {
+        Carbon::setTestNow('2026-10-15 12:00:00');
+
+        try {
+            $tom = Technician::factory()->create(['name' => 'Tom']);
+            $ann = Technician::factory()->create(['name' => 'Ann']);
+            $tom->coverageStores()->attach($this->store->id);
+            $pay = fn (Technician $t, string $at, string $total, bool $mistaken = false) => Payment::query()->create([
+                'paid_at' => $at, 'technician_id' => $t->id, 'total' => $total, 'mistaken' => $mistaken,
+            ]);
+            $pay($tom, '2026-10-01', '100.00');
+            $pay($tom, '2026-10-31', '25.50');
+            $pay($tom, '2026-09-30', '999.00');
+            $pay($tom, '2026-11-01', '999.00');
+            $pay($tom, '2026-10-10', '999.00', mistaken: true);
+            $pay($ann, '2026-09-15', '50.00');
+
+            $plain = array_column($this->getJson('/api/technicians', $this->headers())->assertOk()->json('data'), 'paid_this_month', 'name');
+            $this->assertSame('125.50', $plain['Tom']);
+            $this->assertSame('0.00', $plain['Ann']);
+
+            // The ranked list (store / issue given) carries it too.
+            $ranked = $this->getJson('/api/technicians?store=03795-00001', $this->headers())->assertOk()->json('data');
+            $this->assertSame('Tom', $ranked[0]['name']);
+            $this->assertSame('125.50', $ranked[0]['paid_this_month']);
+            $this->assertTrue($ranked[0]['standing']['covers_store']);
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 }

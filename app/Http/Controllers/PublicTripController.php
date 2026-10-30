@@ -123,6 +123,8 @@ class PublicTripController extends Controller
             $request->validated(),
             (array) $request->file('files', []),
             $request,
+            (array) $request->file('before', []),
+            (array) $request->file('after', []),
         );
 
         return $this->respond($request);

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\IssueInspectionLookupRequest;
 use App\Http\Requests\IssueInspectionResultRequest;
 use App\Http\Requests\IssueInspectionStoreRequest;
 use App\Models\IssueInspection;
@@ -12,7 +13,8 @@ use App\Services\InspectionService;
 use App\Services\TicketIssueService;
 
 /**
- * Booking an inspection and recording what it found (docs/MAINTENANCE-V2.md §2).
+ * Booking an inspection and recording what it found (docs/MAINTENANCE-V2.md §2),
+ * and the global inspection lookup the payment form picks from (§4).
  */
 class IssueInspectionController extends Controller
 {
@@ -20,6 +22,15 @@ class IssueInspectionController extends Controller
         private InspectionService $inspections,
         private TicketIssueService $issues,
     ) {
+    }
+
+    /**
+     * The payment dialog's Inspection line (`GET issue-inspections`):
+     * inspections across every store, with whether they are paid yet.
+     */
+    public function index(IssueInspectionLookupRequest $request): array
+    {
+        return ['data' => $this->inspections->lookup($request->validated())];
     }
 
     public function store(IssueInspectionStoreRequest $request, Store $store, Ticket $ticket, TicketIssue $ticketIssue): array

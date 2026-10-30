@@ -1109,16 +1109,20 @@ class TripService
      *    estimate and is done (one is recorded if the office never booked
      *    it); the issue's status does not move.
      *
-     * Files (before/after photos) go on the issue.
+     * Files go on the issue: `files` as sent, `before` / `after` photos named
+     * "Before - …" / "After - …" (AttachmentService::BEFORE_PREFIX) so they
+     * read back as such -- no column of their own.
      *
      * @param  array{note?: string|null, findings?: string|null, estimated_cost?: numeric-string|float|null}  $data
      * @param  array<int, UploadedFile>  $files
+     * @param  array<int, UploadedFile>  $before
+     * @param  array<int, UploadedFile>  $after
      */
-    public function completeIssue(TripStop $stop, TicketIssue $issue, array $data, array $files, ?Request $request = null): TripStopIssue
+    public function completeIssue(TripStop $stop, TicketIssue $issue, array $data, array $files, ?Request $request = null, array $before = [], array $after = []): TripStopIssue
     {
         $this->assertStopLive($stop);
 
-        return DB::transaction(function () use ($stop, $issue, $data, $files, $request) {
+        return DB::transaction(function () use ($stop, $issue, $data, $files, $request, $before, $after) {
             $row = $this->stopIssueRow($stop, $issue);
 
             if ($row->task_status === 'done') {
@@ -1167,6 +1171,8 @@ class TripService
             }
 
             $this->attachments()->store($issue, $files);
+            $this->attachments()->store($issue, $before, AttachmentService::BEFORE_PREFIX);
+            $this->attachments()->store($issue, $after, AttachmentService::AFTER_PREFIX);
 
             $row->forceFill(['task_status' => 'done', 'done_at' => now(), 'not_done_reason' => null])->save();
 

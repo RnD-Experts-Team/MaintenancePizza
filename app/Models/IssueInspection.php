@@ -66,6 +66,19 @@ class IssueInspection extends Model
         return $this->hasMany(IssueApproval::class);
     }
 
+    /**
+     * The payment lines that pay for this inspection (an Inspection line
+     * naming it). Lines of a mistaken payment stay on record, so "is it paid"
+     * must also ask that the payment is not mistaken
+     * (InspectionService::lookup does).
+     *
+     * @return HasMany<PaymentLine, $this>
+     */
+    public function paymentLines(): HasMany
+    {
+        return $this->hasMany(PaymentLine::class, 'issue_inspection_id');
+    }
+
     /** @return HasMany<Assignment, $this> */
     public function assignments(): HasMany
     {

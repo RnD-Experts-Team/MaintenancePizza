@@ -122,4 +122,83 @@ class InspectionService
             return $inspection;
         });
     }
+
+    /**
+     * The payment dialog's Inspection line (`GET issue-inspections`): the
+     * inspections there are to pay for, newest first. Mistaken ones never.
+     *
+     *   technician_id  who did it
+     *   unpaid=1       only those no payment line pays yet
+     *   search         the issue's title (catalog or free text) or the ticket
+     *                  id (digits, a leading # allowed)
+     *   limit          default 50, at most 100
+     *
+     * `paid` is true when a line of a payment that is not mistaken names the
+     * inspection (payment_lines.issue_inspection_id) -- the same test
+     * `unpaid=1` filters on, so the two can never disagree.
+     *
+     * @param  array{technician_id?: int|string|null, unpaid?: bool|string|null, search?: string|null, limit?: int|string|null}  $filters
+     * @return array<int, array<string, mixed>>
+     */
+    public function lookup(array $filters): array
+    {
+        // A line pays only while its payment is not mistaken.
+        $paying = fn ($q) => $q->whereHas('payment', fn ($p) => $p->where('mistaken', false));
+
+        $query = IssueInspection::query()
+            ->where('mistaken', false)
+            ->whereHas('ticketIssue.ticket')
+            ->withExists(['paymentLines as paid' => $paying])
+            ->with(['technician', 'ticketIssue.issue', 'ticketIssue.ticket.store']);
+
+        if (! empty($filters['technician_id'])) {
+            $query->where('technician_id', (int) $filters['technician_id']);
+        }
+
+        if (! empty($filters['unpaid']) && filter_var($filters['unpaid'], FILTER_VALIDATE_BOOLEAN)) {
+            $query->whereDoesntHave('paymentLines', $paying);
+        }
+
+        $search = trim((string) ($filters['search'] ?? ''));
+        if ($search !== '') {
+            $like = '%'.mb_strtolower(str_replace(['%', '_'], ['\%', '\_'], $search)).'%';
+            $number = ltrim($search, '#');
+
+            $query->whereHas('ticketIssue', fn ($i) => $i->where(fn ($q) => $q
+                ->whereRaw('LOWER(other_title) LIKE ?', [$like])
+                ->orWhereHas('issue', fn ($c) => $c->whereRaw('LOWER(title) LIKE ?', [$like]))
+                ->when(ctype_digit($number), fn ($id) => $id->orWhere('ticket_id', (int) $number))));
+        }
+
+        $limit = max(1, min(100, (int) ($filters['limit'] ?? 50)));
+
+        return $query->orderByDesc('id')->limit($limit)->get()
+            ->map(function (IssueInspection $inspection) {
+                $issue = $inspection->ticketIssue;
+                $store = $issue?->ticket?->store;
+
+                return [
+                    'id' => $inspection->id,
+                    'ticket_issue' => $issue === null ? null : [
+                        'id' => $issue->id,
+                        'ticket_id' => $issue->ticket_id,
+                        'title' => $issue->displayTitle(),
+                        'store' => $store ? ['id' => $store->id, 'store_number' => $store->store_number] : null,
+                        'other_store' => $issue->ticket?->other_store,
+                    ],
+                    'technician' => $inspection->technician
+                        ? ['id' => $inspection->technician->id, 'name' => $inspection->technician->name]
+                        : null,
+                    'status' => $inspection->status->value,
+                    'status_label' => $inspection->status->label(),
+                    'done_at' => $inspection->done_at,
+                    'scheduled_date' => $inspection->scheduled_date?->toDateString(),
+                    'estimated_cost' => $inspection->estimated_cost === null
+                        ? null
+                        : number_format((float) $inspection->estimated_cost, 2, '.', ''),
+                    'paid' => (bool) $inspection->paid,
+                ];
+            })
+            ->all();
+    }
 }

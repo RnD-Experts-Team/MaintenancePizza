@@ -18,6 +18,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
+use Tests\Concerns\FakesAuthServer;
 use Tests\TestCase;
 
 /**
@@ -27,6 +28,7 @@ use Tests\TestCase;
  */
 class PublicTripTest extends TestCase
 {
+    use FakesAuthServer;
     use RefreshDatabase;
 
     private Technician $technician;
@@ -256,6 +258,40 @@ class PublicTripTest extends TestCase
         $this->postJson($this->url("stops/{$stop->id}/issues/{$this->issue->id}/done"), ['note' => 'again'])
             ->assertUnprocessable()->assertJsonValidationErrors('status');
         $this->assertSame(1, MaintenanceOutboxEvent::query()->where('subject', 'maintenance.issue.work_done')->count());
+    }
+
+    public function test_before_and_after_photos_are_kept_on_the_issue_and_read_back_as_such(): void
+    {
+        $stop = $this->trip->stops()->sole();
+
+        $this->post($this->url("stops/{$stop->id}/issues/{$this->issue->id}/done"), [
+            'note' => 'Replaced the drain valve gasket',
+            'files' => [UploadedFile::fake()->image('receipt.jpg')],
+            'before' => [UploadedFile::fake()->image('drain.jpg'), UploadedFile::fake()->image('leak.jpg')],
+            'after' => [UploadedFile::fake()->image('drain.jpg')],
+        ], ['Accept' => 'application/json'])->assertOk();
+
+        $names = $this->issue->attachments()->orderBy('id')->pluck('original_name')->all();
+        $this->assertSame(['receipt.jpg', 'Before - drain.jpg', 'Before - leak.jpg', 'After - drain.jpg'], $names);
+
+        // The dashboard's issue read says which is which.
+        $this->fakeAuthServer();
+        $ticket = $this->issue->ticket;
+        $attachments = $this->getJson("/api/stores/{$ticket->store->store_number}/tickets/{$ticket->id}/issues/{$this->issue->id}", $this->headers())
+            ->assertOk()
+            ->json('data.attachments');
+        $this->assertSame(
+            ['receipt.jpg' => null, 'Before - drain.jpg' => 'before', 'Before - leak.jpg' => 'before', 'After - drain.jpg' => 'after'],
+            array_column($attachments, 'kind', 'original_name'),
+        );
+
+        // Only files.
+        $other = TicketIssue::factory()->for($ticket)->create(['status' => IssueStatus::Scheduled]);
+        $this->app->make(TripService::class)->attachIssue($stop, $other, 'work');
+        $this->postJson($this->url("stops/{$stop->id}/issues/{$other->id}/done"), [
+            'note' => 'x',
+            'before' => ['not a file'],
+        ])->assertUnprocessable()->assertJsonValidationErrors('before.0');
     }
 
     public function test_an_inspection_done_fills_the_open_inspection_and_leaves_the_status(): void

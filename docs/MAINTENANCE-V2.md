@@ -57,6 +57,9 @@ attachments, `deleted_at`.
   `issue_id` or `store` given: covers store → covers issue → emergency (if
   `urgent=1`) → call first on that issue → rating desc → name. Each row adds
   `standing {covers_store, covers_issue, call_first, rating}` when ranking.
+  Every list row (ranked or not) adds `paid_this_month` (money): non-mistaken
+  payments to the technician with `paid_at` in the current calendar month,
+  summed by one aggregate subquery. List rows only, not show.
 - `POST technicians`, `GET technicians/{t}`, `PATCH technicians/{t}`,
   `DELETE technicians/{t}`, `POST technicians/{t}/restore`
 - Coverage of issues: `PUT technicians/{t}/abilities/{issue}` `{rating?:1-5|null, notes?, call_first?}`
@@ -73,12 +76,17 @@ way. Seeded: In-house, Company, Independent.
 `GET suppliers?search=&with_trashed=1`, `POST suppliers`, `GET suppliers/{s}`,
 `PATCH suppliers/{s}`, `DELETE suppliers/{s}`, `POST suppliers/{s}/restore`,
 `POST suppliers/{s}/notes`, `POST suppliers/{s}/attachments`.
-Presented: id, name, phone, website, description, `total_paid` (only on
-show), notes, attachments, deleted_at.
+Presented: id, name, phone, website, description, `total_paid` (money:
+non-mistaken payments to the supplier — on list rows too, one aggregate
+subquery, and on show/create/update/restore), notes, attachments, deleted_at.
 
 ### Parts
 Adds `brand`, `model`, `part_number`, `unit` (each|box|pack|ft|m|gal|l|kg|lb|set),
 `track_serials` (bool). `name` unique the same way.
+- `GET parts?search=&trashed=with|only&per_page=` — `search` matches name,
+  brand, model or part number, ignoring capitals.
+- `GET parts/{part}` → the list row plus `units_count` (part units recorded,
+  every status). Deleted parts are readable (withTrashed).
 - `GET parts/{part}/units?status=` → part units (serial_number, status
   in_stock|installed|returned|damaged_lost, storage_location {id,name},
   ticket_issue {id, ticket_id, store_number, title}, installed_at,
@@ -147,7 +155,9 @@ returns the issue with:
   to this issue, plus `unpaid_purchases` (technician purchases not yet paid)
   and `stock_used_value` (Used movements from storage on this issue, at cost).
 - `payments`: [{payment_id, line_id, paid_at, paid_to {type
-  technician|supplier, id, name}, type, amount, invoice_number, has_invoice}]
+  technician|supplier, id, name}, type, amount, invoice_number, has_invoice,
+  invoices [{id, original_name, url}]}] — `invoices` are the attachments on
+  that payment.
 - `purchases`: technician purchases on this issue (see §4).
 - `stock_used`: [{movement_id, moved_at, part {id,name}, quantity, value,
   storage_location {id,name}, serials[]}]
@@ -157,9 +167,24 @@ returns the issue with:
   level, label} | null }` — `next` lists the actions valid now (first one
   primary). The checklist is the close checklist (§ close).
 - `status_changes`, `notes`, `attachments`, troubleshooting fields — as today.
+  An attachment carries `kind`: `before` | `after` for a job photo (its
+  `original_name` starts "Before - " / "After - ", §3), else null.
 - `timeline`: one merged, newest-first list of {at, kind, text, actor}
   (status changes, info requests/answers, inspections, approvals,
   schedules, visits, payments, purchases, stock used, notes).
+
+Ticket lists (`GET tickets`, `GET stores/{store}/tickets`, and the ticket
+returned by create/restore) keep their light issue rows (no costs, no
+timeline) and add `technicians` [{id, name}] per issue — who it is assigned
+to, removed technicians included, eager-loaded (no query per issue).
+
+### Issue lookup (pickers)
+`GET ticket-issues?search=&store=<store_number>&statuses[]=&limit=` — global
+(every store), newest first, `limit` default 20, max 100. `search` matches the
+catalog title, `other_title`, the description (ignoring capitals) or the
+ticket id (digits, a leading `#` allowed). Issues of a deleted ticket are left
+out. Rows: `{id, ticket_id, title, status, status_label, priority {value,
+label}, store {id, store_number}|null, other_store}` — never the full read.
 
 ### Workflow actions
 All under `stores/{store}/tickets/{ticket}/issues/{ticketIssue}/…`, POST,
@@ -168,7 +193,7 @@ not fit the current status → 422 with a plain reason.
 
 | path | body | effect |
 |---|---|---|
-| `review` | target_completion_at?, next_action?, assigned_priority? | new → in_review (also allowed to just update these fields while in_review) |
+| `review` | target_completion_at?, next_action?, assigned_priority? | new → in_review. In every other open status (in_review, waiting_on_store, inspection, waiting_approval, scheduled, work_done) it only updates these fields and the status stays; refused once closed/cancelled |
 | `info-requests` | question (required), files[] | → waiting_on_store; outbox `maintenance.issue.info_requested` |
 | `info-requests/{request}/answer` | answer (required), files[], via? store\|specialist (default: store when the caller is not MOS… just take the body value, default store) | → in_review; outbox `maintenance.issue.info_answered` |
 | `inspections` | technician_id, scheduled_date, scheduled_time?, instructions? | → inspection; creates a `kind=inspection` schedule + an inspection(status scheduled) + adds the issue to the technician's open trip for that date (TripService::scheduleIssue). Response adds `trip_link` {url_token, expires_after_hours} when a NEW token was issued. |
@@ -237,7 +262,9 @@ Dashboard edits write `trip_audits` (before/after, reason, user).
 
 Presented trip: id, technician {id, name, phone}, status, planned_date,
 instructions, link {active: bool, expires_at|null, last_used_at}, on_clock
-(bool), open_session_id, totals {paid_minutes, break_minutes, miles},
+(bool), open_session_id, `state` (off_clock | on_clock | on_break |
+travelling | parts_run — `TripService::state`, the same reading as the link;
+on list rows and show), totals {paid_minutes, break_minutes, miles},
 stops [{id, store {id, store_number}|null, other_store, status
 planned|arrived|done|not_done, arrived_at, left_at, arrival_odometer,
 not_done_reason, attachments, issues [{ticket_issue_id, ticket_id, title,
@@ -250,9 +277,8 @@ mistaken}], attachments}], purchases [...], notes, attachments, audits
 
 Public endpoints (`public/trips/{token}`, middleware `trip.token`, throttle
 60/min; 404 for an unknown token, 410 `{message}` for an expired/closed one):
-- `GET public/trips/{token}` → the trip as above minus audits/private notes,
-  plus `state`: `off_clock | on_clock | on_break | travelling | parts_run`,
-  and `stores` (for adding a stop: stores of open issues assigned to him + his
+- `GET public/trips/{token}` → the trip as above minus audits/private notes
+  (`state` included), plus `stores` (for adding a stop: stores of open issues assigned to him + his
   coverage stores).
 - `POST …/clock-in` `{using_car?, odometer?, photo?}` — refuses if he is
   already clocked in anywhere (one open session per technician).
@@ -262,10 +288,14 @@ Public endpoints (`public/trips/{token}`, middleware `trip.token`, throttle
 - `POST …/stops` `{store_id}` — add a store visit.
 - `POST …/stops/{stop}/arrive` `{odometer?, photo?}`, `POST …/stops/{stop}/leave`,
   `POST …/stops/{stop}/not-done` `{reason}`
-- `POST …/stops/{stop}/issues/{ticketIssue}/done` `{note?, findings?, estimated_cost?, files[]}`
+- `POST …/stops/{stop}/issues/{ticketIssue}/done` `{note?, findings?, estimated_cost?, files[], before[], after[]}`
   — purpose work: the issue → work_done (work_performed = note), outbox
   `maintenance.issue.work_done`; purpose inspection: the open inspection
-  gets findings/estimate and is done (status unchanged). Files go on the issue.
+  gets findings/estimate and is done (status unchanged). Files go on the issue:
+  `files[]` as sent, `before[]` / `after[]` with `original_name` prefixed
+  "Before - " / "After - " (no column of their own;
+  `AttachmentService::BEFORE_PREFIX`), read back as attachment `kind`
+  before|after.
 - `POST …/stops/{stop}/issues/{ticketIssue}/not-done` `{reason}`
 - `POST …/purchases` `{description, part_id?, quantity?, total_cost, supplier_id?|supplier_name?, ticket_issue_id?, serial_number?, receipt[]}`
   (supplier_name creates the supplier when new, same uniqueness).
@@ -306,11 +336,15 @@ Payment total = sum of its lines.
 - `GET payments?from=&to=&technician_id=&supplier_id=&category_id=&store=&type=&search=&include_mistaken=1` (paginated; search matches invoice_number, reference, names)
   → rows {id, paid_at, paid_to {type, id, name, category}, method, reference,
   invoice_number, total, line_count, stores [store_number…], types [...],
-  has_invoice, mistaken, created_at}, and `meta.totals {count, total}`.
+  has_invoice, mistaken, mistaken_reason (the body of its `mistaken` note, or
+  null), created_at}, and `meta.totals {count, total}`.
 - `POST payments` `{paid_at, technician_id?|supplier_id?, method?, reference?, invoice_number?, note?, files[], lines: [{type, store_id?|other_store?|storage_location_id?, description?, amount?, hours?, rate?, trip_session_ids[]?, ticket_issue_ids[]?, part_id?, quantity?, unit_cost?, bought_from_supplier_id?, destination?, place?, serials[]?, technician_purchase_ids[]?, miles?, issue_inspection_id?}]}`
   (multipart allowed: lines as JSON string in `lines`, or bracket notation)
-- `GET payments/{payment}` → payment + lines [{…, store {id,store_number},
-  storage_location {id,name}, part {id,name}, bought_from {id,name},
+- `GET payments/{payment}` → the row (mistaken_reason included) + lines [{…,
+  store {id,store_number}, storage_location {id,name}, part {id,name},
+  bought_from {id,name}, place (parts going to storage: where that part sits
+  in the location NOW — the stock balance's address [{level_id, level,
+  value_id, value}], `[]` when nobody has said; null on every other line),
   ticket_issues [{id, ticket_id, title, store_number}], trip_sessions [{id,
   clock_in, clock_out, paid_minutes}], stock_movement_id, serials[],
   technician_purchases[]}], notes, attachments, revisions [{id, edited_by,
@@ -325,6 +359,16 @@ Payment total = sum of its lines.
 - `GET unpaid-work?technician_id=` → per technician {technician, sessions
   [unpaid sessions as in trip-sessions/unpaid], purchases [unpaid technician
   purchases], totals {paid_minutes, purchases_total}}.
+
+Inspection lookup (the payment dialog's Inspection line):
+`GET issue-inspections?technician_id=&unpaid=1&search=&limit=` — global,
+newest first, mistaken inspections never, `limit` default 50, max 100.
+`search` matches the issue's title (catalog or `other_title`, ignoring
+capitals) or the ticket id. Rows: `{id, ticket_issue {id, ticket_id, title,
+store {id, store_number}|null, other_store}, technician {id, name}|null,
+status, status_label, done_at, scheduled_date, estimated_cost, paid}` —
+`paid` = a line of a non-mistaken payment has `issue_inspection_id` = this;
+`unpaid=1` keeps the ones that are not.
 
 Technician purchases (dashboard): `GET technician-purchases?technician_id=&unpaid=1`,
 `POST technician-purchases` (same body as the public one + technician_id,

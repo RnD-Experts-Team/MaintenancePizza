@@ -1308,10 +1308,12 @@ class StockService
      *
      * A LIST rather than a map, because the order is the address: "C / 8 / 5"
      * only means shelf-row-column if it comes out in that order every time.
+     * Public so a payment's storage lines show the same address
+     * (PaymentService::placesOf).
      *
      * @return array<int, array<string, mixed>>
      */
-    private function presentPlace(StockBalance $balance): array
+    public function presentPlace(StockBalance $balance): array
     {
         if (! $balance->relationLoaded('places')) {
             return [];

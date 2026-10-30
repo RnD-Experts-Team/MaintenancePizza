@@ -110,8 +110,11 @@ class IssueWorkflowService
 
     /**
      * Review (contract: `review`): new → in_review, setting the target date,
-     * the next action and the assigned priority. While in review it only
-     * updates them. A key left out is left alone; a key sent as null clears.
+     * the next action and the assigned priority. In any other status that is
+     * not finished (in review, waiting on the store, inspection, waiting for
+     * approval, scheduled, work done) it only updates them and the status
+     * stays where it is -- the plan can change at any point. A key left out
+     * is left alone; a key sent as null clears.
      *
      * @param  array{target_completion_at?: string|null, next_action?: string|null, assigned_priority?: string|null}  $data
      */
@@ -335,7 +338,8 @@ class IssueWorkflowService
         $open = array_values(array_filter(IssueStatus::cases(), fn (IssueStatus $s) => !$s->isTerminal()));
 
         return match ($action) {
-            self::REVIEW => [IssueStatus::New, IssueStatus::InReview],
+            // Updating the plan never moves the status (except new → in_review).
+            self::REVIEW => $open,
             self::INFO_REQUEST => [IssueStatus::New, IssueStatus::InReview, IssueStatus::WaitingOnStore],
             self::INSPECTION => [IssueStatus::New, IssueStatus::InReview, IssueStatus::Inspection],
             self::APPROVAL_REQUEST => [IssueStatus::New, IssueStatus::InReview, IssueStatus::Inspection, IssueStatus::WaitingApproval],
@@ -389,16 +393,15 @@ class IssueWorkflowService
             return "This issue is {$label}. Change its status first if it needs more work.";
         }
 
-        if ($status === IssueStatus::WaitingOnStore && in_array($action, [self::INSPECTION, self::SCHEDULE, self::APPROVAL_REQUEST, self::APPROVAL, self::REVIEW], true)) {
+        if ($status === IssueStatus::WaitingOnStore && in_array($action, [self::INSPECTION, self::SCHEDULE, self::APPROVAL_REQUEST, self::APPROVAL], true)) {
             return "We are still waiting for the store to answer. Record the store's answer first.";
         }
 
-        if ($status === IssueStatus::WaitingApproval && in_array($action, [self::SCHEDULE, self::INSPECTION, self::INFO_REQUEST, self::REVIEW, self::WORK_DONE], true)) {
+        if ($status === IssueStatus::WaitingApproval && in_array($action, [self::SCHEDULE, self::INSPECTION, self::INFO_REQUEST, self::WORK_DONE], true)) {
             return 'The quote is still waiting for approval. Record the approval first.';
         }
 
         return match ($action) {
-            self::REVIEW => "The review is over once the issue has moved on; this issue is already {$label}.",
             self::INFO_REQUEST => "You can ask the store a question while reviewing the issue, not while it is {$label}.",
             self::INSPECTION => "An inspection can be booked while reviewing the issue, not while it is {$label}.",
             self::APPROVAL_REQUEST => "Approval can be asked for while reviewing or inspecting the issue, not while it is {$label}.",
@@ -464,7 +467,7 @@ class IssueWorkflowService
                 continue;
             }
 
-            $label = $action === self::REVIEW && $issue->status === IssueStatus::InReview
+            $label = $action === self::REVIEW && $issue->status !== IssueStatus::New
                 ? 'Update the review'
                 : $this->label($action);
 

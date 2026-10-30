@@ -100,6 +100,7 @@ Route::middleware('auth.token.store')->group(function () {
 
     Route::get('parts', [CatalogController::class, 'partsIndex'])->name('parts.index');
     Route::post('parts', [CatalogController::class, 'partsStore'])->name('parts.store');
+    Route::get('parts/{part}', [CatalogController::class, 'partsShow'])->withTrashed()->name('parts.show');
     Route::patch('parts/{part}', [CatalogController::class, 'partsUpdate'])->name('parts.update');
     Route::delete('parts/{part}', [CatalogController::class, 'partsDestroy'])->name('parts.destroy');
     Route::post('parts/{part}/restore', [CatalogController::class, 'partsRestore'])->withTrashed()->name('parts.restore');

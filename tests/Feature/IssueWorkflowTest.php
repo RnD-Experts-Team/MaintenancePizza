@@ -50,12 +50,33 @@ class IssueWorkflowTest extends IssueWorkflowTestCase
         $this->assertSame(0, $this->issue->statusChanges()->count());
     }
 
-    public function test_review_is_refused_once_the_issue_has_moved_on(): void
+    public function test_review_updates_the_plan_in_any_open_status_without_moving_it(): void
     {
-        $this->putStatus(IssueStatus::Scheduled);
+        foreach ([IssueStatus::WaitingOnStore, IssueStatus::Inspection, IssueStatus::WaitingApproval, IssueStatus::Scheduled, IssueStatus::WorkDone] as $status) {
+            $this->putStatus($status);
+
+            $this->act('review', [
+                'target_completion_at' => '2026-11-09 12:00:00',
+                'next_action' => "Plan while {$status->value}",
+                'assigned_priority' => 'urgent',
+            ])->assertOk()
+                ->assertJsonPath('data.status', $status->value)
+                ->assertJsonPath('data.next_action', "Plan while {$status->value}")
+                ->assertJsonPath('data.assigned_priority.value', 'urgent');
+
+            $this->assertStatus($status);
+        }
+
+        $this->assertSame(0, $this->issue->statusChanges()->count());
+        $this->assertCount(0, $this->outbox(IssueEventPublisher::STATUS_CHANGED));
+    }
+
+    public function test_review_is_refused_once_the_issue_is_finished(): void
+    {
+        $this->putStatus(IssueStatus::Closed);
 
         $this->assertRefused($this->act('review', ['next_action' => 'x']))
-            ->assertJsonPath('errors.status.0', 'The review is over once the issue has moved on; this issue is already scheduled.');
+            ->assertJsonPath('errors.status.0', 'This issue is closed. Change its status first if it needs more work.');
     }
 
     // ------------------------------------------------------------- Work done

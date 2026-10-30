@@ -131,6 +131,10 @@ class CatalogService
      *
      * The ranking is done in SQL, so pagination stays correct.
      *
+     * Every row adds `paid_this_month`: payments to them that are not
+     * mistaken, paid_at in the current calendar month -- one aggregate
+     * subquery, never a query per row.
+     *
      * @param  array<string, mixed>  $filters
      */
     public function listTechnicians(array $filters, int $perPage): LengthAwarePaginator
@@ -161,7 +165,8 @@ class CatalogService
         $ranking = $store !== null || $issueId !== null;
 
         if (! $ranking) {
-            return $query->latest()->paginate($perPage)->through(fn (Technician $t) => $this->presentTechnician($t));
+            return $this->withPaidThisMonth($query)->latest()->paginate($perPage)
+                ->through(fn (Technician $t) => $this->presentTechnician($t) + $this->paidThisMonth($t));
         }
 
         $coversStore = fn ($q) => $q->selectRaw('1')
@@ -215,7 +220,10 @@ class CatalogService
             ->orderBy('name')
             ->orderBy('technicians.id');
 
-        return $query->paginate($perPage)->through(fn (Technician $t) => $this->presentTechnician($t) + [
+        // After select('technicians.*'), which would otherwise drop the sum.
+        $this->withPaidThisMonth($query);
+
+        return $query->paginate($perPage)->through(fn (Technician $t) => $this->presentTechnician($t) + $this->paidThisMonth($t) + [
             'standing' => [
                 'covers_store' => $store !== null ? (bool) $t->rank_covers_store : null,
                 'covers_issue' => $issueId !== null ? (bool) $t->rank_covers_issue : null,
@@ -223,6 +231,32 @@ class CatalogService
                 'rating' => $issueId !== null && $t->rank_rating !== null ? (int) $t->rank_rating : null,
             ],
         ]);
+    }
+
+    /**
+     * Sum this month's payments onto each technician row (`paid_this_month`).
+     * paid_at is a date: the month is [the 1st, the 1st of next month).
+     *
+     * @param  Builder<Technician>  $query
+     * @return Builder<Technician>
+     */
+    private function withPaidThisMonth(Builder $query): Builder
+    {
+        $from = now()->startOfMonth()->toDateString();
+        $until = now()->startOfMonth()->addMonth()->toDateString();
+
+        return $query->withSum(['payments as paid_this_month' => fn ($q) => $q
+            ->where('mistaken', false)
+            ->where('paid_at', '>=', $from)
+            ->where('paid_at', '<', $until)], 'total');
+    }
+
+    /**
+     * @return array{paid_this_month: string}
+     */
+    private function paidThisMonth(Technician $technician): array
+    {
+        return ['paid_this_month' => number_format((float) $technician->paid_this_month, 2, '.', '')];
     }
 
     /**
@@ -338,11 +372,43 @@ class CatalogService
 
     // ------------------------------------------------------------------- Parts
 
-    public function listParts(?string $trashed, int $perPage): LengthAwarePaginator
+    /**
+     * The parts list and the part pickers.
+     *
+     * `search` matches the name, brand, model or part number, ignoring
+     * capitals (compared lower-cased, so it does not hang on the database's
+     * collation). `trashed=with|only` as everywhere else.
+     */
+    public function listParts(?string $trashed, int $perPage, ?string $search = null): LengthAwarePaginator
     {
         $query = $this->trashed(Part::query()->with(self::CATALOG_LOADS)->latest(), $trashed);
 
+        $search = mb_strtolower(trim((string) $search));
+        if ($search !== '') {
+            $like = '%'.str_replace(['%', '_'], ['\%', '\_'], $search).'%';
+            $query->where(fn (Builder $q) => $q
+                ->whereRaw('LOWER(name) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(brand) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(model) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(part_number) LIKE ?', [$like]));
+        }
+
         return $query->paginate($perPage)->through(fn (Part $p) => $this->presentPart($p));
+    }
+
+    /**
+     * One part: the list row plus how many pieces of it are recorded
+     * (`units_count`, every status -- only serial-tracked parts have any).
+     *
+     * @return array<string, mixed>
+     */
+    public function showPart(Part $part): array
+    {
+        $part->load(self::CATALOG_LOADS)->loadCount('units');
+
+        return $this->presentPart($part) + [
+            'units_count' => (int) $part->units_count,
+        ];
     }
 
     /**

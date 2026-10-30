@@ -16,6 +16,7 @@ use App\Models\StockMovementLine;
 use App\Models\StorageLocation;
 use App\Models\Supplier;
 use App\Models\TechnicianPurchase;
+use App\Models\Ticket;
 use App\Models\TicketIssue;
 use App\Models\Trip;
 use App\Models\TripStop;
@@ -263,6 +264,51 @@ class TicketIssueReadTest extends IssueWorkflowTestCase
         }
 
         $this->assertSame($one, $count(), 'The issue list ran more queries with more issues.');
+    }
+
+    public function test_each_payment_lists_the_files_on_it_as_invoices(): void
+    {
+        $this->seedMoney();
+
+        $payments = collect($this->read()->json('data.payments'));
+
+        $hourly = $payments->firstWhere('type', 'hourly');
+        $this->assertCount(1, $hourly['invoices']);
+        $this->assertSame('inv7.pdf', $hourly['invoices'][0]['original_name']);
+        $this->assertSame(['id', 'original_name', 'url'], array_keys($hourly['invoices'][0]));
+        $this->assertStringEndsWith('attachments/inv7.pdf', $hourly['invoices'][0]['url']);
+
+        $this->assertSame([], $payments->firstWhere('type', 'parts')['invoices']);
+    }
+
+    public function test_ticket_list_issue_rows_name_their_technicians_without_a_query_per_issue(): void
+    {
+        $this->issue->technicians()->attach($this->technician->id);
+
+        $this->getJson("/api/stores/{$this->store->store_number}/tickets", $this->headers())->assertOk()
+            ->assertJsonPath('data.0.issues.0.technicians', [['id' => $this->technician->id, 'name' => 'Sam Fixer']]);
+        $this->getJson('/api/tickets', $this->headers())->assertOk()
+            ->assertJsonPath('data.0.issues.0.technicians', [['id' => $this->technician->id, 'name' => 'Sam Fixer']]);
+
+        $count = function (): int {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $this->getJson("/api/stores/{$this->store->store_number}/tickets", $this->headers())->assertOk();
+            $n = count(DB::getQueryLog());
+            DB::disableQueryLog();
+
+            return $n;
+        };
+        $one = $count();
+
+        foreach (range(1, 3) as $i) {
+            $ticket = Ticket::factory()->for($this->store)->create();
+            foreach (range(1, 2) as $j) {
+                TicketIssue::factory()->for($ticket)->create()->technicians()->attach($this->technician->id);
+            }
+        }
+
+        $this->assertSame($one, $count(), 'The ticket list ran more queries with more issues.');
     }
 
     public function test_the_ticket_list_stays_light(): void

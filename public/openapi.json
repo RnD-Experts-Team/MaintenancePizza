@@ -686,6 +686,15 @@
         "operationId": "listParts",
         "parameters": [
           {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Name, brand, model or part number; ignores capitals"
+          },
+          {
             "$ref": "#/components/parameters/Trashed"
           },
           {
@@ -840,6 +849,77 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Parts"
+        ],
+        "summary": "Show a part",
+        "operationId": "showPart",
+        "description": "The list row plus `units_count` (pieces recorded, every status; only serial-tracked parts have any). Deleted parts are readable.",
+        "parameters": [
+          {
+            "name": "part",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The part",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/Part"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "brand": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "model": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "part_number": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "track_serials": {
+                              "type": "boolean"
+                            },
+                            "units_count": {
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         }
       }
@@ -4211,6 +4291,11 @@
                               }
                             },
                             "description": "Only when ranking (store or issue_id given)"
+                          },
+                          "paid_this_month": {
+                            "type": "string",
+                            "example": "120.00",
+                            "description": "List rows only: non-mistaken payments to the technician with paid_at in the current calendar month (money, 2 decimals)"
                           }
                         },
                         "additionalProperties": true
@@ -7171,7 +7256,7 @@
                           },
                           "total_paid": {
                             "type": "string",
-                            "description": "Only on show/create/update/restore: sum of non-mistaken payments to this supplier"
+                            "description": "Sum of non-mistaken payments to this supplier (money, 2 decimals); on list rows and show"
                           },
                           "notes": {
                             "type": "array",
@@ -9460,6 +9545,11 @@
                             "type": "string",
                             "format": "date-time",
                             "description": "Send back as expected_updated_at when editing"
+                          },
+                          "mistaken_reason": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "The reason given when it was marked mistaken (its `mistaken` note); null otherwise."
                           }
                         }
                       }
@@ -10179,6 +10269,28 @@
                                     }
                                   }
                                 }
+                              },
+                              "place": {
+                                "type": "array",
+                                "nullable": true,
+                                "description": "Parts into storage only: where the part sits in the location NOW (its stock balance address, ordered by level; [] when nobody has said). null on every other line.",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "level_id": {
+                                      "type": "integer"
+                                    },
+                                    "level": {
+                                      "type": "string"
+                                    },
+                                    "value_id": {
+                                      "type": "integer"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
                               }
                             }
                           }
@@ -10227,6 +10339,11 @@
                         "created_by": {
                           "type": "object",
                           "nullable": true
+                        },
+                        "mistaken_reason": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "The reason given when it was marked mistaken (its `mistaken` note); null otherwise."
                         }
                       }
                     }
@@ -10678,6 +10795,28 @@
                                     }
                                   }
                                 }
+                              },
+                              "place": {
+                                "type": "array",
+                                "nullable": true,
+                                "description": "Parts into storage only: where the part sits in the location NOW (its stock balance address, ordered by level; [] when nobody has said). null on every other line.",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "level_id": {
+                                      "type": "integer"
+                                    },
+                                    "level": {
+                                      "type": "string"
+                                    },
+                                    "value_id": {
+                                      "type": "integer"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
                               }
                             }
                           }
@@ -10726,6 +10865,11 @@
                         "created_by": {
                           "type": "object",
                           "nullable": true
+                        },
+                        "mistaken_reason": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "The reason given when it was marked mistaken (its `mistaken` note); null otherwise."
                         }
                       }
                     }
@@ -11438,6 +11582,28 @@
                                     }
                                   }
                                 }
+                              },
+                              "place": {
+                                "type": "array",
+                                "nullable": true,
+                                "description": "Parts into storage only: where the part sits in the location NOW (its stock balance address, ordered by level; [] when nobody has said). null on every other line.",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "level_id": {
+                                      "type": "integer"
+                                    },
+                                    "level": {
+                                      "type": "string"
+                                    },
+                                    "value_id": {
+                                      "type": "integer"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
                               }
                             }
                           }
@@ -11486,6 +11652,11 @@
                         "created_by": {
                           "type": "object",
                           "nullable": true
+                        },
+                        "mistaken_reason": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "The reason given when it was marked mistaken (its `mistaken` note); null otherwise."
                         }
                       }
                     }
@@ -11971,6 +12142,28 @@
                                     }
                                   }
                                 }
+                              },
+                              "place": {
+                                "type": "array",
+                                "nullable": true,
+                                "description": "Parts into storage only: where the part sits in the location NOW (its stock balance address, ordered by level; [] when nobody has said). null on every other line.",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "level_id": {
+                                      "type": "integer"
+                                    },
+                                    "level": {
+                                      "type": "string"
+                                    },
+                                    "value_id": {
+                                      "type": "integer"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
                               }
                             }
                           }
@@ -12019,6 +12212,11 @@
                         "created_by": {
                           "type": "object",
                           "nullable": true
+                        },
+                        "mistaken_reason": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "The reason given when it was marked mistaken (its `mistaken` note); null otherwise."
                         }
                       }
                     }
@@ -13025,6 +13223,17 @@
                           "created_at": {
                             "type": "string",
                             "format": "date-time"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "off_clock",
+                              "on_clock",
+                              "on_break",
+                              "travelling",
+                              "parts_run"
+                            ],
+                            "description": "What the technician is doing on this trip now (the same reading as his link)."
                           }
                         }
                       }
@@ -13668,6 +13877,17 @@
                               "type": "integer"
                             }
                           }
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "off_clock",
+                            "on_clock",
+                            "on_break",
+                            "travelling",
+                            "parts_run"
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         }
                       }
                     }
@@ -14227,6 +14447,17 @@
                         "created_at": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "off_clock",
+                            "on_clock",
+                            "on_break",
+                            "travelling",
+                            "parts_run"
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         }
                       }
                     }
@@ -14814,6 +15045,17 @@
                         "created_at": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "off_clock",
+                            "on_clock",
+                            "on_break",
+                            "travelling",
+                            "parts_run"
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         }
                       }
                     }
@@ -15388,6 +15630,17 @@
                               "type": "integer"
                             }
                           }
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "off_clock",
+                            "on_clock",
+                            "on_break",
+                            "travelling",
+                            "parts_run"
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         }
                       }
                     }
@@ -15968,6 +16221,17 @@
                         "created_at": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "off_clock",
+                            "on_clock",
+                            "on_break",
+                            "travelling",
+                            "parts_run"
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         }
                       }
                     }
@@ -16548,6 +16812,17 @@
                         "created_at": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "off_clock",
+                            "on_clock",
+                            "on_break",
+                            "travelling",
+                            "parts_run"
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         }
                       }
                     }
@@ -17130,6 +17405,17 @@
                         "created_at": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "off_clock",
+                            "on_clock",
+                            "on_break",
+                            "travelling",
+                            "parts_run"
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         }
                       }
                     }
@@ -17728,6 +18014,17 @@
                         "created_at": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "off_clock",
+                            "on_clock",
+                            "on_break",
+                            "travelling",
+                            "parts_run"
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         }
                       }
                     }
@@ -18318,6 +18615,17 @@
                         "created_at": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "off_clock",
+                            "on_clock",
+                            "on_break",
+                            "travelling",
+                            "parts_run"
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         }
                       }
                     }
@@ -18920,6 +19228,17 @@
                         "created_at": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "off_clock",
+                            "on_clock",
+                            "on_break",
+                            "travelling",
+                            "parts_run"
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         }
                       }
                     }
@@ -19530,6 +19849,17 @@
                         "created_at": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "off_clock",
+                            "on_clock",
+                            "on_break",
+                            "travelling",
+                            "parts_run"
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         }
                       }
                     }
@@ -20120,6 +20450,17 @@
                         "created_at": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "off_clock",
+                            "on_clock",
+                            "on_break",
+                            "travelling",
+                            "parts_run"
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         }
                       }
                     }
@@ -20727,6 +21068,17 @@
                         "created_at": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "off_clock",
+                            "on_clock",
+                            "on_break",
+                            "travelling",
+                            "parts_run"
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         }
                       }
                     }
@@ -21330,6 +21682,17 @@
                         "created_at": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "off_clock",
+                            "on_clock",
+                            "on_break",
+                            "travelling",
+                            "parts_run"
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         }
                       }
                     }
@@ -21929,6 +22292,17 @@
                         "created_at": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "off_clock",
+                            "on_clock",
+                            "on_break",
+                            "travelling",
+                            "parts_run"
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         }
                       }
                     }
@@ -23381,7 +23755,8 @@
                             "on_break",
                             "travelling",
                             "parts_run"
-                          ]
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         },
                         "clocked_in_elsewhere": {
                           "type": "boolean"
@@ -23987,7 +24362,8 @@
                             "on_break",
                             "travelling",
                             "parts_run"
-                          ]
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         },
                         "clocked_in_elsewhere": {
                           "type": "boolean"
@@ -24587,7 +24963,8 @@
                             "on_break",
                             "travelling",
                             "parts_run"
-                          ]
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         },
                         "clocked_in_elsewhere": {
                           "type": "boolean"
@@ -25176,7 +25553,8 @@
                             "on_break",
                             "travelling",
                             "parts_run"
-                          ]
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         },
                         "clocked_in_elsewhere": {
                           "type": "boolean"
@@ -25757,7 +26135,8 @@
                             "on_break",
                             "travelling",
                             "parts_run"
-                          ]
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         },
                         "clocked_in_elsewhere": {
                           "type": "boolean"
@@ -26365,7 +26744,8 @@
                             "on_break",
                             "travelling",
                             "parts_run"
-                          ]
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         },
                         "clocked_in_elsewhere": {
                           "type": "boolean"
@@ -26936,7 +27316,8 @@
                             "on_break",
                             "travelling",
                             "parts_run"
-                          ]
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         },
                         "clocked_in_elsewhere": {
                           "type": "boolean"
@@ -27526,7 +27907,8 @@
                             "on_break",
                             "travelling",
                             "parts_run"
-                          ]
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         },
                         "clocked_in_elsewhere": {
                           "type": "boolean"
@@ -27600,7 +27982,7 @@
         ],
         "summary": "A job done",
         "operationId": "publicIssueDone",
-        "description": "purpose work: the issue moves to work_done (status history written), work_performed = note, outbox `maintenance.issue.work_done`. purpose inspection: the issue's open inspection gets findings (or the note) and the estimate and is done; the status does not move. Files go on the issue.",
+        "description": "purpose work: the issue moves to work_done (status history written), work_performed = note, outbox `maintenance.issue.work_done`. purpose inspection: the issue's open inspection gets findings (or the note) and the estimate and is done; the status does not move. Files go on the issue: `files[]` as sent, `before[]` / `after[]` named \"Before - ...\" / \"After - ...\" (attachment `kind` before|after).",
         "parameters": [
           {
             "name": "token",
@@ -27655,6 +28037,22 @@
                       "type": "string",
                       "format": "binary"
                     }
+                  },
+                  "before": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "Photos before the job: stored on the issue named \"Before - <file>\", presented with kind=before"
+                  },
+                  "after": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "Photos after the job: stored on the issue named \"After - <file>\", presented with kind=after"
                   }
                 }
               }
@@ -27681,6 +28079,22 @@
                       "type": "string",
                       "format": "binary"
                     }
+                  },
+                  "before": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "Photos before the job: stored on the issue named \"Before - <file>\", presented with kind=before"
+                  },
+                  "after": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "Photos after the job: stored on the issue named \"After - <file>\", presented with kind=after"
                   }
                 }
               }
@@ -28164,7 +28578,8 @@
                             "on_break",
                             "travelling",
                             "parts_run"
-                          ]
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         },
                         "clocked_in_elsewhere": {
                           "type": "boolean"
@@ -28763,7 +29178,8 @@
                             "on_break",
                             "travelling",
                             "parts_run"
-                          ]
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         },
                         "clocked_in_elsewhere": {
                           "type": "boolean"
@@ -29431,7 +29847,8 @@
                             "on_break",
                             "travelling",
                             "parts_run"
-                          ]
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         },
                         "clocked_in_elsewhere": {
                           "type": "boolean"
@@ -30047,7 +30464,8 @@
                             "on_break",
                             "travelling",
                             "parts_run"
-                          ]
+                          ],
+                          "description": "What the technician is doing on this trip now (the same reading as his link)."
                         },
                         "clocked_in_elsewhere": {
                           "type": "boolean"
@@ -30305,9 +30723,9 @@
         "tags": [
           "Issue Workflow"
         ],
-        "summary": "Review an issue (new → in_review)",
+        "summary": "Review an issue / update its plan",
         "operationId": "reviewIssue",
-        "description": "new → in_review, setting the plan. While in_review it only updates these fields. Keys left out are kept; null clears. Refused (422 errors.status) in any other status.",
+        "description": "new -> in_review, setting the plan. In any other open status (in_review, waiting_on_store, inspection, waiting_approval, scheduled, work_done) it only updates these fields and the status stays. Keys left out are kept; null clears. Refused (422 errors.status) once closed or cancelled.",
         "parameters": [
           {
             "$ref": "#/components/parameters/Store"
@@ -30332,7 +30750,7 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
                       "additionalProperties": true
                     }
                   }
@@ -30409,7 +30827,7 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
                       "additionalProperties": true
                     }
                   }
@@ -30517,7 +30935,7 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
                       "additionalProperties": true
                     }
                   }
@@ -30630,7 +31048,7 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
                       "additionalProperties": true
                     },
                     "trip_link": {
@@ -30745,7 +31163,7 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
                       "additionalProperties": true
                     }
                   }
@@ -30864,7 +31282,7 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
                       "additionalProperties": true
                     }
                   }
@@ -30939,7 +31357,7 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
                       "additionalProperties": true
                     }
                   }
@@ -31076,7 +31494,7 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
                       "additionalProperties": true
                     },
                     "trip_link": {
@@ -31195,7 +31613,7 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
                       "additionalProperties": true
                     },
                     "trip_link": {
@@ -31298,7 +31716,7 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
                       "additionalProperties": true
                     }
                   }
@@ -31421,7 +31839,7 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
                       "additionalProperties": true
                     }
                   }
@@ -31501,7 +31919,7 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
                       "additionalProperties": true
                     }
                   }
@@ -31586,7 +32004,7 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "description": "The issue's full read (docs/MAINTENANCE-V2.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
                       "additionalProperties": true
                     }
                   }
@@ -31764,6 +32182,286 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 720
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/ticket-issues": {
+      "get": {
+        "tags": [
+          "Tickets"
+        ],
+        "summary": "Issue lookup for pickers",
+        "operationId": "lookupTicketIssues",
+        "description": "A light row per issue across every store, newest first (never the full read). Issues of deleted tickets are left out.",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Catalog title, free-text title, description, or the ticket id (digits, a leading # allowed); ignores capitals"
+          },
+          {
+            "name": "store",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Store number"
+          },
+          {
+            "name": "statuses[]",
+            "in": "query",
+            "required": false,
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/IssueStatus"
+              }
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "description": "Default 20"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching issues",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer"
+                          },
+                          "ticket_id": {
+                            "type": "integer"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "status_label": {
+                            "type": "string"
+                          },
+                          "priority": {
+                            "type": "object",
+                            "nullable": true,
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              },
+                              "label": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "store": {
+                            "type": "object",
+                            "nullable": true,
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "store_number": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "other_store": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/issue-inspections": {
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Inspections to pay for (Inspection line picker)",
+        "operationId": "lookupIssueInspections",
+        "description": "Inspections across every store, newest first; mistaken ones never. `paid` = a line of a non-mistaken payment names it (issue_inspection_id); `unpaid=1` filters on the same test.",
+        "parameters": [
+          {
+            "name": "technician_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "unpaid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "enum": [
+                0,
+                1
+              ]
+            },
+            "description": "1 = only those no payment pays yet"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The issue's title (catalog or free text) or the ticket id; ignores capitals"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "description": "Default 50"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Inspections",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer"
+                          },
+                          "ticket_issue": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "ticket_id": {
+                                "type": "integer"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "store": {
+                                "type": "object",
+                                "nullable": true,
+                                "properties": {
+                                  "id": {
+                                    "type": "integer"
+                                  },
+                                  "store_number": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "other_store": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            }
+                          },
+                          "technician": {
+                            "type": "object",
+                            "nullable": true,
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "scheduled",
+                              "done",
+                              "cancelled"
+                            ]
+                          },
+                          "status_label": {
+                            "type": "string"
+                          },
+                          "done_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "scheduled_date": {
+                            "type": "string",
+                            "format": "date",
+                            "nullable": true
+                          },
+                          "estimated_cost": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Money, 2 decimals"
+                          },
+                          "paid": {
+                            "type": "boolean"
+                          }
                         }
                       }
                     }
@@ -33264,6 +33962,16 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "kind": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "before",
+              "after",
+              null
+            ],
+            "description": "before | after for a job photo (original_name starts \"Before - \" / \"After - \"), else null"
           }
         }
       },
@@ -34708,8 +35416,18 @@
           "technicians": {
             "type": "array",
             "nullable": true,
+            "description": "On ticket lists and reads (GET tickets, GET stores/{store}/tickets, create/restore): [{id, name}] of who it is assigned to. The issue full read gives the full Technician shape.",
             "items": {
-              "$ref": "#/components/schemas/Technician"
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
             }
           },
           "status_changes": {
