@@ -44,11 +44,10 @@ final class LegacyMap
     /**
      * Every new row an old row became.
      *
-     * CAUTION: migration_v2_map is unique on (legacy_table, legacy_id,
-     * new_table), so put() keeps only the FIRST new row per new table and
-     * this returns at most one id. Converters that make several rows of one
-     * old row (sessions of an entry, copies of a booking, inspections of a
-     * diagnosis) must find them from the data, not from here.
+     * The map's unique key includes new_id, so every new row is recorded.
+     * The converters that make several rows of one old row (sessions of an
+     * entry, copies of a booking, inspections of a diagnosis) were written
+     * when it did not, and still find their rows from the data; both agree.
      *
      * @return list<int>
      */
