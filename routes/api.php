@@ -3,50 +3,67 @@
 use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\CatalogController;
 use App\Http\Controllers\ExportController;
+use App\Http\Controllers\IssueApprovalController;
 use App\Http\Controllers\IssueHistoryController;
+use App\Http\Controllers\IssueInfoRequestController;
+use App\Http\Controllers\IssueInspectionController;
+use App\Http\Controllers\IssueScheduleController;
+use App\Http\Controllers\IssueWorkflowController;
 use App\Http\Controllers\MaintenanceAnalyticsController;
 use App\Http\Controllers\MaintenanceSettingController;
 use App\Http\Controllers\NoteController;
+use App\Http\Controllers\PartUnitController;
+use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\PublicTripController;
 use App\Http\Controllers\StockBalanceController;
+use App\Http\Controllers\StockCountController;
 use App\Http\Controllers\StockMovementController;
 use App\Http\Controllers\StorageLocationController;
+use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\TechnicianAbilityController;
 use App\Http\Controllers\TechnicianAnalyticsController;
+use App\Http\Controllers\TechnicianPurchaseController;
 use App\Http\Controllers\TicketCancellationController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TicketFinalNoteController;
 use App\Http\Controllers\TicketIssueCancellationController;
 use App\Http\Controllers\TicketIssueController;
 use App\Http\Controllers\TicketNoteController;
+use App\Http\Controllers\TripController;
+use App\Http\Controllers\TripSessionController;
 use App\Http\Controllers\TroubleshootingController;
 use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| Maintenance route files (docs/MAINTENANCE.md)
+| Maintenance: the technician's trip link (docs/MAINTENANCE.md §3)
 |--------------------------------------------------------------------------
-| Each area keeps its routes in its own file under routes/api/, so the
-| areas can grow without touching each other. Every file is REQUIRED from a
-| fixed place below, and that place decides its prefix and middleware:
-|
-|   public-trips.php  OUTSIDE auth.token.store: the technician's trip
-|                        link (`public/trips/{token}/...`). The file applies
-|                        its own token middleware and throttle.
-|   catalog.php       inside the auth group (suppliers, part units,
-|                        settings ...).
-|   trips.php         inside the auth group (trips, sessions, events).
-|   payments.php      inside the auth group (payments, technician
-|                        purchases, unpaid work).
-|   storage.php       inside the auth group (stock counts ...).
-|   analytics.php     inside the auth group.
-|   workflow.php      inside the auth group, within the
-|                        `stores/{store}` (scopeBindings) → `tickets/{ticket}`
-|                        prefix group, so its paths are written from
-|                        `issues/{ticketIssue}/...` on.
+| OUTSIDE auth.token.store: these URLs carry no dashboard token, only the
+| trip link token, so the group applies its own token middleware and the
+| per-link throttle.
 */
 
-require __DIR__.'/api/public-trips.php';
+Route::prefix('public/trips/{token}')
+    ->middleware(['throttle:trip-link', 'trip.token'])
+    ->group(function () {
+        Route::get('/', [PublicTripController::class, 'show'])->name('public.trips.show');
+        Route::post('clock-in', [PublicTripController::class, 'clockIn'])->name('public.trips.clock-in');
+        Route::post('clock-out', [PublicTripController::class, 'clockOut'])->name('public.trips.clock-out');
+        Route::post('events', [PublicTripController::class, 'events'])->name('public.trips.events');
 
+        Route::post('stops', [PublicTripController::class, 'stopsStore'])->name('public.trips.stops.store');
+        Route::post('stops/{stop}/arrive', [PublicTripController::class, 'arrive'])->name('public.trips.stops.arrive');
+        Route::post('stops/{stop}/leave', [PublicTripController::class, 'leave'])->name('public.trips.stops.leave');
+        Route::post('stops/{stop}/not-done', [PublicTripController::class, 'stopNotDone'])->name('public.trips.stops.not-done');
+        Route::post('stops/{stop}/issues/{ticketIssue}/done', [PublicTripController::class, 'issueDone'])->name('public.trips.issues.done');
+        Route::post('stops/{stop}/issues/{ticketIssue}/not-done', [PublicTripController::class, 'issueNotDone'])->name('public.trips.issues.not-done');
+
+        Route::post('purchases', [PublicTripController::class, 'purchasesStore'])->name('public.trips.purchases.store');
+        Route::post('notes', [PublicTripController::class, 'notesStore'])->name('public.trips.notes');
+
+        Route::get('suppliers', [PublicTripController::class, 'suppliers'])->name('public.trips.suppliers');
+        Route::get('parts', [PublicTripController::class, 'parts'])->name('public.trips.parts');
+    });
 
 /*
 | Rate limits (AppServiceProvider): `throttle:api` covers every route, ahead of
@@ -181,14 +198,102 @@ Route::middleware(['throttle:api', 'auth.token.store'])->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Maintenance areas (see the table at the top of this file).
+    | Maintenance: suppliers, serial-tracked parts, issue lookup
     |--------------------------------------------------------------------------
     */
-    require __DIR__.'/api/catalog.php';
-    require __DIR__.'/api/trips.php';
-    require __DIR__.'/api/payments.php';
-    require __DIR__.'/api/storage.php';
-    require __DIR__.'/api/analytics.php';
+    // Suppliers: the places we buy from. Names unique like technicians'.
+    Route::get('suppliers', [SupplierController::class, 'index'])->name('suppliers.index');
+    Route::post('suppliers', [SupplierController::class, 'store'])->name('suppliers.store');
+    Route::get('suppliers/{supplier}', [SupplierController::class, 'show'])->withTrashed()->name('suppliers.show');
+    Route::patch('suppliers/{supplier}', [SupplierController::class, 'update'])->name('suppliers.update');
+    Route::delete('suppliers/{supplier}', [SupplierController::class, 'destroy'])->name('suppliers.destroy');
+    Route::post('suppliers/{supplier}/restore', [SupplierController::class, 'restore'])->withTrashed()->name('suppliers.restore');
+    Route::post('suppliers/{supplier}/notes', [SupplierController::class, 'notesStore'])->middleware('throttle:api-upload')->name('suppliers.notes');
+    Route::post('suppliers/{supplier}/attachments', [SupplierController::class, 'attachmentsStore'])->middleware('throttle:api-upload')->name('suppliers.attachments');
+
+    // The pieces of serial-tracked parts.
+    Route::get('parts/{part}/units', [PartUnitController::class, 'index'])->withTrashed()->name('parts.units.index');
+    Route::patch('part-units/{unit}', [PartUnitController::class, 'update'])->name('part-units.update');
+
+    // The issue pickers: a light lookup across every store (not the full read).
+    Route::get('ticket-issues', [TicketIssueController::class, 'lookup'])->name('ticket-issues.lookup');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Maintenance: trips (docs/MAINTENANCE.md §3)
+    |--------------------------------------------------------------------------
+    */
+    Route::get('trips', [TripController::class, 'index'])->name('trips.index');
+    Route::post('trips', [TripController::class, 'store'])->name('trips.store');
+
+    // Sessions nobody has paid yet (for the payment form). Literal path, so it
+    // can never be read as a {trip}.
+    Route::get('trip-sessions/unpaid', [TripSessionController::class, 'unpaid'])->name('trip-sessions.unpaid');
+
+    /*
+     | scopeBindings: {stop} and {session} resolve through Trip::stops() and
+     | Trip::sessions(), {event} through TripSession::events(), so a child of
+     | another trip is a 404. PARAMETER NAMES ARE LOAD-BEARING (same rule as the issue workflow routes below).
+     */
+    Route::prefix('trips/{trip}')->scopeBindings()->group(function () {
+        Route::get('/', [TripController::class, 'show'])->name('trips.show');
+        Route::patch('/', [TripController::class, 'update'])->name('trips.update');
+        Route::post('link', [TripController::class, 'link'])->name('trips.link');
+        Route::post('close', [TripController::class, 'close'])->name('trips.close');
+        Route::post('reopen', [TripController::class, 'reopen'])->name('trips.reopen');
+        Route::post('mistaken', [TripController::class, 'mistaken'])->name('trips.mistaken');
+
+        Route::post('stops', [TripController::class, 'stopsStore'])->name('trips.stops.store');
+        Route::post('stops/{stop}/mistaken', [TripController::class, 'stopsMistaken'])->name('trips.stops.mistaken');
+
+        Route::post('sessions', [TripSessionController::class, 'store'])->name('trips.sessions.store');
+        Route::patch('sessions/{session}', [TripSessionController::class, 'update'])->name('trips.sessions.update');
+        Route::post('sessions/{session}/mistaken', [TripSessionController::class, 'mistaken'])->name('trips.sessions.mistaken');
+        Route::post('sessions/{session}/events', [TripSessionController::class, 'eventsStore'])->name('trips.sessions.events.store');
+        Route::patch('sessions/{session}/events/{event}', [TripSessionController::class, 'eventsUpdate'])->name('trips.sessions.events.update');
+        Route::post('sessions/{session}/events/{event}/mistaken', [TripSessionController::class, 'eventsMistaken'])->name('trips.sessions.events.mistaken');
+
+        Route::post('notes', [TripController::class, 'notesStore'])->middleware('throttle:api-upload')->name('trips.notes');
+        Route::post('attachments', [TripController::class, 'attachmentsStore'])->middleware('throttle:api-upload')->name('trips.attachments');
+    });
+
+    // Technician purchases (docs/MAINTENANCE.md §4).
+    Route::get('technician-purchases', [TechnicianPurchaseController::class, 'index'])->name('technician-purchases.index');
+    Route::post('technician-purchases', [TechnicianPurchaseController::class, 'store'])->name('technician-purchases.store');
+    Route::post('technician-purchases/{technicianPurchase}/mistaken', [TechnicianPurchaseController::class, 'mistaken'])->name('technician-purchases.mistaken');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Maintenance: payments (docs/MAINTENANCE.md §4)
+    |--------------------------------------------------------------------------
+    */
+    // Payments: one invoice paid to one technician or one supplier, split into lines.
+    Route::get('payments', [PaymentController::class, 'index'])->name('payments.index');
+    Route::post('payments', [PaymentController::class, 'store'])->name('payments.store');
+    Route::get('payments/{payment}', [PaymentController::class, 'show'])->name('payments.show');
+    Route::post('payments/{payment}/edit', [PaymentController::class, 'edit'])->name('payments.edit');
+    Route::post('payments/{payment}/mistaken', [PaymentController::class, 'mistaken'])->name('payments.mistaken');
+    Route::post('payments/{payment}/notes', [PaymentController::class, 'notesStore'])->middleware('throttle:api-upload')->name('payments.notes');
+    Route::post('payments/{payment}/attachments', [PaymentController::class, 'attachmentsStore'])->middleware('throttle:api-upload')->name('payments.attachments');
+
+    // What has not been paid yet, per technician: unpaid sessions and purchases.
+    Route::get('unpaid-work', [PaymentController::class, 'unpaidWork'])->name('unpaid-work.index');
+
+    // Inspections to pick on an Inspection line, with whether each is paid yet.
+    Route::get('issue-inspections', [IssueInspectionController::class, 'index'])->name('issue-inspections.index');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Maintenance: stock counts (docs/MAINTENANCE.md §5)
+    |--------------------------------------------------------------------------
+    */
+    // Stock counts: a sheet per location (or place), applied as one stock_count movement.
+    Route::get('stock-counts', [StockCountController::class, 'index'])->name('stock-counts.index');
+    Route::post('stock-counts', [StockCountController::class, 'store'])->name('stock-counts.store');
+    Route::get('stock-counts/{stockCount}', [StockCountController::class, 'show'])->name('stock-counts.show');
+    Route::patch('stock-counts/{stockCount}', [StockCountController::class, 'update'])->name('stock-counts.update');
+    Route::post('stock-counts/{stockCount}/apply', [StockCountController::class, 'apply'])->name('stock-counts.apply');
+    Route::delete('stock-counts/{stockCount}', [StockCountController::class, 'destroy'])->name('stock-counts.destroy');
 
     /*
     |--------------------------------------------------------------------------
@@ -266,7 +371,28 @@ Route::middleware(['throttle:api', 'auth.token.store'])->group(function () {
              | TicketIssue::approvals(), {assignment} → TicketIssue::assignments().
              | A parameter named after no relation (e.g. {request}) 500s.
              */
-            require __DIR__.'/api/workflow.php';
+            // Every step answers with the issue's full read ({data}, plus {trip_link} when
+            // it created a trip); a step that does not fit the issue's status is a 422
+            // whose errors.status says why. The machine is IssueWorkflowService.
+
+            Route::post('issues/{ticketIssue}/review', [IssueWorkflowController::class, 'review'])->name('tickets.issues.review');
+
+            Route::post('issues/{ticketIssue}/info-requests', [IssueInfoRequestController::class, 'store'])->name('tickets.issues.info-requests.store');
+            Route::post('issues/{ticketIssue}/info-requests/{infoRequest}/answer', [IssueInfoRequestController::class, 'answer'])->name('tickets.issues.info-requests.answer');
+
+            Route::post('issues/{ticketIssue}/inspections', [IssueInspectionController::class, 'store'])->name('tickets.issues.inspections.store');
+            Route::post('issues/{ticketIssue}/inspections/{inspection}/result', [IssueInspectionController::class, 'result'])->name('tickets.issues.inspections.result');
+
+            Route::post('issues/{ticketIssue}/approval-request', [IssueApprovalController::class, 'ask'])->name('tickets.issues.approval-request');
+            Route::post('issues/{ticketIssue}/approvals', [IssueApprovalController::class, 'store'])->name('tickets.issues.approvals.store');
+
+            Route::post('issues/{ticketIssue}/schedule', [IssueScheduleController::class, 'store'])->name('tickets.issues.schedule');
+            Route::post('issues/{ticketIssue}/schedules/{assignment}/move', [IssueScheduleController::class, 'move'])->name('tickets.issues.schedules.move');
+
+            Route::post('issues/{ticketIssue}/work-done', [IssueWorkflowController::class, 'workDone'])->name('tickets.issues.work-done');
+            Route::post('issues/{ticketIssue}/confirmation', [IssueWorkflowController::class, 'confirmation'])->name('tickets.issues.confirmation');
+            Route::post('issues/{ticketIssue}/close', [IssueWorkflowController::class, 'close'])->name('tickets.issues.close');
+            Route::post('issues/{ticketIssue}/jump', [IssueWorkflowController::class, 'jump'])->name('tickets.issues.jump');
         });
     });
 
