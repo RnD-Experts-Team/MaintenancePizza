@@ -9,7 +9,6 @@ use App\Models\IssueInspection;
 use App\Models\Technician;
 use App\Models\TicketIssue;
 use App\Models\Trip;
-use App\Models\TripStop;
 use App\Models\TripStopIssue;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -25,7 +24,10 @@ use Illuminate\Support\Facades\DB;
  * link for it, when there is none). The hour lives here, on the booking:
  * trips have no time. Moving a booking keeps the old date as an
  * AssignmentDelay and moves the issue to the technician's trip for the new
- * day.
+ * day; the old day's trip goes when that leaves it empty and unused.
+ *
+ * A booking is `ended` (ended_at, ended_reason) when its issue is closed or
+ * cancelled before the day comes (TripService::releaseFinishedIssue).
  */
 class AssignmentService
 {
@@ -131,6 +133,9 @@ class AssignmentService
             if ($assignment->mistaken) {
                 $this->workflow->refuse('This booking was marked as entered by mistake, so it cannot be moved.');
             }
+            if ($assignment->ended_at !== null) {
+                $this->workflow->refuse('This booking ended when the issue was finished. Book the work again instead.');
+            }
 
             $newDate = Carbon::parse($data['date'])->toDateString();
             $newHour = self::time($data['time'] ?? null);
@@ -186,34 +191,19 @@ class AssignmentService
 
     /**
      * Take the issue off a trip for one purpose, while its task there is
-     * still pending. A stop left empty that nobody has been to (no arrival,
-     * no purchases, no notes or files) goes too, so the technician's page
-     * does not send him to a store with nothing to do.
+     * still pending (TripService::removePendingTask: an empty stop nobody
+     * went to goes too, and so does a trip left empty that was never used).
      */
     private function leaveTrip(int $tripId, TicketIssue $issue, string $purpose): void
     {
-        $rows = TripStopIssue::query()
+        TripStopIssue::query()
             ->whereHas('stop', fn ($q) => $q->where('trip_id', $tripId))
             ->where('ticket_issue_id', $issue->id)
             ->where('purpose', $purpose)
             ->where('task_status', 'pending')
             ->with('stop')
-            ->get();
-
-        foreach ($rows as $row) {
-            $stop = $row->stop;
-            $row->delete();
-
-            if ($stop instanceof TripStop
-                && $stop->status === 'planned'
-                && $stop->arrived_at === null
-                && !$stop->stopIssues()->exists()
-                && !$stop->purchases()->exists()
-                && !$stop->notes()->exists()
-                && !$stop->attachments()->exists()) {
-                $stop->delete();
-            }
-        }
+            ->get()
+            ->each(fn (TripStopIssue $row) => $this->trips->removePendingTask($row));
     }
 
     /**

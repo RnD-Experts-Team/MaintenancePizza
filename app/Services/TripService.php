@@ -1211,6 +1211,124 @@ class TripService
             ->firstOrFail();
     }
 
+    // ------------------------------------------- Taking an issue off trips
+
+    /**
+     * Take one pending task off its trip (a booking moved to another day, an
+     * issue closed or cancelled). A stop left with nothing on it that nobody
+     * has been to (no arrival, no purchases, no notes or files) goes too, so
+     * the technician's page does not send him to a store with nothing to do;
+     * and a trip left with no stops that was never used goes with it
+     * (dropIfUnused).
+     */
+    public function removePendingTask(TripStopIssue $row): void
+    {
+        if ($row->task_status !== 'pending') {
+            return;
+        }
+
+        $stop = $row->stop;
+        $row->delete();
+
+        if ($stop instanceof TripStop
+            && $stop->status === 'planned'
+            && $stop->arrived_at === null
+            && ! $stop->stopIssues()->exists()
+            && ! $stop->purchases()->exists()
+            && ! $stop->notes()->exists()
+            && ! $stop->attachments()->exists()) {
+            $stop->delete();
+        }
+
+        if ($stop instanceof TripStop && ($trip = Trip::query()->find($stop->trip_id)) !== null) {
+            $this->dropIfUnused($trip);
+        }
+    }
+
+    /**
+     * Remove a trip that has nothing left on it and was never used: no stops
+     * (mistaken ones included), no session ever clocked (mistaken ones
+     * included), the link never opened, no purchases, notes or files, and not
+     * marked mistaken. Anything else is history and stays. Bookings that still
+     * name it lose the link to it. Returns whether it was removed.
+     *
+     * Removing rather than closing: a closed empty trip would only clutter
+     * the History list, and the link was never opened, so nobody is following
+     * it. If the technician opens it later he gets "not found"; the office
+     * sends the link of the trip the work is on now.
+     */
+    public function dropIfUnused(Trip $trip): bool
+    {
+        if ($trip->mistaken
+            || $trip->last_used_at !== null
+            || TripStop::query()->where('trip_id', $trip->id)->exists()
+            || TripSession::query()->where('trip_id', $trip->id)->exists()
+            || $trip->purchases()->exists()
+            || $trip->notes()->exists()
+            || $trip->attachments()->exists()) {
+            return false;
+        }
+
+        $trip->assignments()->update(['trip_id' => null]);
+        $trip->delete();
+
+        return true;
+    }
+
+    /**
+     * An issue was closed or cancelled: what was still planned for it stops.
+     *
+     *   - its PENDING tasks on open trips: on a trip nobody has clocked on, the
+     *     task is taken off (removePendingTask, which also clears an empty stop
+     *     and an unused trip); on a trip with clocked time it stays, as history
+     *     of what that time was for, marked not done "No longer needed", so
+     *     the technician sees it. Done / not done tasks are never touched.
+     *   - its bookings from today on (not mistaken, not ended) are ended, with
+     *     the same reason;
+     *   - its inspections still booked are cancelled.
+     *
+     * Called from TicketStatusService::changeIssueStatus, the one door every
+     * status change goes through, when an open issue becomes closed or
+     * cancelled.
+     */
+    public function releaseFinishedIssue(TicketIssue $issue, IssueStatus $to): void
+    {
+        $reason = $to === IssueStatus::Cancelled
+            ? 'No longer needed: the issue was cancelled.'
+            : 'No longer needed: the issue was closed.';
+
+        $rows = TripStopIssue::query()
+            ->where('ticket_issue_id', $issue->id)
+            ->where('task_status', 'pending')
+            ->whereHas('stop.trip', fn ($q) => $q->where('status', TripStatus::Open->value)->where('mistaken', false))
+            ->with('stop')
+            ->get();
+
+        foreach ($rows as $row) {
+            $tripId = $row->stop?->trip_id;
+            $clocked = $tripId !== null && TripSession::query()->where('trip_id', $tripId)->exists();
+
+            if ($clocked) {
+                $row->forceFill(['task_status' => 'not_done', 'done_at' => null, 'not_done_reason' => $reason])->save();
+            } else {
+                $this->removePendingTask($row);
+            }
+        }
+
+        $issue->assignments()
+            ->where('mistaken', false)
+            ->whereNull('ended_at')
+            ->whereDate('assigned_date', '>=', now()->toDateString())
+            ->get()
+            ->each(fn ($assignment) => $assignment->forceFill(['ended_at' => now(), 'ended_reason' => $reason])->save());
+
+        IssueInspection::query()
+            ->where('ticket_issue_id', $issue->id)
+            ->where('status', InspectionStatus::Scheduled->value)
+            ->where('mistaken', false)
+            ->update(['status' => InspectionStatus::Cancelled->value, 'updated_at' => now()]);
+    }
+
     // -------------------------------------------------------------- Audits
 
     /**

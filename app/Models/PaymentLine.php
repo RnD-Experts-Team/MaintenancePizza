@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\PaymentLineType;
+use App\Models\Concerns\HasNotesAndAttachments;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -18,9 +19,14 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * hours_overridden, trip sessions), parts (part, quantity, unit_cost,
  * bought_from), gas (miles), inspection (issue_inspection_id). `amount` is
  * always what the line costs, computed by the payment service.
+ *
+ * A line carries its own notes and attachments, as many as needed. An edit
+ * replaces the lines; the notes and files a new line keeps move over to it.
  */
 class PaymentLine extends Model
 {
+    use HasNotesAndAttachments;
+
     protected $fillable = [
         'payment_id',
         'type',

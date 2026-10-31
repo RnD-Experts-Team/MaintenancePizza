@@ -1,6 +1,6 @@
 # Maintenance — domain rules and API contract
 
-_Last updated: 2026-10-30_
+_Last updated: 2026-10-31_
 
 This is the contract the backend implements and the dashboard calls. Responses
 are `{ "data": ... }` (lists: `{ "data": [...], "meta": {pagination} }` where
@@ -63,7 +63,9 @@ attachments, `deleted_at`.
 - `POST technicians`, `GET technicians/{t}`, `PATCH technicians/{t}`,
   `DELETE technicians/{t}`, `POST technicians/{t}/restore`
 - Coverage of issues: `PUT technicians/{t}/abilities/{issue}` `{rating?:1-5|null, notes?, call_first?}`
-  (exists — keep), `DELETE technicians/{t}/abilities/{issue}` (exists),
+  — an entry with nothing set is kept ("covers this issue, not rated yet";
+  moving the call-first pin away also keeps the old holder covering it),
+  `DELETE technicians/{t}/abilities/{issue}` takes the issue off,
   `GET technician-abilities` (exists; drop the `overall` part).
 - REMOVED: `PATCH technicians/{t}/rating` (overall rating is computed now).
 
@@ -145,7 +147,10 @@ returns the issue with:
 - `approvals`: [{id, amount, level, level_label, decision approved|rejected,
   approver_name, decided_at, note, inspection_id, attachments, mistaken}]
 - `schedules`: [{id, kind work|inspection, technician {id,name}, date, time,
-  expected_completion_date, trip_id, mistaken, delays [...]}]
+  expected_completion_date, trip_id, inspection_id, mistaken, ended_at,
+  ended_reason, delays [...]}] — `ended_at`/`ended_reason` are set when the
+  issue was closed or cancelled before the booking's day (see "Finished
+  issues" below); an ended booking cannot be moved.
 - `visits`: [{trip_id, trip_stop_id, technician {id,name}, store_number,
   arrived_at, left_at, task_status pending|done|not_done, done_at,
   not_done_reason, purpose work|inspection}]
@@ -201,13 +206,26 @@ not fit the current status → 422 with a plain reason.
 | `approval-request` | amount (required), inspection_id? | → waiting_approval; outbox `maintenance.issue.approval_needed` with level |
 | `approvals` | amount, decision approved\|rejected, approver_name, note?, inspection_id?, files[] | records it; → in_review (next_action set to "Schedule the work" / "Find another option") |
 | `schedule` | technician_id, date, time?, expected_completion_date?, instructions? | → scheduled; creates a `kind=work` schedule, adds the issue to the technician's trip (same as inspections), puts the technician on the issue. `trip_link` as above. |
-| `schedules/{assignment}/move` | date, time?, reason | writes an assignment delay; moves the trip stop to the matching trip |
+| `schedules/{assignment}/move` | date, time?, reason | writes an assignment delay; moves the trip stop to the matching trip. The old day's trip is REMOVED when that leaves it with no stops and it was never used (no session ever, link never opened, no purchases / notes / files, not mistaken) |
 | `work-done` | work_performed (required), files[] (before/after photos), warranty? {body, expiry_date} | scheduled → work_done (the specialist recording it for the technician) |
 | `confirmation` | working (bool), note?, via store\|specialist | records store_confirmed_*; working=false → in_review with next_action "Schedule more work" |
 | `close` | resolution repaired\|fixed_by_troubleshooting\|not_needed\|replaced, final_note?, what_we_learned?, override_reason? | → closed. Checklist keys: `resolved` (store confirmed working, or resolution fixed_by_troubleshooting/not_needed), `cost_recorded` (a payment line on the issue, or resolution fixed_by_troubleshooting/not_needed), `invoice_attached` (a linked payment has an attachment, same exemption), `notes_completed` (work_performed set, same exemption). Any not done → 422 unless `override_reason` is given (logged in the status change reason). |
 | `jump` | status (any), reason (required) | the escape hatch: any status → any status, logged |
 | `cancel` | reason | existing endpoint, keep |
 | `assigned-priority` | existing, keep | |
+
+Finished issues: when an open issue becomes closed or cancelled (close,
+cancel, ticket cancel, jump — `TicketStatusService::changeIssueStatus` calls
+`TripService::releaseFinishedIssue`), what was still planned for it stops:
+- its PENDING tasks on open trips: on a trip with no clocked session the
+  task is taken off (an empty stop nobody went to goes too, and an unused
+  trip left empty is removed, as for a move); on a trip with clocked time
+  the task stays as history, `task_status` not_done with `not_done_reason`
+  "No longer needed: the issue was closed." / "…cancelled.", so the
+  technician sees it. Done / not done tasks are never touched.
+- its bookings dated today or later (not mistaken) get `ended_at` and
+  `ended_reason` (same words). Past bookings stay as they were.
+- its inspections still `scheduled` become `cancelled`.
 
 Approval levels come from `maintenance_settings.approval_levels`, default
 `[{"max": 300, "level": "specialist", "label": "Maintenance Specialist"},
@@ -248,6 +266,9 @@ sha256 hash is stored; the plain token is returned ONCE when issued.
 
 Dashboard endpoints (MOS):
 - `GET trips?status=open|closed&technician_id=&from=&to=&on_clock=1&search=` (paginated)
+  — `history_before=YYYY-MM-DD` (the viewer's today) keeps the History tab's
+  trips: planned before that day, plus closed trips of any day (a future open
+  trip is never history).
 - `POST trips` `{technician_id, planned_date, instructions?, stops?: [{store_id?|other_store?, ticket_issue_ids[]}]}` → trip + `trip_link`
 - `GET trips/{trip}`, `PATCH trips/{trip}` `{planned_date?, instructions?, link_idle_hours?}`
 - `POST trips/{trip}/link` → new `trip_link`; `POST trips/{trip}/close`; `POST trips/{trip}/reopen`; `POST trips/{trip}/mistaken`
@@ -330,7 +351,10 @@ Line amount rules (server computes, client previews):
   purchases paid back by this line.
 - gas: amount sent, or miles × rate.
 - fixed / inspection / other: amount sent. inspection may carry
-  issue_inspection_id.
+  issue_inspection_id. other may carry `technician_purchase_ids[]` too: it
+  pays back what the technician bought that is not a catalog part (zip ties,
+  a cleaner), same checks as on a parts line (his own, not mistaken, not paid
+  yet). Any other line type naming purchases → 422.
 Payment total = sum of its lines.
 
 - `GET payments?from=&to=&technician_id=&supplier_id=&category_id=&store=&type=&search=&include_mistaken=1` (paginated; search matches invoice_number, reference, names)
@@ -338,8 +362,16 @@ Payment total = sum of its lines.
   invoice_number, total, line_count, stores [store_number…], types [...],
   has_invoice, mistaken, mistaken_reason (the body of its `mistaken` note, or
   null), created_at}, and `meta.totals {count, total}`.
-- `POST payments` `{paid_at, technician_id?|supplier_id?, method?, reference?, invoice_number?, note?, files[], lines: [{type, store_id?|other_store?|storage_location_id?, description?, amount?, hours?, rate?, trip_session_ids[]?, ticket_issue_ids[]?, part_id?, quantity?, unit_cost?, bought_from_supplier_id?, destination?, place?, serials[]?, technician_purchase_ids[]?, miles?, issue_inspection_id?}]}`
-  (multipart allowed: lines as JSON string in `lines`, or bracket notation)
+- `POST payments` `{paid_at, technician_id?|supplier_id?, method?, reference?, invoice_number?, note?, notes[]?, files[], lines: [{type, store_id?|other_store?|storage_location_id?, description?, amount?, hours?, rate?, trip_session_ids[]?, ticket_issue_ids[]?, part_id?, quantity?, unit_cost?, bought_from_supplier_id?, destination?, place?, serials[]?, technician_purchase_ids[]?, miles?, issue_inspection_id?, notes[]?, files[]?}]}`
+  (multipart allowed: lines as JSON string in `lines`, or bracket notation).
+  method / reference / invoice_number are optional and the dashboard no longer
+  asks for them. Notes and files, as many as wanted, on the payment and on
+  each line: `notes[]` (strings; blank ones dropped, `note` still accepted)
+  and `files[]` (≤ 10 MB each) on the payment; `lines[i][notes][]` and
+  `lines[i][files][]` on a line. A line's files need bracket notation (they
+  cannot ride inside a JSON-string `lines`). A parts line into storage writes
+  a Bought stock movement whose `moved_at` is now when `paid_at` is today,
+  else 12:00 UTC on `paid_at` (so it reads as that day in every time zone).
 - `GET payments/{payment}` → the row (mistaken_reason included) + lines [{…,
   store {id,store_number}, storage_location {id,name}, part {id,name},
   bought_from {id,name}, place (parts going to storage: where that part sits
@@ -347,14 +379,27 @@ Payment total = sum of its lines.
   value_id, value}], `[]` when nobody has said; null on every other line),
   ticket_issues [{id, ticket_id, title, store_number}], trip_sessions [{id,
   clock_in, clock_out, paid_minutes}], stock_movement_id, serials[],
-  technician_purchases[]}], notes, attachments, revisions [{id, edited_by,
-  created_at}]
+  technician_purchases[], notes [the line's notes], attachments [the line's
+  files]}], notes, attachments, revisions [{id, edited_by, created_at}]
 - `POST payments/{payment}/edit` — same body as create + `expected_updated_at`
   (409 when stale). Replaces the lines: undoes the old lines' stock movements
   (reversal, `undone`), releases their session claims and purchases, then
   writes the new lines. Saves a revision snapshot first.
+  Notes and files on edit:
+  - the payment's own stay; `remove_note_ids[]` / `remove_attachment_ids[]`
+    take the named ones off (soft-deleted; an id not on this payment → 422 on
+    that field). New `notes[]` / `files[]` are added.
+  - a line's saved notes and files belong to the line being replaced, so a
+    new line names the ones it keeps: `lines[i][keep_note_ids][]`,
+    `lines[i][keep_attachment_ids][]` (ids from the payment's current lines;
+    they move to the new line). One kept by no line is removed
+    (soft-deleted). An id that is not on a line of this payment → 422
+    `lines.i.keep_note_ids`; the same id on two lines → 422. New
+    `lines[i][notes][]` / `lines[i][files][]` are added on top.
+  - the revision snapshot keeps everything as it was before the edit.
+  `remove_*` and `keep_*` are refused on create.
 - `POST payments/{payment}/mistaken` `{reason}` — mistaken=true, same undo
-  as edit, lines kept for history.
+  as edit, lines kept for history (with their notes and files).
 - `POST payments/{payment}/notes`, `POST payments/{payment}/attachments`
 - `GET unpaid-work?technician_id=` → per technician {technician, sessions
   [unpaid sessions as in trip-sessions/unpaid], purchases [unpaid technician
@@ -403,7 +448,9 @@ Stock counts:
 - `GET stock-counts/{count}` → lines {id, part {id,name,unit}, expected,
   counted, difference, unit_cost (average cost), value_difference}, totals
   {missing_quantity, missing_value, extra_quantity, extra_value,
-  counted_lines, total_lines}
+  counted_lines, total_lines}. While the count is a draft, `expected` (and
+  so difference and totals) is the balance there NOW — what apply will use —
+  so stock moved after the sheet was made never shows as a correction.
 - `PATCH stock-counts/{count}` `{lines: [{part_id, counted|null}], notes?}`
   (also adds parts not on the sheet) — draft only.
 - `POST stock-counts/{count}/apply` — one stock_count movement with a line per

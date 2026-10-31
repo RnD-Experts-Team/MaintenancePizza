@@ -14,7 +14,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * A booking on one or more issues -- a "schedule" in the contract: `kind`
  * work (do the job) or inspection (look and quote), for one technician, on a
  * date (and optional hour), with the trip that carries it. Moving it writes
- * an AssignmentDelay so the history of reschedules is kept.
+ * an AssignmentDelay so the history of reschedules is kept. `ended_at` /
+ * `ended_reason`: the issue was closed or cancelled before the day came, so
+ * the booking no longer stands (kept for the record).
  */
 class Assignment extends Model
 {
@@ -32,6 +34,8 @@ class Assignment extends Model
         'trip_id',
         'issue_inspection_id',
         'mistaken',
+        'ended_at',
+        'ended_reason',
     ];
 
     /**
@@ -49,6 +53,7 @@ class Assignment extends Model
             'assigned_date' => 'date',
             'expected_completion_date' => 'date',
             'mistaken' => 'boolean',
+            'ended_at' => 'datetime',
         ];
     }
 

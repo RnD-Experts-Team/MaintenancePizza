@@ -42,7 +42,7 @@ class ApprovalService
 
             $level = $this->workflow->approvalLevelFor($amount);
 
-            $issue->next_action = "Waiting for {$level['label']} to approve {$level['amount']}";
+            $issue->next_action = "Waiting for {$level['label']} to approve $".number_format((float) $level['amount'], 2);
             $issue->save();
 
             if ($issue->status !== IssueStatus::WaitingApproval) {

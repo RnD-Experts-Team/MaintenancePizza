@@ -122,6 +122,22 @@ class TripsDashboardTest extends TestCase
         $this->getJson('/api/trips?search=ola', $this->headers())->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $theirs['id']);
     }
 
+    public function test_history_is_past_days_and_closed_trips_never_future_open_ones(): void
+    {
+        $past = $this->makeTrip(); // Nov 2, open (never closed)
+        $today = Trip::query()->create(['technician_id' => $this->technician->id, 'status' => 'open', 'planned_date' => '2026-11-10', 'token_hash' => 'a']);
+        $future = Trip::query()->create(['technician_id' => $this->technician->id, 'status' => 'open', 'planned_date' => '2026-11-12', 'token_hash' => 'b']);
+        $closedFuture = Trip::query()->create(['technician_id' => $this->technician->id, 'status' => 'closed', 'planned_date' => '2026-11-14', 'token_hash' => 'c']);
+
+        $ids = collect($this->getJson('/api/trips?history_before=2026-11-10', $this->headers())->assertOk()->json('data'))->pluck('id')->sort()->values()->all();
+
+        $this->assertSame([$past['id'], $closedFuture->id], $ids);
+        $this->assertNotContains($today->id, $ids);
+        $this->assertNotContains($future->id, $ids);
+
+        $this->getJson('/api/trips?history_before=10-11-2026', $this->headers())->assertUnprocessable()->assertJsonValidationErrors('history_before');
+    }
+
     public function test_list_rows_and_show_carry_his_state_as_the_link_reads_it(): void
     {
         $trip = $this->makeTrip();

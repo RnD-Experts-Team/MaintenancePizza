@@ -25,7 +25,7 @@ class ApprovalWorkflowTest extends IssueWorkflowTestCase
             ->assertJsonPath('data.status', 'waiting_approval')
             ->assertJsonPath('data.step', 7)
             ->assertJsonPath('data.whose_turn', 'approver')
-            ->assertJsonPath('data.next_action', 'Waiting for Maintenance Manager to approve 450.00')
+            ->assertJsonPath('data.next_action', 'Waiting for Maintenance Manager to approve $450.00')
             ->assertJsonPath('data.workflow.next.0.action', 'approval');
 
         $events = $this->outbox(IssueEventPublisher::APPROVAL_NEEDED);

@@ -140,6 +140,13 @@ class StockCountTest extends TestCase
             'storage_location_id' => $this->shelf->id,
         ], [['part_id' => $this->filter->id, 'storage_location_id' => $this->shelf->id, 'quantity' => '2', 'direction' => -1]]);
 
+        // The draft already compares with what is there now, as apply will.
+        $this->getJson("/api/stock-counts/{$count['id']}", $this->headers())
+            ->assertOk()
+            ->assertJsonPath('data.lines.0.expected', '8.00')
+            ->assertJsonPath('data.lines.0.difference', '0.00')
+            ->assertJsonPath('data.totals.missing_quantity', '0.00');
+
         $this->postJson("/api/stock-counts/{$count['id']}/apply", [], $this->headers())
             ->assertOk()
             ->assertJsonPath('data.lines.0.expected', '8.00')

@@ -12,8 +12,9 @@ use Illuminate\Validation\Rule;
 /**
  * POST payments and POST payments/{payment}/edit (docs/MAINTENANCE.md §4).
  *
- * JSON, or multipart (so invoice files can ride along) with `lines` either in
- * bracket notation or as ONE JSON string. The shape is checked here; the
+ * JSON, or multipart (so files can ride along) with `lines` either in
+ * bracket notation or as ONE JSON string. A line's own files need bracket
+ * notation (`lines[0][files][]`). The shape is checked here; the
  * rules that need the database state -- a session already paid, a purchase
  * already paid back, a serial already recorded, where each line was spent --
  * are PaymentService's, inside the write's transaction.
@@ -51,8 +52,16 @@ class PaymentRequest extends FormRequest
             'reference' => ['nullable', 'string', 'max:255'],
             'invoice_number' => ['nullable', 'string', 'max:255'],
             'note' => ['nullable', 'string', 'max:10000'],
+            // As many notes as wanted; blank ones are dropped.
+            'notes' => ['nullable', 'array', 'max:50'],
+            'notes.*' => ['nullable', 'string', 'max:10000'],
             'files' => ['nullable', 'array'],
             'files.*' => ['file', 'max:10240'],
+            // Edit only: the payment's own notes and files to take off.
+            'remove_note_ids' => [$editing ? 'nullable' : 'prohibited', 'array'],
+            'remove_note_ids.*' => ['integer', 'distinct'],
+            'remove_attachment_ids' => [$editing ? 'nullable' : 'prohibited', 'array'],
+            'remove_attachment_ids.*' => ['integer', 'distinct'],
 
             'lines' => ['required', 'array', 'min:1', 'max:200'],
             'lines.*' => ['array'],
@@ -82,6 +91,17 @@ class PaymentRequest extends FormRequest
             'lines.*.technician_purchase_ids.*' => ['integer', 'distinct', 'exists:technician_purchases,id'],
             'lines.*.miles' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
             'lines.*.issue_inspection_id' => ['nullable', 'integer', 'exists:issue_inspections,id'],
+            // The line's own notes and files (as many as wanted).
+            'lines.*.notes' => ['nullable', 'array', 'max:50'],
+            'lines.*.notes.*' => ['nullable', 'string', 'max:10000'],
+            'lines.*.files' => ['nullable', 'array', 'max:20'],
+            'lines.*.files.*' => ['file', 'max:10240'],
+            // Edit only: the saved notes and files (of the lines being
+            // replaced) this line keeps. Whatever no line keeps is removed.
+            'lines.*.keep_note_ids' => [$editing ? 'nullable' : 'prohibited', 'array'],
+            'lines.*.keep_note_ids.*' => ['integer'],
+            'lines.*.keep_attachment_ids' => [$editing ? 'nullable' : 'prohibited', 'array'],
+            'lines.*.keep_attachment_ids.*' => ['integer'],
         ];
     }
 
@@ -97,8 +117,9 @@ class PaymentRequest extends FormRequest
                 $validator->errors()->add('technician_id', 'Say who was paid: a technician or a supplier.');
             }
 
-            // A session or a purchase can be paid by one line only.
-            foreach (['trip_session_ids' => 'session', 'technician_purchase_ids' => 'purchase'] as $field => $thing) {
+            // A session or a purchase is paid by one line only; a kept note or
+            // file goes to one line only.
+            foreach (['trip_session_ids' => 'session', 'technician_purchase_ids' => 'purchase', 'keep_note_ids' => 'note', 'keep_attachment_ids' => 'file'] as $field => $thing) {
                 $seen = [];
                 foreach ((array) $this->input('lines', []) as $i => $line) {
                     foreach ((array) ($line[$field] ?? []) as $id) {

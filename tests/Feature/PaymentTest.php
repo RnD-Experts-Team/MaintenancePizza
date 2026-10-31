@@ -284,6 +284,32 @@ class PaymentTest extends TestCase
         $this->assertSame('2.00', $this->balance($part));
     }
 
+    public function test_parts_bought_enter_storage_on_the_paid_day_in_every_time_zone(): void
+    {
+        $part = Part::factory()->create(['name' => 'Fuse']);
+        \Illuminate\Support\Carbon::setTestNow('2026-10-31 16:59:00');
+
+        try {
+            // An earlier day: noon UTC, so it reads as that day east and west of UTC.
+            $earlier = $this->pay([[
+                'type' => 'parts', 'storage_location_id' => $this->shelf->id, 'destination' => 'storage',
+                'part_id' => $part->id, 'quantity' => 1, 'unit_cost' => 2,
+            ]], ['paid_at' => '2026-10-05'])['data'];
+            $movement = StockMovement::query()->findOrFail($earlier['lines'][0]['stock_movement_id']);
+            $this->assertSame('2026-10-05 12:00:00', $movement->moved_at->format('Y-m-d H:i:s'));
+
+            // Paid today: stamped when it was recorded.
+            $today = $this->pay([[
+                'type' => 'parts', 'storage_location_id' => $this->shelf->id, 'destination' => 'storage',
+                'part_id' => $part->id, 'quantity' => 1, 'unit_cost' => 2,
+            ]], ['paid_at' => '2026-10-31'])['data'];
+            $movement = StockMovement::query()->findOrFail($today['lines'][0]['stock_movement_id']);
+            $this->assertSame('2026-10-31 16:59:00', $movement->moved_at->format('Y-m-d H:i:s'));
+        } finally {
+            \Illuminate\Support\Carbon::setTestNow();
+        }
+    }
+
     public function test_a_storage_parts_line_shows_where_the_part_sits_now(): void
     {
         $part = Part::factory()->create(['name' => 'Air filter']);
@@ -390,6 +416,38 @@ class PaymentTest extends TestCase
             'type' => 'parts', 'store_id' => $this->store->id, 'ticket_issue_ids' => [$issue->id], 'part_id' => $part->id,
             'quantity' => 2, 'unit_cost' => '4.90', 'technician_purchase_ids' => [$mine->id],
         ]], [], 422);
+    }
+
+    public function test_an_other_line_pays_back_a_purchase_that_is_not_a_catalog_part(): void
+    {
+        $ties = TechnicianPurchase::query()->create([
+            'technician_id' => $this->tom->id, 'trip_id' => $this->trip->id,
+            'description' => 'Zip ties', 'total_cost' => '6.50', 'bought_at' => '2026-10-01 10:00:00',
+        ]);
+
+        // Only parts and Other lines pay purchases back.
+        $refused = $this->pay([[
+            'type' => 'fixed', 'store_id' => $this->store->id, 'amount' => '6.50', 'technician_purchase_ids' => [$ties->id],
+        ]], [], 422);
+        $this->assertArrayHasKey('lines.0.technician_purchase_ids', $refused['errors']);
+
+        $data = $this->pay([[
+            'type' => 'other', 'store_id' => $this->store->id, 'description' => 'Zip ties he bought',
+            'amount' => '6.50', 'technician_purchase_ids' => [$ties->id],
+        ]])['data'];
+
+        $this->assertSame('6.50', $data['lines'][0]['amount']);
+        $this->assertSame($data['lines'][0]['id'], $ties->fresh()->payment_line_id);
+        $this->assertTrue($data['lines'][0]['technician_purchases'][0]['paid']);
+
+        // Paid twice: refused, also on another Other line.
+        $this->pay([[
+            'type' => 'other', 'store_id' => $this->store->id, 'amount' => '6.50', 'technician_purchase_ids' => [$ties->id],
+        ]], [], 422);
+
+        // Marking the payment mistaken releases it again.
+        $this->postJson("/api/payments/{$data['id']}/mistaken", ['reason' => 'Wrong technician'], $this->headers())->assertOk();
+        $this->assertNull($ties->fresh()->payment_line_id);
     }
 
     // --------------------------------------------------------- Edit, mistaken

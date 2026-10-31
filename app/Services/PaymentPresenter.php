@@ -47,6 +47,9 @@ class PaymentPresenter
         'lines.technicianPurchases.supplier',
         'lines.technicianPurchases.attachments.creator',
         'lines.technicianPurchases.paymentLine',
+        'lines.notes.creator',
+        'lines.notes.attachments.creator',
+        'lines.attachments.creator',
         'notes.creator',
         'notes.attachments.creator',
         'attachments.creator',
@@ -197,6 +200,9 @@ class PaymentPresenter
             'stock_movement_id' => $line->stockMovement?->id,
             'serials' => $line->partUnits->pluck('serial_number')->sort()->values()->all(),
             'technician_purchases' => $line->technicianPurchases->map(fn (TechnicianPurchase $p) => $this->purchase($p))->values()->all(),
+            // The line's own notes and files ([] when it has none).
+            'notes' => $this->notes->presentMany($line) ?? [],
+            'attachments' => $this->attachments->presentMany($line) ?? [],
         ];
     }
 

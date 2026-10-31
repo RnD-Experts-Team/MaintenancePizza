@@ -4,7 +4,9 @@ namespace App\Services;
 
 use App\Enums\PaymentLineType;
 use App\Enums\StockMovementType;
+use App\Models\Attachment;
 use App\Models\IssueInspection;
+use App\Models\Note;
 use App\Models\Part;
 use App\Models\PartUnit;
 use App\Models\Payment;
@@ -42,15 +44,24 @@ use Illuminate\Validation\ValidationException;
  *               piece (part units, in stock or installed on the first issue).
  *               Technician purchases named on the line are paid back by it.
  *   gas         the amount typed, or miles × rate.
- *   fixed / inspection / other   the amount typed.
+ *   fixed / inspection / other   the amount typed. An Other line may also
+ *               pay back technician purchases that are not catalog parts
+ *               (zip ties, a cleaner), the same way a parts line does.
  *
  * The payment total is the sum of its lines.
+ *
+ * The payment and each line carry as many notes and files as wanted.
  *
  * Editing replaces the lines in one transaction: a revision snapshot first,
  * then the old lines are UNDONE (their Bought movements reversed through
  * StockService, the units they created retired, session claims and purchases
- * released) and the new ones written. Marking mistaken is the same undo, but
- * the lines stay for the record.
+ * released) and the new ones written. A new line keeps the saved notes and
+ * files it names (`keep_note_ids` / `keep_attachment_ids`, from the lines it
+ * replaces): they move over to it, and whatever no line keeps is removed
+ * (soft-deleted; the revision snapshot still shows it). The payment's own
+ * notes and files stay unless `remove_note_ids` / `remove_attachment_ids`
+ * name them. Marking mistaken is the same undo, but the lines stay for the
+ * record, with their notes and files.
  */
 class PaymentService
 {
@@ -199,7 +210,7 @@ class PaymentService
             $payment->total = '0.00';
             $payment->save();
 
-            $this->writeLines($payment, $data['lines']);
+            $this->writeLines($payment, $data['lines'], []);
             $this->afterWrite($payment, $data, $files);
 
             return $payment;
@@ -229,12 +240,19 @@ class PaymentService
             }
 
             $this->snapshot($payment);
+            $this->removeOwn($payment, $data);
+
+            // What the old lines held, before they go: a new line may keep it.
+            $oldLineIds = $payment->lines()->pluck('id')->all();
+            $held = $this->heldBy($oldLineIds);
+
             $this->undoLines($payment, delete: true);
 
             $payment->fill($this->header($data));
             $payment->save();
 
-            $this->writeLines($payment, $data['lines']);
+            $this->writeLines($payment, $data['lines'], $held);
+            $this->dropUnkept($oldLineIds);
             $this->afterWrite($payment, $data, $files);
             $payment->touch();
 
@@ -300,11 +318,127 @@ class PaymentService
         );
         $payment->save();
 
-        if (! empty($data['note']) && trim((string) $data['note']) !== '') {
-            $this->notes->store($payment, trim((string) $data['note']), null, []);
+        foreach ($this->bodies([$data['note'] ?? null, ...(array) ($data['notes'] ?? [])]) as $body) {
+            $this->notes->store($payment, $body, null, []);
         }
 
         $this->attachments->store($payment, $files);
+    }
+
+    /**
+     * The non-blank note texts, trimmed.
+     *
+     * @param  array<int, mixed>  $notes
+     * @return array<int, string>
+     */
+    private function bodies(array $notes): array
+    {
+        return array_values(array_filter(
+            array_map(fn ($n) => trim((string) $n), $notes),
+            fn (string $n) => $n !== '',
+        ));
+    }
+
+    /**
+     * Edit: take off the payment's own notes and files named in
+     * `remove_note_ids` / `remove_attachment_ids`. An id that is not the
+     * payment's own is a 422.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function removeOwn(Payment $payment, array $data): void
+    {
+        $kinds = [
+            'remove_note_ids' => [$payment->notes(), 'Note'],
+            'remove_attachment_ids' => [$payment->attachments(), 'File'],
+        ];
+
+        foreach ($kinds as $field => [$relation, $thing]) {
+            $ids = array_values(array_unique(array_map('intval', (array) ($data[$field] ?? []))));
+            if ($ids === []) {
+                continue;
+            }
+
+            $found = (clone $relation)->whereKey($ids)->pluck('id')->map(fn ($id) => (int) $id)->all();
+            $missing = array_values(array_diff($ids, $found));
+
+            if ($missing !== []) {
+                throw ValidationException::withMessages([$field => "{$thing} #{$missing[0]} is not on this payment."]);
+            }
+
+            $relation->whereKey($ids)->delete();
+        }
+    }
+
+    /**
+     * The notes and files the given (old) lines hold, as
+     * ['notes' => [id => line id], 'attachments' => [id => line id]].
+     *
+     * @param  array<int, int>  $lineIds
+     * @return array{notes: array<int, int>, attachments: array<int, int>}
+     */
+    private function heldBy(array $lineIds): array
+    {
+        $type = (new PaymentLine)->getMorphClass();
+
+        return [
+            'notes' => Note::query()->where('notable_type', $type)->whereIn('notable_id', $lineIds)->pluck('notable_id', 'id')->all(),
+            'attachments' => Attachment::query()->where('attachable_type', $type)->whereIn('attachable_id', $lineIds)->pluck('attachable_id', 'id')->all(),
+        ];
+    }
+
+    /**
+     * After an edit: the notes and files of the replaced lines that no new
+     * line kept are removed (soft-deleted, as everywhere).
+     *
+     * @param  array<int, int>  $oldLineIds
+     */
+    private function dropUnkept(array $oldLineIds): void
+    {
+        if ($oldLineIds === []) {
+            return;
+        }
+
+        $type = (new PaymentLine)->getMorphClass();
+        Note::query()->where('notable_type', $type)->whereIn('notable_id', $oldLineIds)->delete();
+        Attachment::query()->where('attachable_type', $type)->whereIn('attachable_id', $oldLineIds)->delete();
+    }
+
+    /**
+     * The line's notes and files: the saved ones it keeps move over to it
+     * (edit), then the new ones are added.
+     *
+     * @param  array<string, mixed>  $in
+     * @param  array{notes?: array<int, int>, attachments?: array<int, int>}  $held  see heldBy()
+     */
+    private function writeLineExtras(PaymentLine $line, int $i, array $in, array $held): void
+    {
+        $kinds = [
+            'keep_note_ids' => [$held['notes'] ?? [], Note::class, 'notable_id', 'Note'],
+            'keep_attachment_ids' => [$held['attachments'] ?? [], Attachment::class, 'attachable_id', 'File'],
+        ];
+
+        foreach ($kinds as $field => [$heldIds, $model, $column, $thing]) {
+            $ids = array_values(array_unique(array_map('intval', (array) ($in[$field] ?? []))));
+            if ($ids === []) {
+                continue;
+            }
+
+            foreach ($ids as $id) {
+                if (! array_key_exists($id, $heldIds)) {
+                    throw ValidationException::withMessages(["lines.{$i}.{$field}" => "{$thing} #{$id} is not on a line of this payment."]);
+                }
+            }
+
+            $model::query()->whereKey($ids)->update([$column => $line->id]);
+        }
+
+        foreach ($this->bodies((array) ($in['notes'] ?? [])) as $body) {
+            $this->notes->store($line, $body, null, []);
+        }
+
+        $files = array_values(array_filter((array) ($in['files'] ?? []), fn ($f) => $f instanceof UploadedFile));
+        $this->attachments->store($line, $files);
     }
 
     private function snapshot(Payment $payment): void
@@ -355,20 +489,22 @@ class PaymentService
 
     /**
      * @param  array<int, array<string, mixed>>  $lines
+     * @param  array{notes?: array<int, int>, attachments?: array<int, int>}  $held  what the replaced lines held (heldBy())
      */
-    private function writeLines(Payment $payment, array $lines): void
+    private function writeLines(Payment $payment, array $lines, array $held): void
     {
         $technician = $payment->technician_id !== null ? Technician::withTrashed()->find($payment->technician_id) : null;
 
         foreach (array_values($lines) as $i => $input) {
-            $this->writeLine($payment, $technician, $i, $input);
+            $this->writeLine($payment, $technician, $i, $input, $held);
         }
     }
 
     /**
      * @param  array<string, mixed>  $in
+     * @param  array{notes?: array<int, int>, attachments?: array<int, int>}  $held
      */
-    private function writeLine(Payment $payment, ?Technician $technician, int $i, array $in): void
+    private function writeLine(Payment $payment, ?Technician $technician, int $i, array $in, array $held): void
     {
         $type = PaymentLineType::from((string) $in['type']);
         $key = fn (string $field) => "lines.{$i}.{$field}";
@@ -424,8 +560,10 @@ class PaymentService
         if ($type !== PaymentLineType::Parts && $serials !== []) {
             $fail('serials', 'Only a parts line has serial numbers.');
         }
-        if ($type !== PaymentLineType::Parts && ! empty($in['technician_purchase_ids'])) {
-            $fail('technician_purchase_ids', 'Technician purchases are paid back on a parts line.');
+        // A purchase is paid back on a parts line (a catalog part) or on an
+        // Other line (anything else he bought: zip ties, a fuse, a cleaner).
+        if (! in_array($type, [PaymentLineType::Parts, PaymentLineType::Other], true) && ! empty($in['technician_purchase_ids'])) {
+            $fail('technician_purchase_ids', 'Technician purchases are paid back on a parts line or an Other line.');
         }
 
         switch ($type) {
@@ -552,6 +690,7 @@ class PaymentService
 
         $line->save();
 
+        $this->writeLineExtras($line, $i, $in, $held);
         $line->ticketIssues()->sync($issueIds);
         foreach ($sessionMinutes as $id => $minutes) {
             try {
@@ -563,12 +702,14 @@ class PaymentService
             }
         }
 
-        if ($type === PaymentLineType::Parts) {
+        if ($type === PaymentLineType::Parts || $type === PaymentLineType::Other) {
             $this->payBackPurchases($line, $payment, $i, (array) ($in['technician_purchase_ids'] ?? []));
+        }
 
+        if ($type === PaymentLineType::Parts) {
             if ($destination === 'storage') {
                 $this->stock->record([
-                    'moved_at' => $payment->paid_at,
+                    'moved_at' => $this->boughtAt($payment),
                     'type' => StockMovementType::Bought,
                     'storage_location_id' => $line->storage_location_id,
                     'payment_line_id' => $line->id,
@@ -588,6 +729,19 @@ class PaymentService
                 $this->installUnits($line, $part, $issueIds[0], $serials, $payment, $key('serials'));
             }
         }
+    }
+
+    /**
+     * When parts bought on a payment entered storage. paid_at is a day: a
+     * payment for today is stamped now; an earlier day at noon UTC, so the
+     * Stock history shows that same calendar day in every time zone (midnight
+     * UTC would read as the evening before west of UTC).
+     */
+    private function boughtAt(Payment $payment): Carbon
+    {
+        $day = Carbon::parse($payment->paid_at);
+
+        return $day->isSameDay(now()) ? now() : $day->copy()->setTime(12, 0);
     }
 
     /**

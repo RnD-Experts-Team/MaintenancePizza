@@ -18,8 +18,9 @@ use Illuminate\Validation\ValidationException;
  * somebody types what is really there; applying it writes ONE stock_count
  * movement for the differences and freezes the values.
  *
- *   draft     expected = the balance when the sheet was made; counted typed in
- *             (null = not counted yet); values shown at today's average cost.
+ *   draft     expected = the balance here now (read live on every show, the
+ *             figure apply will use); counted typed in (null = not counted
+ *             yet); values shown at today's average cost.
  *   applied   expected recomputed at the moment of applying (stock may have
  *             moved since the sheet was made), the difference written to the
  *             ledger, each line's unit cost frozen. Kept as the report.
@@ -256,6 +257,16 @@ class StockCountService
         $costs = $draft
             ? $this->stock->averageCosts($count->lines->pluck('part_id')->all(), (int) $count->storage_location_id)
             : [];
+        // A draft compares with what is there NOW -- the same figure apply
+        // uses -- so the sheet, its totals and the apply summary never promise
+        // corrections that stock moved since the sheet was made would undo.
+        $live = $draft
+            ? StockBalance::query()
+                ->where('storage_location_id', $count->storage_location_id)
+                ->whereIn('part_id', $count->lines->pluck('part_id')->all())
+                ->pluck('quantity', 'part_id')
+                ->all()
+            : [];
 
         $totals = [
             'missing_quantity' => '0.00',
@@ -267,9 +278,10 @@ class StockCountService
         ];
 
         $lines = $count->lines->sortBy(fn (StockCountLine $l) => mb_strtolower((string) $l->part?->name))->values()
-            ->map(function (StockCountLine $line) use ($draft, $costs, &$totals) {
+            ->map(function (StockCountLine $line) use ($draft, $costs, $live, &$totals) {
                 $cost = $draft ? ($costs[$line->part_id] ?? null) : ($line->unit_cost === null ? null : number_format((float) $line->unit_cost, 4, '.', ''));
-                $difference = $line->difference();
+                $expected = $draft ? $this->scale($live[$line->part_id] ?? 0) : $this->scale($line->expected);
+                $difference = $line->counted === null ? null : number_format((float) $line->counted - (float) $expected, 2, '.', '');
                 $valueDifference = $difference === null || $cost === null ? null : bcmul($difference, $cost, self::SCALE);
 
                 if ($difference !== null) {
@@ -290,7 +302,7 @@ class StockCountService
                     'id' => $line->id,
                     'part_id' => $line->part_id,
                     'part' => $line->part ? ['id' => $line->part->id, 'name' => $line->part->name, 'unit' => $line->part->unit ?? 'each'] : null,
-                    'expected' => $this->scale($line->expected),
+                    'expected' => $expected,
                     'counted' => $line->counted === null ? null : $this->scale($line->counted),
                     'difference' => $difference,
                     'unit_cost' => $cost,

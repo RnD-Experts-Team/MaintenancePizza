@@ -3481,7 +3481,7 @@
         ],
         "summary": "Cancel a ticket by cancelling all of its issues",
         "operationId": "cancelTicket",
-        "description": "Cancels every issue on the ticket that is not already cancelled, recording the provided reason on each status-change entry. Once all issues are cancelled the ticket's derived status becomes `cancelled`.",
+        "description": "Cancels every issue on the ticket that is not already cancelled, recording the provided reason on each status-change entry. Once all issues are cancelled the ticket's derived status becomes `cancelled`. Finishing it releases what was still planned (docs/MAINTENANCE.md §2 \"Finished issues\"): pending tasks on open trips are taken off (or, on a trip with clocked time, marked not_done \"No longer needed\"), an unused trip left empty is removed, bookings from today on get ended_at/ended_reason, scheduled inspections become cancelled.",
         "parameters": [
           {
             "$ref": "#/components/parameters/Store"
@@ -3823,7 +3823,7 @@
         ],
         "summary": "Cancel an issue — records reason, no child spawned",
         "operationId": "cancelIssue",
-        "description": "Marks the issue `cancelled` (a terminal/finished status) and records the reason in `status_changes`. Unlike deferral it spawns no child. If every issue on the ticket ends up cancelled, the ticket derives to `cancelled`.",
+        "description": "Marks the issue `cancelled` (a terminal/finished status) and records the reason in `status_changes`. Unlike deferral it spawns no child. If every issue on the ticket ends up cancelled, the ticket derives to `cancelled`. Finishing it releases what was still planned (docs/MAINTENANCE.md §2 \"Finished issues\"): pending tasks on open trips are taken off (or, on a trip with clocked time, marked not_done \"No longer needed\"), an unused trip left empty is removed, bookings from today on get ended_at/ended_reason, scheduled inspections become cancelled.",
         "parameters": [
           {
             "$ref": "#/components/parameters/Store"
@@ -6035,7 +6035,7 @@
           "Technicians"
         ],
         "summary": "Rate a technician on one issue",
-        "description": "Replaces the entry: fields left out are cleared. An entry with no stars, no notes and no pin is removed (`data` is null). `call_first: true` moves the issue's pin to this technician.",
+        "description": "Replaces the entry: fields left out are cleared. An entry with no stars, no notes and no pin is kept: the technician covers the issue, not rated yet (DELETE takes the issue off). `call_first: true` moves the issue's pin to this technician; whoever had it keeps covering the issue.",
         "operationId": "putTechnicianAbility",
         "parameters": [
           {
@@ -8648,6 +8648,7 @@
           "Storage"
         ],
         "summary": "Show a stock count",
+        "description": "While the count is a draft, each line's expected (and so difference and totals) is the balance at the location now, the figure apply uses.",
         "operationId": "showStockCount",
         "parameters": [
           {
@@ -9647,7 +9648,7 @@
                   "note": {
                     "type": "string",
                     "nullable": true,
-                    "description": "Added as a note on the payment"
+                    "description": "Added as a note on the payment (kept for older clients; prefer notes)"
                   },
                   "lines": {
                     "type": "array",
@@ -9764,7 +9765,7 @@
                           "items": {
                             "type": "integer"
                           },
-                          "description": "parts: this technician's unpaid purchases paid back by the line"
+                          "description": "parts or other: this technician's unpaid purchases paid back by the line (an Other line pays back things that are not catalog parts)"
                         },
                         "miles": {
                           "type": "number",
@@ -9774,6 +9775,21 @@
                           "type": "integer",
                           "nullable": true,
                           "description": "inspection lines only; its issue is linked too"
+                        },
+                        "notes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "The line's new notes, as many as wanted (multipart: lines[0][notes][])"
+                        },
+                        "files": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "format": "binary"
+                          },
+                          "description": "The line's files, multipart bracket notation only: lines[0][files][]"
                         }
                       },
                       "required": [
@@ -9781,6 +9797,13 @@
                       ]
                     },
                     "minItems": 1
+                  },
+                  "notes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "New notes, as many as wanted (blank ones are dropped)"
                   }
                 },
                 "required": [
@@ -9829,11 +9852,11 @@
                   "note": {
                     "type": "string",
                     "nullable": true,
-                    "description": "Added as a note on the payment"
+                    "description": "Added as a note on the payment (kept for older clients; prefer notes)"
                   },
                   "lines": {
                     "type": "string",
-                    "description": "The lines as ONE JSON string (bracket notation lines[0][type]=… also works)"
+                    "description": "The lines as ONE JSON string (bracket notation lines[0][type]=… also works). A line's files need bracket notation: lines[0][files][]; its notes lines[0][notes][]"
                   },
                   "files[]": {
                     "type": "array",
@@ -9841,7 +9864,14 @@
                       "type": "string",
                       "format": "binary"
                     },
-                    "description": "Invoice files"
+                    "description": "Files attached to the payment (as many as wanted)"
+                  },
+                  "notes[]": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "New notes, as many as wanted (blank ones are dropped)"
                   }
                 },
                 "required": [
@@ -10291,6 +10321,20 @@
                                     }
                                   }
                                 }
+                              },
+                              "notes": {
+                                "type": "array",
+                                "items": {
+                                  "$ref": "#/components/schemas/Note"
+                                },
+                                "description": "The line's own notes"
+                              },
+                              "attachments": {
+                                "type": "array",
+                                "items": {
+                                  "$ref": "#/components/schemas/Attachment"
+                                },
+                                "description": "The line's own files"
                               }
                             }
                           }
@@ -10817,6 +10861,20 @@
                                     }
                                   }
                                 }
+                              },
+                              "notes": {
+                                "type": "array",
+                                "items": {
+                                  "$ref": "#/components/schemas/Note"
+                                },
+                                "description": "The line's own notes"
+                              },
+                              "attachments": {
+                                "type": "array",
+                                "items": {
+                                  "$ref": "#/components/schemas/Attachment"
+                                },
+                                "description": "The line's own files"
                               }
                             }
                           }
@@ -10948,7 +11006,7 @@
                   "note": {
                     "type": "string",
                     "nullable": true,
-                    "description": "Added as a note on the payment"
+                    "description": "Added as a note on the payment (kept for older clients; prefer notes)"
                   },
                   "lines": {
                     "type": "array",
@@ -11065,7 +11123,7 @@
                           "items": {
                             "type": "integer"
                           },
-                          "description": "parts: this technician's unpaid purchases paid back by the line"
+                          "description": "parts or other: this technician's unpaid purchases paid back by the line (an Other line pays back things that are not catalog parts)"
                         },
                         "miles": {
                           "type": "number",
@@ -11075,6 +11133,35 @@
                           "type": "integer",
                           "nullable": true,
                           "description": "inspection lines only; its issue is linked too"
+                        },
+                        "notes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "The line's new notes, as many as wanted (multipart: lines[0][notes][])"
+                        },
+                        "files": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "format": "binary"
+                          },
+                          "description": "The line's files, multipart bracket notation only: lines[0][files][]"
+                        },
+                        "keep_note_ids": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "description": "Saved notes of the lines being replaced that this line keeps (they move to it). A line note no line keeps is removed"
+                        },
+                        "keep_attachment_ids": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "description": "Saved files of the lines being replaced that this line keeps (they move to it). A line file no line keeps is removed"
                         }
                       },
                       "required": [
@@ -11087,6 +11174,27 @@
                     "type": "string",
                     "format": "date-time",
                     "description": "The payment's updated_at as you read it; 409 when stale"
+                  },
+                  "notes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "New notes, as many as wanted (blank ones are dropped)"
+                  },
+                  "remove_note_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    },
+                    "description": "The payment's own notes to take off (soft-deleted). Absent = keep them all"
+                  },
+                  "remove_attachment_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    },
+                    "description": "The payment's own files to take off (soft-deleted). Absent = keep them all"
                   }
                 },
                 "required": [
@@ -11136,11 +11244,11 @@
                   "note": {
                     "type": "string",
                     "nullable": true,
-                    "description": "Added as a note on the payment"
+                    "description": "Added as a note on the payment (kept for older clients; prefer notes)"
                   },
                   "lines": {
                     "type": "string",
-                    "description": "The lines as ONE JSON string (bracket notation lines[0][type]=… also works)"
+                    "description": "The lines as ONE JSON string (bracket notation lines[0][type]=… also works). A line's files need bracket notation: lines[0][files][]; its notes lines[0][notes][]; on edit lines[0][keep_note_ids][] / lines[0][keep_attachment_ids][]"
                   },
                   "files[]": {
                     "type": "array",
@@ -11148,12 +11256,33 @@
                       "type": "string",
                       "format": "binary"
                     },
-                    "description": "Invoice files"
+                    "description": "Files attached to the payment (as many as wanted)"
                   },
                   "expected_updated_at": {
                     "type": "string",
                     "format": "date-time",
                     "description": "The payment's updated_at as you read it; 409 when stale"
+                  },
+                  "notes[]": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "New notes, as many as wanted (blank ones are dropped)"
+                  },
+                  "remove_note_ids[]": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    },
+                    "description": "The payment's own notes to take off (soft-deleted). Absent = keep them all"
+                  },
+                  "remove_attachment_ids[]": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    },
+                    "description": "The payment's own files to take off (soft-deleted). Absent = keep them all"
                   }
                 },
                 "required": [
@@ -11604,6 +11733,20 @@
                                     }
                                   }
                                 }
+                              },
+                              "notes": {
+                                "type": "array",
+                                "items": {
+                                  "$ref": "#/components/schemas/Note"
+                                },
+                                "description": "The line's own notes"
+                              },
+                              "attachments": {
+                                "type": "array",
+                                "items": {
+                                  "$ref": "#/components/schemas/Attachment"
+                                },
+                                "description": "The line's own files"
                               }
                             }
                           }
@@ -12164,6 +12307,20 @@
                                     }
                                   }
                                 }
+                              },
+                              "notes": {
+                                "type": "array",
+                                "items": {
+                                  "$ref": "#/components/schemas/Note"
+                                },
+                                "description": "The line's own notes"
+                              },
+                              "attachments": {
+                                "type": "array",
+                                "items": {
+                                  "$ref": "#/components/schemas/Attachment"
+                                },
+                                "description": "The line's own files"
                               }
                             }
                           }
@@ -12676,6 +12833,16 @@
               "type": "boolean"
             },
             "description": "Only trips someone is clocked in on."
+          },
+          {
+            "name": "history_before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "YYYY-MM-DD, the viewer's today. The History list: trips planned before that day, plus closed trips of any day; a future (or today's) open trip is left out."
           },
           {
             "name": "search",
@@ -31579,7 +31746,7 @@
         ],
         "summary": "Move a booking",
         "operationId": "moveSchedule",
-        "description": "Writes an assignment delay (old date/time, new, reason). When the DAY changes, the issue leaves the old trip (pending tasks only; an empty untouched stop is removed) and goes on the technician's trip for the new day; an inspection booking moves its inspection too. Status unchanged. Refused for a mistaken booking, a closed/cancelled issue, or no change (errors.date).",
+        "description": "Writes an assignment delay (old date/time, new, reason). When the DAY changes, the issue leaves the old trip (pending tasks only; an empty untouched stop is removed) and goes on the technician's trip for the new day; an inspection booking moves its inspection too. The old day's trip is removed when that leaves it with no stops and it was never used (no session, link never opened, no purchases/notes/files). Status unchanged. Refused for a mistaken or ended booking, a closed/cancelled issue, or no change (errors.date).",
         "parameters": [
           {
             "$ref": "#/components/parameters/Store"
@@ -31894,7 +32061,7 @@
         ],
         "summary": "Close the issue (→ closed)",
         "operationId": "closeIssue",
-        "description": "Allowed in any open status. Checklist: resolved (store confirmed working), cost_recorded (a live payment line on the issue), invoice_attached (a linked live payment has a file), notes_completed (work_performed) -- all exempt for fixed_by_troubleshooting / not_needed. Anything missing → 422 errors.status (what is missing) + errors.checklist (the keys), unless override_reason is given (kept in the status change reason). final_note / what_we_learned become typed notes (final_notes / what_we_learned) on the issue.",
+        "description": "Allowed in any open status. Checklist: resolved (store confirmed working), cost_recorded (a live payment line on the issue), invoice_attached (a linked live payment has a file), notes_completed (work_performed) -- all exempt for fixed_by_troubleshooting / not_needed. Anything missing → 422 errors.status (what is missing) + errors.checklist (the keys), unless override_reason is given (kept in the status change reason). final_note / what_we_learned become typed notes (final_notes / what_we_learned) on the issue. Finishing it releases what was still planned (docs/MAINTENANCE.md §2 \"Finished issues\"): pending tasks on open trips are taken off (or, on a trip with clocked time, marked not_done \"No longer needed\"), an unused trip left empty is removed, bookings from today on get ended_at/ended_reason, scheduled inspections become cancelled.",
         "parameters": [
           {
             "$ref": "#/components/parameters/Store"
@@ -31979,7 +32146,7 @@
         ],
         "summary": "Change the status by hand",
         "operationId": "jumpIssueStatus",
-        "description": "The escape hatch: any status → any status, reason required, logged as \"Changed by hand: <reason>\". Jumping to the status it already has → 422.",
+        "description": "The escape hatch: any status → any status, reason required, logged as \"Changed by hand: <reason>\". Jumping to the status it already has → 422. A jump from an open status to closed/cancelled releases planned work the same way as close/cancel.",
         "parameters": [
           {
             "$ref": "#/components/parameters/Store"
@@ -35249,6 +35416,16 @@
           "mistaken": {
             "type": "boolean",
             "description": "True when this record was entered in error."
+          },
+          "ended_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Set when the issue was closed or cancelled before the booking's day: the booking no longer stands."
+          },
+          "ended_reason": {
+            "type": "string",
+            "nullable": true
           },
           "delays": {
             "type": "array",

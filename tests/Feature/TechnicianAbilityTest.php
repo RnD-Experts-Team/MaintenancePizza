@@ -89,18 +89,29 @@ class TechnicianAbilityTest extends TestCase
         $this->assertSame(2, TechnicianIssueAbility::query()->where('call_first', true)->count());
     }
 
-    public function test_an_entry_that_was_only_the_pin_goes_away_when_the_pin_moves(): void
+    public function test_an_entry_that_was_only_the_pin_still_covers_the_issue_when_the_pin_moves(): void
     {
         $this->rate($this->ahmed, ['call_first' => true])->assertOk();
         $this->rate($this->bilal, ['call_first' => true])->assertOk();
 
-        $this->assertDatabaseMissing('technician_issue_abilities', ['technician_id' => $this->ahmed->id]);
+        $this->assertDatabaseHas('technician_issue_abilities', ['technician_id' => $this->ahmed->id, 'call_first' => null]);
     }
 
-    public function test_an_empty_entry_is_removed_and_delete_forgets_one(): void
+    public function test_an_empty_entry_covers_the_issue_unrated_and_delete_forgets_one(): void
     {
+        // "Add issue": covers it, not rated yet.
+        $this->rate($this->ahmed, ['rating' => null, 'notes' => null, 'call_first' => false])
+            ->assertOk()
+            ->assertJsonPath('data.rating', null)
+            ->assertJsonPath('data.call_first', false);
+        $this->assertDatabaseCount('technician_issue_abilities', 1);
+
+        // Clearing the stars keeps the issue covered.
         $this->rate($this->ahmed, ['rating' => 2])->assertOk();
-        $this->rate($this->ahmed, ['rating' => null, 'notes' => '   '])->assertOk()->assertJsonPath('data', null);
+        $this->rate($this->ahmed, ['rating' => null, 'notes' => '   '])->assertOk()->assertJsonPath('data.rating', null);
+        $this->assertDatabaseCount('technician_issue_abilities', 1);
+
+        $this->deleteJson("/api/technicians/{$this->ahmed->id}/abilities/{$this->oven->id}", [], $this->headers())->assertNoContent();
         $this->assertDatabaseCount('technician_issue_abilities', 0);
 
         $this->rate($this->ahmed, ['rating' => 2])->assertOk();

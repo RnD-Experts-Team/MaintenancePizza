@@ -283,6 +283,8 @@ class TicketIssuePresenter
             'trip_id' => $a->trip_id,
             'inspection_id' => $a->issue_inspection_id,
             'mistaken' => (bool) $a->mistaken,
+            'ended_at' => $a->ended_at,
+            'ended_reason' => $a->ended_reason,
             'delays' => $a->relationLoaded('delays')
                 ? $a->delays->sortBy('id')->map(fn (AssignmentDelay $d) => [
                     'id' => $d->id,
@@ -647,10 +649,10 @@ class TicketIssuePresenter
                 continue;
             }
             $tech = $i->technician?->name ?? 'a technician';
-            $when = $i->scheduled_date?->toDateString().($i->scheduled_time ? ' at '.AssignmentService::showTime($i->scheduled_time) : '');
+            $when = $this->day($i->scheduled_date).($i->scheduled_time ? ' at '.AssignmentService::showTime($i->scheduled_time) : '');
             $add($i->created_at, 'inspection_booked', "Inspection booked with {$tech} for {$when}", $i->creator?->name);
             if ($i->done_at !== null) {
-                $estimate = $i->estimated_cost !== null ? ' (estimate '.$this->money($i->estimated_cost).')' : '';
+                $estimate = $i->estimated_cost !== null ? ' (quote '.$this->cash($i->estimated_cost).')' : '';
                 $add($i->done_at, 'inspection_done', 'Inspection done: '.Str::limit((string) $i->findings, 200).$estimate, $tech);
             }
         }
@@ -660,7 +662,7 @@ class TicketIssuePresenter
                 continue;
             }
             $label = $this->settings->labelOf((string) $a->level);
-            $add($a->decided_at, 'approval', "{$a->decision->label()} by {$a->approver_name} ({$label}) for ".$this->money($a->amount), $a->creator?->name);
+            $add($a->decided_at, 'approval', "{$a->decision->label()} by {$a->approver_name} ({$label}) for ".$this->cash($a->amount), $a->creator?->name);
         }
 
         foreach ($issue->assignments as $s) {
@@ -669,14 +671,14 @@ class TicketIssuePresenter
             }
             // An inspection booking is already on the timeline as the inspection.
             if (($s->kind ?? 'work') === 'work') {
-                $when = $s->assigned_date?->toDateString().($s->assigned_hour ? ' at '.AssignmentService::showTime($s->assigned_hour) : '');
+                $when = $this->day($s->assigned_date).($s->assigned_hour ? ' at '.AssignmentService::showTime($s->assigned_hour) : '');
                 $add($s->created_at, 'scheduled', 'Work booked with '.($s->technician?->name ?? 'a technician')." for {$when}", $s->creator?->name);
             }
             foreach ($s->delays as $d) {
                 if ($d->mistaken) {
                     continue;
                 }
-                $add($d->created_at, 'schedule_moved', "Booking moved from {$d->old_date?->toDateString()} to {$d->new_date?->toDateString()}: {$d->reason}", $d->creator?->name);
+                $add($d->created_at, 'schedule_moved', 'Booking moved from '.$this->day($d->old_date).' to '.$this->day($d->new_date).": {$d->reason}", $d->creator?->name);
             }
         }
 
@@ -695,14 +697,14 @@ class TicketIssuePresenter
 
         foreach ($this->liveLines($issue) as $l) {
             $to = $l->payment->paidTo()['name'] ?? 'someone';
-            $add($l->payment->created_at, 'payment', "Paid {$to} ".$this->money($l->amount)." ({$l->type->label()}) on {$l->payment->paid_at?->toDateString()}", $l->payment->creator?->name);
+            $add($l->payment->created_at, 'payment', "Paid {$to} ".$this->cash($l->amount)." ({$l->type->label()}) on ".$this->day($l->payment->paid_at), $l->payment->creator?->name);
         }
 
         foreach ($issue->technicianPurchases as $p) {
             if ($p->mistaken) {
                 continue;
             }
-            $add($p->bought_at, 'purchase', "Bought {$p->description} for ".$this->money($p->total_cost), $p->technician?->name);
+            $add($p->bought_at, 'purchase', "Bought {$p->description} for ".$this->cash($p->total_cost), $p->technician?->name);
         }
 
         foreach ($this->usedLines($issue) as [$m, $line]) {
@@ -718,7 +720,7 @@ class TicketIssuePresenter
         }
 
         if ($issue->store_confirmed_at !== null) {
-            $how = $issue->store_confirmed_via === 'specialist' ? ' (told the specialist)' : '';
+            $how = $issue->store_confirmed_via === 'specialist' ? ' (by phone)' : '';
             $add($issue->store_confirmed_at, 'store_confirmed', ($issue->store_confirmed_working ? 'The store says it works now' : 'The store says it still does not work').$how, $issue->storeConfirmer?->name);
         }
 
@@ -760,6 +762,18 @@ class TicketIssuePresenter
     private function money(mixed $amount): ?string
     {
         return $amount === null ? null : number_format((float) $amount, 2, '.', '');
+    }
+
+    /** Money as people read it in the timeline: $1,234.50. */
+    private function cash(mixed $amount): string
+    {
+        return '$'.number_format((float) $amount, 2);
+    }
+
+    /** A day as people read it in the timeline: Oct 31, 2026. */
+    private function day(?\DateTimeInterface $date): string
+    {
+        return $date?->format('M j, Y') ?? '';
     }
 
     private function quantity(mixed $quantity): string

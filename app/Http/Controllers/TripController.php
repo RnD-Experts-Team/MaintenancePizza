@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\TripStatus;
 use App\Http\Requests\TripActionRequest;
 use App\Http\Requests\TripAttachmentRequest;
 use App\Http\Requests\TripIndexRequest;
@@ -46,6 +47,9 @@ class TripController extends Controller
             ->when($data['technician_id'] ?? null, fn (Builder $q, $id) => $q->where('technician_id', (int) $id))
             ->when($data['from'] ?? null, fn (Builder $q, string $d) => $q->whereDate('planned_date', '>=', $d))
             ->when($data['to'] ?? null, fn (Builder $q, string $d) => $q->whereDate('planned_date', '<=', $d))
+            ->when($data['history_before'] ?? null, fn (Builder $q, string $d) => $q->where(fn (Builder $h) => $h
+                ->whereDate('planned_date', '<', $d)
+                ->orWhere('status', TripStatus::Closed->value)))
             ->when($request->boolean('on_clock'), fn (Builder $q) => $q->whereHas('sessions', fn (Builder $s) => $s
                 ->whereNull('clock_out')->where('mistaken', false)))
             ->when($data['search'] ?? null, function (Builder $q, string $search) {

@@ -135,7 +135,7 @@ class IssueWorkflowTest extends IssueWorkflowTestCase
             ->assertJsonPath('data.notes.0.body', 'Still warm at 2pm');
 
         $this->assertSame(
-            'The store told the specialist it still does not work: Still warm at 2pm',
+            'The store said by phone it still does not work: Still warm at 2pm',
             $this->issue->statusChanges()->latest('id')->value('reason'),
         );
     }

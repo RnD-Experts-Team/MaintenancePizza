@@ -217,7 +217,7 @@ class IssueWorkflowService
             $issue->next_action = self::NEXT_AFTER_NOT_WORKING;
             $issue->save();
 
-            $who = $via === 'specialist' ? 'The store told the specialist' : 'The store says';
+            $who = $via === 'specialist' ? 'The store said by phone' : 'The store says';
             TicketStatusService::changeIssueStatus(
                 $issue,
                 IssueStatus::InReview,
@@ -495,7 +495,7 @@ class IssueWorkflowService
         return [
             'open_info_request' => $requests->contains(fn (IssueInfoRequest $r) => !$r->mistaken && $r->answered_at === null),
             'scheduled_inspection' => $inspections->contains(fn (IssueInspection $i) => !$i->mistaken && $i->status === InspectionStatus::Scheduled),
-            'live_schedule' => $assignments->contains(fn (Assignment $a) => !$a->mistaken),
+            'live_schedule' => $assignments->contains(fn (Assignment $a) => !$a->mistaken && $a->ended_at === null),
             'confirmed_working' => $issue->store_confirmed_working === true,
             'last_approval_rejected' => $lastApproval !== null && $lastApproval->decision?->value === 'rejected',
         ];

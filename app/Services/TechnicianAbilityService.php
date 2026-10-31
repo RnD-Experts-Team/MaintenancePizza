@@ -32,7 +32,9 @@ class TechnicianAbilityService
 {
     /**
      * Rate a technician on one issue -- the whole entry is replaced. An entry
-     * left with no stars, no notes and no pin says nothing, so it is removed.
+     * with no stars, no notes and no pin still says "covers this issue, not
+     * rated yet" (the dashboard's "Add issue"), so it is kept; DELETE is what
+     * takes an issue off.
      *
      * @param  array{rating?: int|string|null, notes?: string|null, call_first?: bool|int|string}  $data
      * @return array{ability: TechnicianIssueAbility|null, moved_from: Technician|null}
@@ -49,12 +51,6 @@ class TechnicianAbilityService
                 ->where('issue_id', $issue->id)
                 ->lockForUpdate()
                 ->first();
-
-            if ($rating === null && $notes === null && ! $callFirst) {
-                $ability?->delete();
-
-                return ['ability' => null, 'moved_from' => null];
-            }
 
             $movedFrom = null;
 
@@ -154,16 +150,10 @@ class TechnicianAbilityService
     }
 
     /**
-     * Take the pin off an entry; an entry that was only the pin goes away.
+     * Take the pin off an entry; the technician still covers the issue.
      */
     private function unpinAbility(TechnicianIssueAbility $ability): void
     {
-        if ($ability->rating === null && $ability->notes === null) {
-            $ability->delete();
-
-            return;
-        }
-
         $ability->call_first = null;
         $ability->updated_by = Auth::id();
         $ability->save();

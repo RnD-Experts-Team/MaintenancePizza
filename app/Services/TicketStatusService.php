@@ -109,6 +109,12 @@ class TicketStatusService
         $issue->status = $to;
         $issue->save();
 
+        // Finished: what was still planned for it stops (pending trip tasks,
+        // bookings from today on, booked inspections).
+        if ($to->isTerminal() && ! ($from instanceof IssueStatus && $from->isTerminal())) {
+            app(TripService::class)->releaseFinishedIssue($issue, $to);
+        }
+
         if ($from !== $to) {
             app(IssueEventPublisher::class)->statusChanged($issue, $from, $to, $reason);
         }
