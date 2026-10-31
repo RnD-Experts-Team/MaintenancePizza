@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| Maintenance v2: the technician trip link (docs/MAINTENANCE-V2.md §3)
+| Maintenance: the technician trip link (docs/MAINTENANCE.md §3)
 |--------------------------------------------------------------------------
 | Required from routes/api.php OUTSIDE the auth.token.store group: these
 | URLs carry no dashboard token, only the trip link token. Paths start at

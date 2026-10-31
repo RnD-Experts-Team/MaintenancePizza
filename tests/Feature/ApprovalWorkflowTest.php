@@ -11,7 +11,7 @@ use App\Services\MaintenanceEvents\IssueEventPublisher;
 use Illuminate\Http\UploadedFile;
 
 /**
- * Asking for and recording approval of a quote (docs/MAINTENANCE-V2.md §2).
+ * Asking for and recording approval of a quote (docs/MAINTENANCE.md §2).
  * The level comes from the amount and maintenance_settings.approval_levels
  * (max is an exclusive upper bound; the last level has none).
  */

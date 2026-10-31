@@ -6,7 +6,7 @@ use App\Http\Requests\MaintenanceSettingUpdateRequest;
 use App\Services\MaintenanceSettingsService;
 
 /**
- * The owner's settings (docs/MAINTENANCE-V2.md §2 "Settings"): approval
+ * The owner's settings (docs/MAINTENANCE.md §2 "Settings"): approval
  * thresholds and how long an idle trip link lives.
  */
 class MaintenanceSettingController extends Controller

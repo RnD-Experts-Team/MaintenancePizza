@@ -1,4 +1,4 @@
-# Maintenance v2 — domain rules and API contract
+# Maintenance — domain rules and API contract
 
 _Last updated: 2026-10-30_
 

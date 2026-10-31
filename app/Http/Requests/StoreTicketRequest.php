@@ -33,7 +33,7 @@ class StoreTicketRequest extends FormRequest
             'issues.*.other_title' => ['nullable', 'string', 'max:255', 'required_without:issues.*.issue_id'],
             'issues.*.priority' => ['required', Rule::enum(Priority::class)],
             'issues.*.description' => ['required', 'string'],
-            // v2: how badly the store is affected, and who to call back.
+            // How badly the store is affected, and who to call back.
             'issues.*.impact' => ['nullable', Rule::enum(Impact::class)],
             'issues.*.contact_name' => ['nullable', 'string', 'max:255'],
             'issues.*.contact_phone' => ['nullable', ...StoreTechnicianRequest::PHONE_RULES],

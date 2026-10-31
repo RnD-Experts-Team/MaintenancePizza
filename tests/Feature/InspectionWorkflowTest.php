@@ -13,7 +13,7 @@ use App\Services\TripService;
 use Illuminate\Http\UploadedFile;
 
 /**
- * Booking an inspection and recording what it found (docs/MAINTENANCE-V2.md
+ * Booking an inspection and recording what it found (docs/MAINTENANCE.md
  * §2). An inspection is booked like work: a kind=inspection booking and the
  * issue on the technician's trip for that day.
  */

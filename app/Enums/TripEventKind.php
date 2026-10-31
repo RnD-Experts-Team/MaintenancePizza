@@ -3,7 +3,7 @@
 namespace App\Enums;
 
 /**
- * Something that happened inside a trip session (docs/MAINTENANCE-V2.md §3).
+ * Something that happened inside a trip session (docs/MAINTENANCE.md §3).
  *
  * Clocking in and out are not events: they ARE the session. Inside it, each
  * kind opens or closes a span, and each span falls in a BUCKET:

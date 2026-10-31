@@ -12,7 +12,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Approving a quote (docs/MAINTENANCE-V2.md §2). Who has to approve depends on
+ * Approving a quote (docs/MAINTENANCE.md §2). Who has to approve depends on
  * the amount (maintenance_settings.approval_levels): the specialist up to one
  * amount, the manager up to the next, management above. Asking makes it the
  * approver's turn; the decision -- by NAME today, the approver may not have a

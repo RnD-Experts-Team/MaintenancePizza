@@ -13,7 +13,7 @@ use Tests\Concerns\FakesAuthServer;
 use Tests\TestCase;
 
 /**
- * Stock counts (docs/MAINTENANCE-V2.md §5): draft → counted → applied, over HTTP.
+ * Stock counts (docs/MAINTENANCE.md §5): draft → counted → applied, over HTTP.
  */
 class StockCountTest extends TestCase
 {

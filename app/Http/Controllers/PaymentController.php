@@ -14,7 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * Payments and unpaid work (docs/MAINTENANCE-V2.md §4). All logic lives in
+ * Payments and unpaid work (docs/MAINTENANCE.md §4). All logic lives in
  * PaymentService; the shapes in PaymentPresenter.
  */
 class PaymentController extends Controller

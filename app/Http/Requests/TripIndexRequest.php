@@ -7,7 +7,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 /**
- * `GET trips` filters (docs/MAINTENANCE-V2.md §3).
+ * `GET trips` filters (docs/MAINTENANCE.md §3).
  */
 class TripIndexRequest extends FormRequest
 {

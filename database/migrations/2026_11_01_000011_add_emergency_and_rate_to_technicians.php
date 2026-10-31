@@ -1,13 +1,13 @@
 <?php
 
-use App\Services\MigrationV2\LegacyMap;
+use App\Services\LegacyConversion\LegacyMap;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * What a technician is in v2.
+ * What a technician is.
  *
  * - `emergency_available` + `emergency_notes`: "you can call me at night".
  *   Pickers on an urgent issue list these first.
@@ -53,7 +53,7 @@ return new class extends Migration {
                 $parts = [];
 
                 if ($t->rating !== null) {
-                    $parts[] = "Overall rating before v2: {$t->rating}/5.";
+                    $parts[] = "Overall rating before it became an average: {$t->rating}/5.";
                 }
                 if ($t->call_first) {
                     $parts[] = 'Was pinned as the overall "call first".';

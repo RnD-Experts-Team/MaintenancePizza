@@ -8,7 +8,7 @@ use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * Change the maintenance settings (docs/MAINTENANCE-V2.md §2 "Settings"). Each
+ * Change the maintenance settings (docs/MAINTENANCE.md §2 "Settings"). Each
  * key is optional; a key left out keeps its value.
  *
  * approval_levels replaces the whole list: lowest level first, each with a

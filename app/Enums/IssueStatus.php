@@ -3,7 +3,7 @@
 namespace App\Enums;
 
 /**
- * Where one ticket issue is in the v2 workflow (docs/MAINTENANCE-V2.md §2):
+ * Where one ticket issue is in the workflow (docs/MAINTENANCE.md §2):
  *
  *   new → in_review → (waiting_on_store) → (inspection) → (waiting_approval)
  *       → scheduled → work_done → closed          (or cancelled at any point)

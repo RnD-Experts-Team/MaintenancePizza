@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Parts a technician bought with his own money (docs/MAINTENANCE-V2.md §3/§4),
+ * Parts a technician bought with his own money (docs/MAINTENANCE.md §3/§4),
  * from his trip link or typed in by the office, waiting to be paid back by a
  * parts payment line. The receipts are the purchase's attachments.
  *

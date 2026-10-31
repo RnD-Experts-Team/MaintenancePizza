@@ -21,7 +21,7 @@ use Tests\Concerns\FakesAuthServer;
 use Tests\TestCase;
 
 /**
- * What a technician bought with his own money (docs/MAINTENANCE-V2.md §3/§4):
+ * What a technician bought with his own money (docs/MAINTENANCE.md §3/§4):
  * from his link and from the dashboard, the supplier by id or by name, and
  * whether it is paid back yet.
  */

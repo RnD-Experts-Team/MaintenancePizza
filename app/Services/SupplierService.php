@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 
 /**
- * Suppliers: the places we buy from (docs/MAINTENANCE-V2.md §1). Names are
+ * Suppliers: the places we buy from (docs/MAINTENANCE.md §1). Names are
  * unique ignoring capitals and repeated spaces, soft-deleted ones included
  * (HasUniqueName + the UniqueName rule).
  */

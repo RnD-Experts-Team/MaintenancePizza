@@ -12,7 +12,7 @@ use App\Services\MaintenanceEvents\IssueEventPublisher;
  * Derives a ticket's status from its issues. The ticket has no stored status
  * column — it is always computed, so it can never drift out of sync.
  *
- * Precedence (docs/MAINTENANCE-V2.md §2), first match wins -- whatever is
+ * Precedence (docs/MAINTENANCE.md §2), first match wins -- whatever is
  * waiting on someone outside the office shows first:
  *   1. any issue waiting_on_store   -> waiting_on_store
  *   2. any issue waiting_approval   -> waiting_approval

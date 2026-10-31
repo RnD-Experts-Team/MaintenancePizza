@@ -4,7 +4,7 @@ namespace App\Enums;
 
 /**
  * How an issue ended, set when it is closed. `deferred` is only ever the
- * converted form of the old "deferred" status; closing in v2 offers the
+ * converted form of the old "deferred" status; closing now offers the
  * other four (closable()).
  */
 enum Resolution: string

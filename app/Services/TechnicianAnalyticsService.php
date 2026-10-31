@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\DB;
  * The Technicians page: what each technician was paid, and the work they did,
  * for a range, a set of stores, issues and categories.
  *
- * PAY comes from v2 payments (docs/MAINTENANCE-V2.md §4) made to the
+ * PAY comes from payments (docs/MAINTENANCE.md §4) made to the
  * technician, mistaken ones left out. The pay date is the payment's
  * `paid_at` (a DATE), so pay is filtered on local days. Every penny of a
  * payment is on one of its lines, and each line is for one store (or one

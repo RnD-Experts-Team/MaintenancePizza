@@ -115,7 +115,7 @@ class CalendarFeedController extends Controller
             ->groupBy('ticket_issue_id');
 
         // ticket_issue_id => [session, …]: the clocked sessions of every trip
-        // that has the issue on one of its stops (maintenance v2 trips;
+        // that has the issue on one of its stops (trips;
         // start_clock / end_clock are each session's clock-in / clock-out).
         $sessions = DB::table('trip_stop_issues as tsi')
             ->join('trip_stops as st', 'st.id', '=', 'tsi.trip_stop_id')

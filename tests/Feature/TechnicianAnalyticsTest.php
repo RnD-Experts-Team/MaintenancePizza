@@ -18,7 +18,7 @@ use Tests\Concerns\FakesAuthServer;
 use Tests\TestCase;
 
 /**
- * The Technicians page on v2 data: pay from payments (by store and by line
+ * The Technicians page on the new data: pay from payments (by store and by line
  * type, both adding up to what was paid), work from trip sessions.
  */
 class TechnicianAnalyticsTest extends TestCase

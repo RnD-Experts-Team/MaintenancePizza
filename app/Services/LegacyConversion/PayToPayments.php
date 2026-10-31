@@ -1,13 +1,13 @@
 <?php
 
-namespace App\Services\MigrationV2;
+namespace App\Services\LegacyConversion;
 
 use Illuminate\Support\Facades\DB;
 
 /**
  * Daily Pay sheets and one-off pay entries become payments.
  *
- * Each old PAYMENT (one technician on one sheet) becomes one v2 payment dated
+ * Each old PAYMENT (one technician on one sheet) becomes one payment dated
  * the sheet's date, and its money is split into typed lines the way the old
  * sheet worked it out:
  *
@@ -177,7 +177,7 @@ final class PayToPayments extends Converter
     /**
      * The sessions an attendance entry became, first clock-in first: every
      * session of the trip it became. Read from the trip, not from the map:
-     * migration_v2_map is unique on (legacy row, new table), so it only ever
+     * legacy_conversion_map is unique on (legacy row, new table), so it only ever
      * holds an entry's FIRST session, and the others would be left unpaid.
      *
      * @return list<int>

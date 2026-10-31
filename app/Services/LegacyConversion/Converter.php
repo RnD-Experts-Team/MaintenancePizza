@@ -1,18 +1,18 @@
 <?php
 
-namespace App\Services\MigrationV2;
+namespace App\Services\LegacyConversion;
 
 use App\Support\NameKey;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Shared plumbing for the v2 data converters. They work on the query builder,
- * never on models: models describe the v2 schema, and the rows being read are
+ * Shared plumbing for the data converters. They work on the query builder,
+ * never on models: models describe the current schema, and the rows being read are
  * the old one.
  */
 abstract class Converter
 {
-    /** Where parts bought before v2 came from, when nobody wrote it down. */
+    /** Where parts bought before suppliers were recorded came from, when nobody wrote it down. */
     public const UNKNOWN_SUPPLIER = 'Unknown (migrated)';
 
     abstract public function run(): void;
@@ -119,7 +119,7 @@ abstract class Converter
         return (int) DB::table('suppliers')->insertGetId([
             'name' => self::UNKNOWN_SUPPLIER,
             'name_key' => NameKey::of(self::UNKNOWN_SUPPLIER),
-            'description' => 'Parts bought before v2, where nobody wrote down the shop. Rename or merge once you know.',
+            'description' => 'Parts bought before suppliers were recorded, where nobody wrote down the shop. Rename or merge once you know.',
             'created_at' => now(),
             'updated_at' => now(),
         ]);

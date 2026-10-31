@@ -11,7 +11,7 @@ use Tests\Concerns\FakesAuthServer;
 use Tests\TestCase;
 
 /**
- * Suppliers (docs/MAINTENANCE-V2.md §1), over HTTP.
+ * Suppliers (docs/MAINTENANCE.md §1), over HTTP.
  */
 class SupplierTest extends TestCase
 {

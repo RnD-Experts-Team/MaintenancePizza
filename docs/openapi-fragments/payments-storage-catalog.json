@@ -3369,7 +3369,7 @@
         "Payments"
       ],
       "summary": "Record a payment",
-      "description": "Line amounts are computed by the server (docs/MAINTENANCE-V2.md §4). Parts into storage write a Bought stock movement; parts to a ticket link the issues; serial-tracked parts create part units; technician purchases named are marked paid. The total is the sum of the lines.",
+      "description": "Line amounts are computed by the server (docs/MAINTENANCE.md §4). Parts into storage write a Bought stock movement; parts to a ticket link the issues; serial-tracked parts create part units; technician purchases named are marked paid. The total is the sum of the lines.",
       "operationId": "createPayment",
       "requestBody": {
         "required": true,

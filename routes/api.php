@@ -23,29 +23,29 @@ use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| Maintenance v2 route files (docs/MAINTENANCE-V2.md)
+| Maintenance route files (docs/MAINTENANCE.md)
 |--------------------------------------------------------------------------
-| Each v2 area keeps its routes in its own file under routes/api/, so the
+| Each area keeps its routes in its own file under routes/api/, so the
 | areas can grow without touching each other. Every file is REQUIRED from a
 | fixed place below, and that place decides its prefix and middleware:
 |
-|   v2-public-trips.php  OUTSIDE auth.token.store: the technician's trip
+|   public-trips.php  OUTSIDE auth.token.store: the technician's trip
 |                        link (`public/trips/{token}/...`). The file applies
 |                        its own token middleware and throttle.
-|   v2-catalog.php       inside the auth group (suppliers, part units,
+|   catalog.php       inside the auth group (suppliers, part units,
 |                        settings ...).
-|   v2-trips.php         inside the auth group (trips, sessions, events).
-|   v2-payments.php      inside the auth group (payments, technician
+|   trips.php         inside the auth group (trips, sessions, events).
+|   payments.php      inside the auth group (payments, technician
 |                        purchases, unpaid work).
-|   v2-storage.php       inside the auth group (stock counts ...).
-|   v2-analytics.php     inside the auth group.
-|   v2-workflow.php      inside the auth group, within the
+|   storage.php       inside the auth group (stock counts ...).
+|   analytics.php     inside the auth group.
+|   workflow.php      inside the auth group, within the
 |                        `stores/{store}` (scopeBindings) → `tickets/{ticket}`
 |                        prefix group, so its paths are written from
 |                        `issues/{ticketIssue}/...` on.
 */
 
-require __DIR__.'/api/v2-public-trips.php';
+require __DIR__.'/api/public-trips.php';
 
 
 /*
@@ -99,7 +99,7 @@ Route::middleware(['throttle:api', 'auth.token.store'])->group(function () {
     Route::delete('categories/{category}', [CatalogController::class, 'categoriesDestroy'])->name('categories.destroy');
 
     // The owner's settings: approval thresholds, how long an idle trip link
-    // lives (docs/MAINTENANCE-V2.md §2 "Settings").
+    // lives (docs/MAINTENANCE.md §2 "Settings").
     Route::get('maintenance-settings', [MaintenanceSettingController::class, 'show'])->name('maintenance-settings.show');
     Route::put('maintenance-settings', [MaintenanceSettingController::class, 'update'])->name('maintenance-settings.update');
 
@@ -181,14 +181,14 @@ Route::middleware(['throttle:api', 'auth.token.store'])->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Maintenance v2 areas (see the table at the top of this file).
+    | Maintenance areas (see the table at the top of this file).
     |--------------------------------------------------------------------------
     */
-    require __DIR__.'/api/v2-catalog.php';
-    require __DIR__.'/api/v2-trips.php';
-    require __DIR__.'/api/v2-payments.php';
-    require __DIR__.'/api/v2-storage.php';
-    require __DIR__.'/api/v2-analytics.php';
+    require __DIR__.'/api/catalog.php';
+    require __DIR__.'/api/trips.php';
+    require __DIR__.'/api/payments.php';
+    require __DIR__.'/api/storage.php';
+    require __DIR__.'/api/analytics.php';
 
     /*
     |--------------------------------------------------------------------------
@@ -255,7 +255,7 @@ Route::middleware(['throttle:api', 'auth.token.store'])->group(function () {
             Route::post('issues/{ticketIssue}/attachments', [AttachmentController::class, 'ticketIssue'])->middleware('throttle:api-upload')->name('tickets.issues.attachments');
 
             /*
-             | The v2 issue workflow (review, info requests, inspections,
+             | The issue workflow (review, info requests, inspections,
              | approvals, schedule, work done, confirmation, close, jump).
              |
              | Still inside scopeBindings(), so every nested parameter is
@@ -266,7 +266,7 @@ Route::middleware(['throttle:api', 'auth.token.store'])->group(function () {
              | TicketIssue::approvals(), {assignment} → TicketIssue::assignments().
              | A parameter named after no relation (e.g. {request}) 500s.
              */
-            require __DIR__.'/api/v2-workflow.php';
+            require __DIR__.'/api/workflow.php';
         });
     });
 

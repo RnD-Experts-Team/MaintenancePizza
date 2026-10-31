@@ -14,7 +14,7 @@ use App\Services\TicketStatusService;
 use Illuminate\Http\UploadedFile;
 
 /**
- * The status machine of one issue over HTTP (docs/MAINTENANCE-V2.md §2):
+ * The status machine of one issue over HTTP (docs/MAINTENANCE.md §2):
  * review, work done, the store's confirmation, close with its checklist, the
  * jump escape hatch, cancel, and the outbox event every change writes.
  */

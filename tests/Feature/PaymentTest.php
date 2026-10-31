@@ -27,7 +27,7 @@ use Tests\Concerns\FakesAuthServer;
 use Tests\TestCase;
 
 /**
- * Payments and unpaid work (docs/MAINTENANCE-V2.md §4), over HTTP.
+ * Payments and unpaid work (docs/MAINTENANCE.md §4), over HTTP.
  */
 class PaymentTest extends TestCase
 {

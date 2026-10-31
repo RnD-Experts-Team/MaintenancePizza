@@ -27,7 +27,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Payments (docs/MAINTENANCE-V2.md §4): one invoice we paid, to exactly one
+ * Payments (docs/MAINTENANCE.md §4): one invoice we paid, to exactly one
  * technician or one supplier, split into lines by where the money went.
  *
  * The server works out every line's amount (the dashboard only previews it):

@@ -14,7 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 /**
- * Suppliers (docs/MAINTENANCE-V2.md §1): the places we buy from.
+ * Suppliers (docs/MAINTENANCE.md §1): the places we buy from.
  */
 class SupplierController extends Controller
 {

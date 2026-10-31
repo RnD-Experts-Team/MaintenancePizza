@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Trips from the dashboard (docs/MAINTENANCE-V2.md §3 "Dashboard endpoints"):
+ * Trips from the dashboard (docs/MAINTENANCE.md §3 "Dashboard endpoints"):
  * the list, a trip by hand, its link, closing and reopening, its stops, and
  * its notes and files. Every change is written to trip_audits by TripService.
  */

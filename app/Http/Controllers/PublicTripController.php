@@ -27,7 +27,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
 /**
- * The technician's trip link (docs/MAINTENANCE-V2.md §3 "Public endpoints").
+ * The technician's trip link (docs/MAINTENANCE.md §3 "Public endpoints").
  *
  * No dashboard login: the `trip.token` middleware has already opened the
  * trip from the token (404 / 410 otherwise), stamped the link as used and

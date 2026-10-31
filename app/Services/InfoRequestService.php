@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * "We need a photo of the label" (docs/MAINTENANCE-V2.md §2): the office asks
+ * "We need a photo of the label" (docs/MAINTENANCE.md §2): the office asks
  * the store something during review, which makes it the store's turn, and the
  * answer -- typed by the store manager, or by the specialist after a phone
  * call (`via`) -- hands it back to the office.

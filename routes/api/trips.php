@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| Maintenance v2: trips (docs/MAINTENANCE-V2.md)
+| Maintenance: trips (docs/MAINTENANCE.md)
 |--------------------------------------------------------------------------
 | Required from routes/api.php INSIDE the auth.token.store group, at the top
 | level (no prefix): write full paths from the /api root.
@@ -43,11 +43,11 @@ Route::prefix('trips/{trip}')->scopeBindings()->group(function () {
     Route::patch('sessions/{session}/events/{event}', [TripSessionController::class, 'eventsUpdate'])->name('trips.sessions.events.update');
     Route::post('sessions/{session}/events/{event}/mistaken', [TripSessionController::class, 'eventsMistaken'])->name('trips.sessions.events.mistaken');
 
-    Route::post('notes', [TripController::class, 'notesStore'])->name('trips.notes');
-    Route::post('attachments', [TripController::class, 'attachmentsStore'])->name('trips.attachments');
+    Route::post('notes', [TripController::class, 'notesStore'])->middleware('throttle:api-upload')->name('trips.notes');
+    Route::post('attachments', [TripController::class, 'attachmentsStore'])->middleware('throttle:api-upload')->name('trips.attachments');
 });
 
-// Technician purchases (docs/MAINTENANCE-V2.md §4).
+// Technician purchases (docs/MAINTENANCE.md §4).
 Route::get('technician-purchases', [TechnicianPurchaseController::class, 'index'])->name('technician-purchases.index');
 Route::post('technician-purchases', [TechnicianPurchaseController::class, 'store'])->name('technician-purchases.store');
 Route::post('technician-purchases/{technicianPurchase}/mistaken', [TechnicianPurchaseController::class, 'mistaken'])->name('technician-purchases.mistaken');

@@ -13,7 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 
 /**
- * Technician purchases from the dashboard (docs/MAINTENANCE-V2.md §4
+ * Technician purchases from the dashboard (docs/MAINTENANCE.md §4
  * "Technician purchases (dashboard)"): the list (by technician, unpaid
  * only...), one typed in by the office, and marking one as a mistake. Paying
  * them back is a parts payment line (payments).

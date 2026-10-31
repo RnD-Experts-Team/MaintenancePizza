@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Stock counts (docs/MAINTENANCE-V2.md §5): a sheet for one storage location
+ * Stock counts (docs/MAINTENANCE.md §5): a sheet for one storage location
  * (or one place in it) listing every part with what the system expects;
  * somebody types what is really there; applying it writes ONE stock_count
  * movement for the differences and freezes the values.

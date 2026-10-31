@@ -20,7 +20,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 
 /**
- * The specialist's corrections to a trip's clocking (docs/MAINTENANCE-V2.md
+ * The specialist's corrections to a trip's clocking (docs/MAINTENANCE.md
  * §3): sessions typed in or fixed, events typed in, moved or marked as a
  * mistake -- each with a reason, each written to trip_audits -- and the list
  * of sessions nobody has paid yet. A paid session is frozen.

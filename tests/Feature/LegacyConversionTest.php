@@ -6,22 +6,22 @@ use App\Models\Part;
 use App\Models\StorageLocation;
 use App\Models\Store;
 use App\Models\Technician;
-use App\Services\MigrationV2\AttendanceToTrips;
-use App\Services\MigrationV2\DiagnosesAndAssignments;
-use App\Services\MigrationV2\PartUsagesToV2;
-use App\Services\MigrationV2\PayToPayments;
-use App\Services\MigrationV2\UniqueNames;
+use App\Services\LegacyConversion\AttendanceToTrips;
+use App\Services\LegacyConversion\DiagnosesAndAssignments;
+use App\Services\LegacyConversion\PartUsagesToPurchases;
+use App\Services\LegacyConversion\PayToPayments;
+use App\Services\LegacyConversion\UniqueNames;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
- * The v2 data conversion (migration 2026_11_01_000060), run over LEGACY rows
+ * The data conversion (migration 2026_11_01_000060), run over LEGACY rows
  * written straight into the old tables the way the old app left them. The
  * hard rule is that no money, time or note is lost or counted twice, and
  * that a second run changes nothing.
  */
-class MigrationV2ConversionTest extends TestCase
+class LegacyConversionTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -213,12 +213,12 @@ class MigrationV2ConversionTest extends TestCase
         app(AttendanceToTrips::class)->run();
         app(DiagnosesAndAssignments::class)->run();
         app(PayToPayments::class)->run();
-        app(PartUsagesToV2::class)->run();
+        app(PartUsagesToPurchases::class)->run();
     }
 
     private function newId(string $legacyTable, string $key, string $newTable): int
     {
-        $id = DB::table('migration_v2_map')
+        $id = DB::table('legacy_conversion_map')
             ->where('legacy_table', $legacyTable)->where('legacy_id', $this->id[$key])->where('new_table', $newTable)
             ->orderBy('id')->value('new_id');
         $this->assertNotNull($id, "{$legacyTable} {$key} was not mapped to {$newTable}");
@@ -290,7 +290,7 @@ class MigrationV2ConversionTest extends TestCase
         $this->assertSame(['hourly', 'other'], array_column($this->linesOf($p4), 'type'));
         $this->assertSame('10.00', $this->linesOf($p4)[1]['amount']);
         $this->assertSame('Adjusted to match the old pay sheet', $this->linesOf($p4)[1]['description']);
-        $this->assertTrue(DB::table('migration_v2_report')->where('step', 'payments')->where('level', 'warning')->where('message', 'like', '%daily pay payment #' . $this->id['p4'] . '%')->exists());
+        $this->assertTrue(DB::table('legacy_conversion_report')->where('step', 'payments')->where('level', 'warning')->where('message', 'like', '%daily pay payment #' . $this->id['p4'] . '%')->exists());
 
         // Every converted payment equals its old total.
         foreach (['p1', 'p2', 'p3', 'p4'] as $key) {
@@ -397,7 +397,7 @@ class MigrationV2ConversionTest extends TestCase
             $this->assertSame(1, DB::table('notes')->where('notable_type', 'App\\Models\\IssueInspection')->where('notable_id', $inspection->id)->where('body', 'Photo of the belt in the files')->count());
         }
         $this->assertSame(0, DB::table('notes')->where('notable_type', 'App\\Models\\Diagnosis')->count());
-        $this->assertTrue(DB::table('migration_v2_report')->where('step', 'inspections')->where('message', 'like', '%#' . $this->id['d2'] . ' %')->exists());
+        $this->assertTrue(DB::table('legacy_conversion_report')->where('step', 'inspections')->where('message', 'like', '%#' . $this->id['d2'] . ' %')->exists());
 
         // AS1 covered two technicians: one booking each, same issue, same history.
         $copies = DB::table('assignment_ticket_issue')->where('ticket_issue_id', $this->id['ti2'])->orderBy('assignment_id')->pluck('assignment_id')->map(fn ($i) => (int) $i)->all();
@@ -414,7 +414,7 @@ class MigrationV2ConversionTest extends TestCase
 
         $this->assertSame((int) $this->id['tom'], (int) DB::table('assignments')->where('id', $this->id['as2'])->value('technician_id'));
         $this->assertNull(DB::table('assignments')->where('id', $this->id['as3'])->value('technician_id'));
-        $this->assertTrue(DB::table('migration_v2_report')->where('step', 'bookings')->where('level', 'warning')->exists());
+        $this->assertTrue(DB::table('legacy_conversion_report')->where('step', 'bookings')->where('level', 'warning')->exists());
     }
 
     public function test_part_usages_split_by_what_they_really_were(): void
@@ -450,8 +450,8 @@ class MigrationV2ConversionTest extends TestCase
         $this->assertSame('12.50', number_format((float) $unpaid->total_cost, 2));
 
         // Nobody to owe it to: left out, reported as an error.
-        $this->assertFalse(DB::table('migration_v2_map')->where('legacy_table', 'part_usages')->where('legacy_id', $this->id['pu_unknown'])->where('new_table', 'technician_purchases')->exists());
-        $this->assertSame(1, DB::table('migration_v2_report')->where('step', 'parts')->where('level', 'error')->count());
+        $this->assertFalse(DB::table('legacy_conversion_map')->where('legacy_table', 'part_usages')->where('legacy_id', $this->id['pu_unknown'])->where('new_table', 'technician_purchases')->exists());
+        $this->assertSame(1, DB::table('legacy_conversion_report')->where('step', 'parts')->where('level', 'error')->count());
         $this->assertSame(2, DB::table('technician_purchases')->count());
     }
 
@@ -463,7 +463,7 @@ class MigrationV2ConversionTest extends TestCase
         $tables = [
             'trips', 'trip_sessions', 'trip_events', 'trip_stops', 'trip_stop_issues', 'issue_inspections', 'assignments',
             'assignment_ticket_issue', 'assignment_delays', 'payments', 'payment_lines', 'payment_line_ticket_issue',
-            'payment_line_trip_session', 'technician_purchases', 'suppliers', 'notes', 'attachments', 'migration_v2_map', 'migration_v2_report',
+            'payment_line_trip_session', 'technician_purchases', 'suppliers', 'notes', 'attachments', 'legacy_conversion_map', 'legacy_conversion_report',
         ];
         $counts = fn () => collect($tables)->mapWithKeys(fn ($t) => [$t => DB::table($t)->count()])->all();
         $before = $counts();
@@ -497,8 +497,8 @@ class MigrationV2ConversionTest extends TestCase
         $this->assertSame('drain cleaner', DB::table('parts')->where('id', $spaced)->value('name_key'));
         $this->assertSame(DB::table('parts')->count(), DB::table('parts')->distinct()->count('name_key'));
 
-        $this->assertSame(2, DB::table('migration_v2_report')->where('step', 'unique_names')->where('level', 'warning')->count());
+        $this->assertSame(2, DB::table('legacy_conversion_report')->where('step', 'unique_names')->where('level', 'warning')->count());
         // Only tidied (spaces): info, not a warning.
-        $this->assertSame(1, DB::table('migration_v2_report')->where('step', 'unique_names')->where('level', 'info')->count());
+        $this->assertSame(1, DB::table('legacy_conversion_report')->where('step', 'unique_names')->where('level', 'info')->count());
     }
 }

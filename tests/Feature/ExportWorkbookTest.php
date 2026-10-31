@@ -33,7 +33,7 @@ class ExportWorkbookTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const V2_SHEETS = [
+    private const NEW_SHEETS = [
         'Payments', 'Payment Lines', 'Trips', 'Trip Sessions', 'Technician Purchases', 'Suppliers',
         'Inspections', 'Approvals', 'Stock Counts',
     ];
@@ -64,7 +64,7 @@ class ExportWorkbookTest extends TestCase
         $assignment->delays()->create(['old_date' => '2026-09-10', 'new_date' => '2026-09-11', 'reason' => 'Rain']);
         Warranty::factory()->create()->ticketIssues()->attach($issue->id);
 
-        // v2: an inspection and its approval, a trip with a stop and a paid
+        // An inspection and its approval, a trip with a stop and a paid
         // session, a payment to the technician and one to a supplier, a
         // technician purchase, and a stock count.
         $inspection = IssueInspection::query()->create([
@@ -115,7 +115,7 @@ class ExportWorkbookTest extends TestCase
         $sheets = (new TicketsWorkbookExport)->sheets();
         $titles = array_map(fn ($s) => $s->title(), $sheets);
 
-        foreach (self::V2_SHEETS as $title) {
+        foreach (self::NEW_SHEETS as $title) {
             $this->assertContains($title, $titles);
         }
         $this->assertSame(count($titles), count(array_unique($titles)), 'Two sheets share a title.');
@@ -124,7 +124,7 @@ class ExportWorkbookTest extends TestCase
             $rows = $sheet->collection();
             $headings = $sheet->headings();
 
-            if (in_array($sheet->title(), self::V2_SHEETS, true)) {
+            if (in_array($sheet->title(), self::NEW_SHEETS, true)) {
                 $this->assertNotEmpty($rows, $sheet->title() . ' exported no rows.');
             }
 

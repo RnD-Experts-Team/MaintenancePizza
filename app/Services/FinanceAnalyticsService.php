@@ -11,7 +11,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
- * GET /api/maintenance-analytics/finances (docs/MAINTENANCE-V2.md §6):
+ * GET /api/maintenance-analytics/finances (docs/MAINTENANCE.md §6):
  * where the money went in a range of days.
  *
  * Everything is summed from PAYMENT LINES, never from payment totals: a

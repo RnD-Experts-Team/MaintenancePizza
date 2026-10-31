@@ -25,7 +25,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
- * The full read of an issue (docs/MAINTENANCE-V2.md §2 "Read"): money from
+ * The full read of an issue (docs/MAINTENANCE.md §2 "Read"): money from
  * payment lines, purchases and stock; visits from trips; one merged timeline;
  * and no query per issue on a ticket's issue list.
  */

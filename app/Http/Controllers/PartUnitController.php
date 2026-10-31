@@ -11,7 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 /**
- * The individual pieces of serial-tracked parts (docs/MAINTENANCE-V2.md §1).
+ * The individual pieces of serial-tracked parts (docs/MAINTENANCE.md §1).
  * Units are created and moved by stock movements and parts payment lines;
  * here they are only read and corrected.
  */

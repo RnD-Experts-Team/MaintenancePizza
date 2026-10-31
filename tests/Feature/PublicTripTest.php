@@ -22,7 +22,7 @@ use Tests\Concerns\FakesAuthServer;
 use Tests\TestCase;
 
 /**
- * The technician's trip link (docs/MAINTENANCE-V2.md §3 "Public endpoints"),
+ * The technician's trip link (docs/MAINTENANCE.md §3 "Public endpoints"),
  * over HTTP and without any dashboard login: what opens it, what kills it,
  * the clock and its events, and doing the jobs on a stop.
  */

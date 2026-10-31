@@ -18,7 +18,7 @@ use Tests\Concerns\FakesAuthServer;
 use Tests\TestCase;
 
 /**
- * Trips from the dashboard (docs/MAINTENANCE-V2.md §3), over HTTP: a trip by
+ * Trips from the dashboard (docs/MAINTENANCE.md §3), over HTTP: a trip by
  * hand and its one-time link, the specialist's corrections (each audited),
  * durations as presented, and the sessions nobody has paid yet.
  */

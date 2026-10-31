@@ -10,7 +10,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 /**
- * POST payments and POST payments/{payment}/edit (docs/MAINTENANCE-V2.md §4).
+ * POST payments and POST payments/{payment}/edit (docs/MAINTENANCE.md §4).
  *
  * JSON, or multipart (so invoice files can ride along) with `lines` either in
  * bracket notation or as ONE JSON string. The shape is checked here; the

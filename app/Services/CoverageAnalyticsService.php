@@ -8,7 +8,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * GET /api/maintenance-analytics/coverage (docs/MAINTENANCE-V2.md §6):
+ * GET /api/maintenance-analytics/coverage (docs/MAINTENANCE.md §6):
  * for every store × issue, how many technicians we could call.
  *
  * A technician covers a CELL when he covers the store (store_technician) and

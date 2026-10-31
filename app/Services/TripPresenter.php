@@ -14,7 +14,7 @@ use App\Models\TripStopIssue;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * How a trip reads (docs/MAINTENANCE-V2.md §3 "Presented trip").
+ * How a trip reads (docs/MAINTENANCE.md §3 "Presented trip").
  *
  * Two audiences:
  *  - the dashboard (MOS): everything, private notes included, and the audit

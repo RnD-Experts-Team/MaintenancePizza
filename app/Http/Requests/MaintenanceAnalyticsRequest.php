@@ -22,7 +22,7 @@ use Illuminate\Validation\Validator;
  *   and the server compares timestamps -- no whereDate(), which would cut the
  *   day at UTC midnight instead.
  *
- * finances (docs/MAINTENANCE-V2.md §6)
+ * finances (docs/MAINTENANCE.md §6)
  *   from=2026-10-01&to=2026-10-31       required DATES, both included (a
  *                                       payment is dated, not timed), at
  *                                       most 400 days

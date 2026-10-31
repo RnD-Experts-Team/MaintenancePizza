@@ -1,18 +1,18 @@
 <?php
 
-namespace App\Services\MigrationV2;
+namespace App\Services\LegacyConversion;
 
 use Illuminate\Support\Facades\DB;
 
 /**
  * Diagnoses become inspections; bookings get a technician.
  *
- * A diagnosis was "what we found". In v2 that is an inspection's findings:
+ * A diagnosis was "what we found". That is now an inspection's findings:
  * one done inspection per issue the diagnosis covered, by the issue's
  * technician when it had exactly one.
  *
  * An old booking (assignment) had no technician of its own: technicians hung
- * off the issues. A v2 booking is one technician's: a booking whose issues
+ * off the issues. A booking is one technician's: a booking whose issues
  * had one technician gets that technician; one with several is copied, one
  * per technician, so each still sees it on their schedule.
  */

@@ -178,7 +178,7 @@ class StockService
 
     /**
      * Move the serial-tracked pieces a movement's lines name
-     * (docs/MAINTENANCE-V2.md §5), after its quantities are written:
+     * (docs/MAINTENANCE.md §5), after its quantities are written:
      *
      *   out lines   the units must be in_stock at that line's location;
      *               used → installed on the movement's ticket issue,

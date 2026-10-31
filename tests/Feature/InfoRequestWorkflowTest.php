@@ -9,7 +9,7 @@ use App\Services\MaintenanceEvents\IssueEventPublisher;
 use Illuminate\Http\UploadedFile;
 
 /**
- * Questions to the store and their answers (docs/MAINTENANCE-V2.md §2): asking
+ * Questions to the store and their answers (docs/MAINTENANCE.md §2): asking
  * makes it the store's turn, the answer (from the store, or the specialist
  * after a phone call) hands it back to review.
  */

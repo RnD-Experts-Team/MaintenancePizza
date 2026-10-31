@@ -14,7 +14,7 @@ use Tests\Concerns\FakesAuthServer;
 use Tests\TestCase;
 
 /**
- * GET technicians filters and the picker ranking (docs/MAINTENANCE-V2.md §1):
+ * GET technicians filters and the picker ranking (docs/MAINTENANCE.md §1):
  * covers store → covers issue → emergency (urgent=1) → call first on that
  * issue → rating desc → name.
  */

@@ -21,7 +21,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
- * The status machine of one ticket issue (docs/MAINTENANCE-V2.md §2): which
+ * The status machine of one ticket issue (docs/MAINTENANCE.md §2): which
  * workflow action may run in which status, why not in plain words, what the
  * progress strip shows (stepOf), what can be done next (next), and the close
  * checklist.

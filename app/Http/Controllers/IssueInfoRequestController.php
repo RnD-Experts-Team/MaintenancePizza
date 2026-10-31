@@ -12,7 +12,7 @@ use App\Services\InfoRequestService;
 use App\Services\TicketIssueService;
 
 /**
- * Questions to the store and their answers (docs/MAINTENANCE-V2.md §2).
+ * Questions to the store and their answers (docs/MAINTENANCE.md §2).
  */
 class IssueInfoRequestController extends Controller
 {

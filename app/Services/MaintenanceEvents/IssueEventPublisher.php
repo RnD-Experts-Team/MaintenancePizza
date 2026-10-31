@@ -10,7 +10,7 @@ use App\Models\Ticket;
 use App\Models\TicketIssue;
 
 /**
- * The domain events of the issue workflow (docs/MAINTENANCE-V2.md §2), written
+ * The domain events of the issue workflow (docs/MAINTENANCE.md §2), written
  * to the outbox in the same transaction as the change they describe and
  * published after commit (PublishOutboxEventJob; PublishPendingOutboxCommand
  * sweeps anything a lost job left behind).

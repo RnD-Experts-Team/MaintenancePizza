@@ -7,18 +7,18 @@ use App\Models\Part;
 use App\Models\StorageLocation;
 use App\Models\Store;
 use App\Models\Technician;
-use App\Services\MigrationV2\LegacyMap;
-use App\Services\MigrationV2\PayToPayments;
+use App\Services\LegacyConversion\LegacyMap;
+use App\Services\LegacyConversion\PayToPayments;
 use App\Services\StockService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
- * `php artisan maintenance:v2-report`: counts, the conversion report, and two
+ * `php artisan maintenance:conversion-report`: counts, the conversion report, and two
  * checks that fail the command (exit 1) when the books do not add up.
  */
-class MaintenanceV2ReportTest extends TestCase
+class LegacyConversionReportTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -49,8 +49,8 @@ class MaintenanceV2ReportTest extends TestCase
         LegacyMap::report('parts', 'Part usage #9 did not say which technician', [], 'error');
         LegacyMap::report('statuses', '3 issue(s) moved', []);
 
-        $this->artisan('maintenance:v2-report')
-            ->expectsOutputToContain('Rows per v2 table')
+        $this->artisan('maintenance:conversion-report')
+            ->expectsOutputToContain('Rows per new table')
             ->expectsTable(['Step', 'Level', 'Entries'], [['parts', 'error', 1], ['statuses', 'info', 1], ['trips', 'warning', 1]])
             ->expectsOutputToContain('Part usage #9 did not say which technician')
             ->expectsOutputToContain('Attendance entry #7 had no clock-in at all')
@@ -66,7 +66,7 @@ class MaintenanceV2ReportTest extends TestCase
         $payment = $this->convertedSheet();
         DB::table('payments')->where('id', $payment)->update(['total' => 41]);
 
-        $this->artisan('maintenance:v2-report')
+        $this->artisan('maintenance:conversion-report')
             ->expectsOutputToContain('The converted payments total 41.00; the old sheets said 40.00.')
             ->assertExitCode(1);
     }
@@ -74,9 +74,9 @@ class MaintenanceV2ReportTest extends TestCase
     public function test_an_unconverted_old_payment_fails(): void
     {
         $this->convertedSheet();
-        DB::table('migration_v2_map')->where('legacy_table', 'daily_pay_payments')->delete();
+        DB::table('legacy_conversion_map')->where('legacy_table', 'daily_pay_payments')->delete();
 
-        $this->artisan('maintenance:v2-report')
+        $this->artisan('maintenance:conversion-report')
             ->expectsOutputToContain('1 old Daily Pay payment(s) were not converted.')
             ->assertExitCode(1);
     }
@@ -89,11 +89,11 @@ class MaintenanceV2ReportTest extends TestCase
             'part_id' => $part->id, 'storage_location_id' => $shelf->id, 'quantity' => '5', 'direction' => 1, 'unit_cost' => '2',
         ]]);
 
-        $this->artisan('maintenance:v2-report')->assertExitCode(0);
+        $this->artisan('maintenance:conversion-report')->assertExitCode(0);
 
         DB::table('stock_balances')->update(['quantity' => 4]);
 
-        $this->artisan('maintenance:v2-report')
+        $this->artisan('maintenance:conversion-report')
             ->expectsOutputToContain('1 stock balance(s) differ from the ledger.')
             ->expectsTable(['Part', 'Location', 'Balance', 'Ledger'], [[(string) $part->id, (string) $shelf->id, '4.00', '5.00']])
             ->assertExitCode(1);

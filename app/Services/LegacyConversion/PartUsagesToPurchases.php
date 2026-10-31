@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services\MigrationV2;
+namespace App\Services\LegacyConversion;
 
 use Illuminate\Support\Facades\DB;
 
@@ -12,11 +12,11 @@ use Illuminate\Support\Facades\DB;
  * - Bought by a technician with his own money: a technician purchase. If an
  *   old pay sheet paid it back, PayToPayments already recorded it (and linked
  *   the parts line that paid); otherwise it waits as unpaid.
- * - Bought by us: in v2 everything we pay is a payment, so it becomes a Parts
+ * - Bought by us: everything we pay is now a payment, so it becomes a Parts
  *   payment to the supplier "Unknown (migrated)", dated the day it was
  *   recorded, for the store of its ticket.
  */
-final class PartUsagesToV2 extends Converter
+final class PartUsagesToPurchases extends Converter
 {
     public function run(): void
     {
@@ -109,7 +109,7 @@ final class PartUsagesToV2 extends Converter
             'type' => 'parts',
             'store_id' => $storeId,
             'other_store' => $storeId === null ? ($other ?? 'Unknown store') : null,
-            'description' => 'Bought for the job (recorded before v2)',
+            'description' => 'Bought for the job (recorded before payments)',
             'amount' => $this->money($usage->cost),
             'part_id' => $usage->part_id,
             'quantity' => $usage->quantity,

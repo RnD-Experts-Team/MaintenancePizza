@@ -27,7 +27,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 /**
- * The full read of one ticket issue (docs/MAINTENANCE-V2.md §2 "Read"): the
+ * The full read of one ticket issue (docs/MAINTENANCE.md §2 "Read"): the
  * core fields, everyone and everything on it -- technicians, questions to the
  * store, inspections, approvals, bookings, visits, money, stock -- the
  * workflow block (step, what can be done next, the close checklist) and one

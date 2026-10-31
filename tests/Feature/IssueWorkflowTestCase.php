@@ -16,7 +16,7 @@ use Tests\Concerns\FakesAuthServer;
 use Tests\TestCase;
 
 /**
- * Shared ground for the issue workflow tests (docs/MAINTENANCE-V2.md §2): a
+ * Shared ground for the issue workflow tests (docs/MAINTENANCE.md §2): a
  * store, a ticket with one issue, a technician, and helpers to drive the
  * workflow endpoints over HTTP through the real auth middleware.
  */

@@ -8,10 +8,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * What the v2 conversion did, and whether it kept the books straight.
+ * What the conversion did, and whether it kept the books straight.
  *
- *   1. how many rows each v2 table holds;
- *   2. the conversion report (migration_v2_report) by step and level, with
+ *   1. how many rows each new table holds;
+ *   2. the conversion report (legacy_conversion_report) by step and level, with
  *      every warning and error spelled out;
  *   3. CHECK money: the converted payments of the old Daily Pay sheets add up
  *      to exactly what the old sheets said (and every old payment was
@@ -21,18 +21,18 @@ use Illuminate\Support\Facades\Schema;
  *
  * Exit code 1 when a check fails, so a deploy script can stop on it.
  */
-class MaintenanceV2Report extends Command
+class LegacyConversionReport extends Command
 {
-    protected $signature = 'maintenance:v2-report {--limit=50 : How many warnings/errors (and mismatches) to list}';
+    protected $signature = 'maintenance:conversion-report {--limit=50 : How many warnings/errors (and mismatches) to list}';
 
-    protected $description = 'Summarise the maintenance v2 conversion and check money and stock still add up';
+    protected $description = 'Summarise the maintenance conversion and check money and stock still add up';
 
     private const TABLES = [
         'suppliers', 'trips', 'trip_sessions', 'trip_events', 'trip_stops', 'trip_stop_issues', 'trip_audits',
         'issue_info_requests', 'issue_inspections', 'issue_approvals',
         'payments', 'payment_lines', 'payment_line_ticket_issue', 'payment_line_trip_session', 'payment_revisions',
         'technician_purchases', 'stock_counts', 'stock_count_lines', 'part_units', 'maintenance_settings',
-        'migration_v2_map',
+        'legacy_conversion_map',
     ];
 
     public function handle(StockService $stock): int
@@ -59,7 +59,7 @@ class MaintenanceV2Report extends Command
 
     private function counts(): void
     {
-        $this->line('<comment>Rows per v2 table</comment>');
+        $this->line('<comment>Rows per new table</comment>');
         $this->table(['Table', 'Rows'], array_map(
             fn (string $t) => [$t, Schema::hasTable($t) ? DB::table($t)->count() : 'missing'],
             self::TABLES,
@@ -70,7 +70,7 @@ class MaintenanceV2Report extends Command
     {
         $this->line('<comment>Conversion report</comment>');
 
-        $groups = DB::table('migration_v2_report')
+        $groups = DB::table('legacy_conversion_report')
             ->groupBy('step', 'level')
             ->orderBy('step')->orderBy('level')
             ->selectRaw('step, level, COUNT(*) as n')
@@ -84,7 +84,7 @@ class MaintenanceV2Report extends Command
 
         $this->table(['Step', 'Level', 'Entries'], $groups->map(fn ($g) => [$g->step, $g->level, (int) $g->n])->all());
 
-        $problems = DB::table('migration_v2_report')->whereIn('level', ['warning', 'error']);
+        $problems = DB::table('legacy_conversion_report')->whereIn('level', ['warning', 'error']);
         $total = (clone $problems)->count();
 
         if ($total === 0) {
@@ -123,7 +123,7 @@ class MaintenanceV2Report extends Command
         }
 
         $mapped = fn () => DB::table('daily_pay_payments as d')
-            ->join('migration_v2_map as m', function ($j) {
+            ->join('legacy_conversion_map as m', function ($j) {
                 $j->on('m.legacy_id', '=', 'd.id')
                     ->where('m.legacy_table', 'daily_pay_payments')
                     ->where('m.new_table', 'payments');
@@ -131,7 +131,7 @@ class MaintenanceV2Report extends Command
             ->join('payments as p', 'p.id', '=', 'm.new_id');
 
         $unconverted = DB::table('daily_pay_payments as d')
-            ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('migration_v2_map as m')
+            ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('legacy_conversion_map as m')
                 ->whereColumn('m.legacy_id', 'd.id')
                 ->where('m.legacy_table', 'daily_pay_payments')
                 ->where('m.new_table', 'payments'))

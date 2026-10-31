@@ -12,7 +12,7 @@ use App\Services\TicketIssueService;
 
 /**
  * Asking for approval of a quote and recording the decision
- * (docs/MAINTENANCE-V2.md §2).
+ * (docs/MAINTENANCE.md §2).
  */
 class IssueApprovalController extends Controller
 {

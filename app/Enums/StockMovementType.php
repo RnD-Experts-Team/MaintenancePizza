@@ -4,8 +4,8 @@ namespace App\Enums;
 
 /**
  * Why stock moved, in the words the people at the shelf use
- * (docs/MAINTENANCE-V2.md §5). The stored values were renamed from the old
- * ledger jargon by the inventory_v2 migration; quantities and directions
+ * (docs/MAINTENANCE.md §5). The stored values were renamed from the old
+ * ledger jargon by the stock_counts_and_serials migration; quantities and directions
  * were not touched.
  *
  * Where each comes from:

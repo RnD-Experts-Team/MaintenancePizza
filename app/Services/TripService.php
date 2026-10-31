@@ -36,7 +36,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
- * The core of trips (docs/MAINTENANCE-V2.md §3): the link, putting an issue on
+ * The core of trips (docs/MAINTENANCE.md §3): the link, putting an issue on
  * a technician's trip, and what a session's time adds up to. Everything other
  * services call lives here; the trip endpoints build on it.
  *
@@ -398,7 +398,7 @@ class TripService
     }
 
     // ======================================================================
-    //  The trip endpoints (docs/MAINTENANCE-V2.md §3). Everything below is
+    //  The trip endpoints (docs/MAINTENANCE.md §3). Everything below is
     //  what the dashboard (MOS) and the technician's link do to a trip.
     //  Refusals are 422s keyed by the field at fault (or `status` for a step
     //  that does not fit), worded for the person reading them.

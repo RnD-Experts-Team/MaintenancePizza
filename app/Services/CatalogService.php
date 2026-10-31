@@ -113,7 +113,7 @@ class CatalogService
     private const TECHNICIAN_LOADS = ['category', 'coverageStores', 'abilities', ...self::CATALOG_LOADS];
 
     /**
-     * The technician list and the pickers (docs/MAINTENANCE-V2.md §1).
+     * The technician list and the pickers (docs/MAINTENANCE.md §1).
      *
      * Filters: `search` (name, phone, contact person), `category_id`,
      * `emergency=1`, `with_trashed=1` (or the older `trashed=with|only`).

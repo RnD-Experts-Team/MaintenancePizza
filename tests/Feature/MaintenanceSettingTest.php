@@ -13,7 +13,7 @@ use Tests\Concerns\FakesAuthServer;
 use Tests\TestCase;
 
 /**
- * GET / PUT maintenance-settings (docs/MAINTENANCE-V2.md §2 "Settings").
+ * GET / PUT maintenance-settings (docs/MAINTENANCE.md §2 "Settings").
  */
 class MaintenanceSettingTest extends TestCase
 {

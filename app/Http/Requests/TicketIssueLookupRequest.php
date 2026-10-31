@@ -7,7 +7,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 /**
- * `GET ticket-issues` (docs/MAINTENANCE-V2.md §2 "Issue lookup"): the filters
+ * `GET ticket-issues` (docs/MAINTENANCE.md §2 "Issue lookup"): the filters
  * of the issue pickers.
  */
 class TicketIssueLookupRequest extends FormRequest

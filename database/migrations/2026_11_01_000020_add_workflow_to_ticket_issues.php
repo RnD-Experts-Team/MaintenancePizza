@@ -1,13 +1,13 @@
 <?php
 
-use App\Services\MigrationV2\LegacyMap;
+use App\Services\LegacyConversion\LegacyMap;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * The issue workflow of v2, after the owner's flowchart:
+ * The issue workflow, after the owner's flowchart:
  *
  *   new → in_review → (waiting_on_store) → (inspection) → (waiting_approval)
  *       → scheduled → work_done → closed          (or cancelled at any point)

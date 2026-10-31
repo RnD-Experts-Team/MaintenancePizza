@@ -1,13 +1,13 @@
 <?php
 
-use App\Services\MigrationV2\LegacyMap;
+use App\Services\LegacyConversion\LegacyMap;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Storage, v2: the words people use, stock counts, and serial numbers.
+ * Storage: the words people use, stock counts, and serial numbers.
  *
  * Movement types are renamed to the business's vocabulary:
  *   purchase → bought        draw → used           return → returned

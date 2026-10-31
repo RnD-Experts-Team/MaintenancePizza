@@ -12,7 +12,7 @@ use App\Models\TripSession;
 
 /**
  * The shapes payments, their lines, unpaid sessions and technician purchases
- * take on the wire (docs/MAINTENANCE-V2.md §4). Pure presentation: every
+ * take on the wire (docs/MAINTENANCE.md §4). Pure presentation: every
  * relation it reads is loaded by the caller through the *_LOADS constants.
  */
 class PaymentPresenter
@@ -240,7 +240,7 @@ class PaymentPresenter
     }
 
     /**
-     * A technician purchase (docs/MAINTENANCE-V2.md §4, "Presented").
+     * A technician purchase (docs/MAINTENANCE.md §4, "Presented").
      *
      * @return array<string, mixed>
      */

@@ -5,7 +5,7 @@ namespace App\Http\Requests;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * `GET issue-inspections` (docs/MAINTENANCE-V2.md §4 "Inspection lookup"):
+ * `GET issue-inspections` (docs/MAINTENANCE.md §4 "Inspection lookup"):
  * the filters of the payment dialog's Inspection line.
  */
 class IssueInspectionLookupRequest extends FormRequest

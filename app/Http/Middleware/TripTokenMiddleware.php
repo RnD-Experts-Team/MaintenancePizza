@@ -11,7 +11,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * `trip.token`: opens a trip from the token in a technician's link
- * (`public/trips/{token}/...`, docs/MAINTENANCE-V2.md §3).
+ * (`public/trips/{token}/...`, docs/MAINTENANCE.md §3).
  *
  *   unknown token                         404
  *   trip closed / mistaken / link idle    410 {message}

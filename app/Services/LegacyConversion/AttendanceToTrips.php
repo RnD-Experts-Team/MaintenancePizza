@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services\MigrationV2;
+namespace App\Services\LegacyConversion;
 
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;

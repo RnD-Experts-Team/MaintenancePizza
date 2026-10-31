@@ -15,7 +15,7 @@ use Tests\TestCase;
 
 /**
  * POST stock-movements with serial-tracked parts and a ticket issue
- * (docs/MAINTENANCE-V2.md §5), and the part units it moves.
+ * (docs/MAINTENANCE.md §5), and the part units it moves.
  */
 class StockSerialsTest extends TestCase
 {

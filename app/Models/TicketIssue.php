@@ -15,8 +15,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * One problem on a ticket, and the unit the v2 workflow moves
- * (docs/MAINTENANCE-V2.md §2): new → in_review → … → closed.
+ * One problem on a ticket, and the unit the workflow moves
+ * (docs/MAINTENANCE.md §2): new → in_review → … → closed.
  *
  * The workflow columns are what each step writes down: `impact` and the
  * contact at submission; `target_completion_at` / `next_action` at review;

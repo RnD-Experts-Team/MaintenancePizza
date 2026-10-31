@@ -60,7 +60,7 @@ class TicketUpdateNotificationsTest extends TestCase
     }
 
     /**
-     * Move the issue as a workflow step would (the v2 actions all end in
+     * Move the issue as a workflow step would (the workflow actions all end in
      * TicketStatusService::changeIssueStatus).
      */
     private function setStatus(string $status): void

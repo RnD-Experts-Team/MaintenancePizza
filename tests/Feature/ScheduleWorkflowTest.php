@@ -12,7 +12,7 @@ use App\Models\TripStop;
 use App\Models\TripStopIssue;
 
 /**
- * Scheduling the work and moving a booking (docs/MAINTENANCE-V2.md §2).
+ * Scheduling the work and moving a booking (docs/MAINTENANCE.md §2).
  */
 class ScheduleWorkflowTest extends IssueWorkflowTestCase
 {

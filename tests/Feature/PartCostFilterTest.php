@@ -14,7 +14,7 @@ use Illuminate\Http\Request;
 use Tests\TestCase;
 
 /**
- * The two part-cost ticket filters in TicketService::applyFilters(), on v2
+ * The two part-cost ticket filters in TicketService::applyFilters(), on
  * payments: what counts is the parts payment lines linked to the issues, on
  * payments not marked mistaken. One line can be linked to MANY issues, so a
  * naive SUM would double-count it.

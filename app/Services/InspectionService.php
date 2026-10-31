@@ -15,7 +15,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Inspections (docs/MAINTENANCE-V2.md §2): booking a technician to go and
+ * Inspections (docs/MAINTENANCE.md §2): booking a technician to go and
  * look, and recording what he found. An issue can have several (a second
  * opinion); each is booked like work -- a kind=inspection booking, the issue
  * on the technician's trip for that day -- so the technician sees it on the

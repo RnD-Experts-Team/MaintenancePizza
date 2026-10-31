@@ -17,7 +17,7 @@ use Tests\Concerns\FakesAuthServer;
 use Tests\TestCase;
 
 /**
- * The lookups the dashboard's pickers call (docs/MAINTENANCE-V2.md §1 Parts,
+ * The lookups the dashboard's pickers call (docs/MAINTENANCE.md §1 Parts,
  * §2 "Issue lookup", §4 "Inspection lookup"), over HTTP.
  */
 class PickerLookupTest extends TestCase

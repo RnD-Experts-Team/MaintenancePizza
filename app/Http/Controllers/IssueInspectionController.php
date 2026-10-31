@@ -13,7 +13,7 @@ use App\Services\InspectionService;
 use App\Services\TicketIssueService;
 
 /**
- * Booking an inspection and recording what it found (docs/MAINTENANCE-V2.md §2),
+ * Booking an inspection and recording what it found (docs/MAINTENANCE.md §2),
  * and the global inspection lookup the payment form picks from (§4).
  */
 class IssueInspectionController extends Controller

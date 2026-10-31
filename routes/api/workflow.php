@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| Maintenance v2: the issue workflow (docs/MAINTENANCE-V2.md §2)
+| Maintenance: the issue workflow (docs/MAINTENANCE.md §2)
 |--------------------------------------------------------------------------
 | Required from routes/api.php inside auth.token.store, within
 |   Route::prefix('stores/{store}')->scopeBindings()

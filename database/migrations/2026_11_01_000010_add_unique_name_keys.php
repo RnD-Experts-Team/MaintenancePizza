@@ -1,6 +1,6 @@
 <?php
 
-use App\Services\MigrationV2\UniqueNames;
+use App\Services\LegacyConversion\UniqueNames;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Schema;
  * its name -- and every rename is written to the conversion report so somebody
  * can merge or rename them properly. Soft-deleted rows count: restoring one
  * must not be able to create a duplicate. The renaming itself lives in
- * App\Services\MigrationV2\UniqueNames, so it can be tested on its own.
+ * App\Services\LegacyConversion\UniqueNames, so it can be tested on its own.
  */
 return new class extends Migration {
     private const TABLES = ['technicians', 'categories', 'parts'];

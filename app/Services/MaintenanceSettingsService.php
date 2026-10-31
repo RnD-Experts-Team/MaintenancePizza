@@ -7,7 +7,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 /**
- * The numbers the owner may change without a release (docs/MAINTENANCE-V2.md
+ * The numbers the owner may change without a release (docs/MAINTENANCE.md
  * §2 "Settings"): the approval thresholds and how long an idle trip link
  * lives. An empty maintenance_settings table is a valid, fully working
  * configuration -- every read falls back to the contract's defaults.

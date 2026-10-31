@@ -12,7 +12,7 @@ use Illuminate\Http\Response;
 use Illuminate\Validation\Rule;
 
 /**
- * Stock counts (docs/MAINTENANCE-V2.md §5). All logic in StockCountService.
+ * Stock counts (docs/MAINTENANCE.md §5). All logic in StockCountService.
  */
 class StockCountController extends Controller
 {

@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| Maintenance v2: catalog (docs/MAINTENANCE-V2.md)
+| Maintenance: catalog (docs/MAINTENANCE.md)
 |--------------------------------------------------------------------------
 | Required from routes/api.php INSIDE the auth.token.store group, at the top
 | level (no prefix): write full paths from the /api root.
@@ -20,8 +20,8 @@ Route::get('suppliers/{supplier}', [SupplierController::class, 'show'])->withTra
 Route::patch('suppliers/{supplier}', [SupplierController::class, 'update'])->name('suppliers.update');
 Route::delete('suppliers/{supplier}', [SupplierController::class, 'destroy'])->name('suppliers.destroy');
 Route::post('suppliers/{supplier}/restore', [SupplierController::class, 'restore'])->withTrashed()->name('suppliers.restore');
-Route::post('suppliers/{supplier}/notes', [SupplierController::class, 'notesStore'])->name('suppliers.notes');
-Route::post('suppliers/{supplier}/attachments', [SupplierController::class, 'attachmentsStore'])->name('suppliers.attachments');
+Route::post('suppliers/{supplier}/notes', [SupplierController::class, 'notesStore'])->middleware('throttle:api-upload')->name('suppliers.notes');
+Route::post('suppliers/{supplier}/attachments', [SupplierController::class, 'attachmentsStore'])->middleware('throttle:api-upload')->name('suppliers.attachments');
 
 // The pieces of serial-tracked parts.
 Route::get('parts/{part}/units', [PartUnitController::class, 'index'])->withTrashed()->name('parts.units.index');

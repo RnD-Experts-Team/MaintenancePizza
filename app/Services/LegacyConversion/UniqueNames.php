@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services\MigrationV2;
+namespace App\Services\LegacyConversion;
 
 use App\Support\NameKey;
 use Illuminate\Support\Facades\DB;

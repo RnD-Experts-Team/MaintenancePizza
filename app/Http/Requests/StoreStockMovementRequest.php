@@ -29,7 +29,7 @@ class StoreStockMovementRequest extends FormRequest
             // marking a movement mistaken.
             'type' => ['required', Rule::in(array_map(fn (StockMovementType $t) => $t->value, StockMovementType::manual()))],
             'storage_location_id' => ['nullable', 'integer', 'exists:storage_locations,id'],
-            // v1 history fields; v2 records who paid on the payment instead.
+            // Old history fields; who paid is recorded on the payment instead.
             'paid_by' => ['nullable', Rule::in(['us', 'technician'])],
             'paid_by_technician_id' => ['nullable', 'required_if:paid_by,technician', 'integer', 'exists:technicians,id'],
             // The ticket issue the parts were used on -- only on a `used` movement.

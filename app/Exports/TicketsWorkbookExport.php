@@ -36,7 +36,7 @@ use Maatwebsite\Excel\Concerns\WithMultipleSheets;
  * including soft-deleted reference records.
  *
  * The v1 sheets (daily pay, pay entries, attendance, part usages, diagnoses)
- * are gone with their features; their rows live on in the v2 sheets they
+ * are gone with their features; their rows live on in the new sheets they
  * were converted into (payments, trips, technician purchases, inspections).
  */
 class TicketsWorkbookExport implements WithMultipleSheets

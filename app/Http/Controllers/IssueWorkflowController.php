@@ -16,7 +16,7 @@ use App\Services\TicketIssueService;
 
 /**
  * The issue workflow steps that act on the issue itself
- * (docs/MAINTENANCE-V2.md §2): review, work done, the store's confirmation,
+ * (docs/MAINTENANCE.md §2): review, work done, the store's confirmation,
  * close and jump. Each answers with the issue's full read; a step that does
  * not fit the current status is a 422 with errors.status saying why.
  */

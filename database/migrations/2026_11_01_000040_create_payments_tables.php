@@ -5,7 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Payments, v2. Replaces Daily Pay sheets and per-ticket pay entries.
+ * Payments. Replaces Daily Pay sheets and per-ticket pay entries.
  *
  * A PAYMENT is the record of one invoice we paid: when, to whom (exactly one
  * technician OR one supplier), how (cash, check, card...), the invoice number

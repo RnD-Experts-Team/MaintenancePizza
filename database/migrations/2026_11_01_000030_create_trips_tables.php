@@ -5,7 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Trips: how technicians clock their time in v2, after the ClockInOut flow.
+ * Trips: how technicians clock their time, after the ClockInOut flow.
  *
  * A TRIP is one outing of one technician that can cover several tickets at
  * several stores. The specialist creates it (scheduling a visit creates or

@@ -3,7 +3,7 @@
 namespace App\Enums;
 
 /**
- * What one line of a payment paid for (docs/MAINTENANCE-V2.md §4). Each line
+ * What one line of a payment paid for (docs/MAINTENANCE.md §4). Each line
  * is for one store, or one storage location for parts bought for the shelf.
  */
 enum PaymentLineType: string

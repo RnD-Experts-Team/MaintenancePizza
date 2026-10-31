@@ -17,8 +17,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * Issue-level reads and the few direct edits left after v2 moved the workflow
- * into its own actions (docs/MAINTENANCE-V2.md §2): the full read (presented
+ * Issue-level reads and the few direct edits left after the workflow moved
+ * into its own actions (docs/MAINTENANCE.md §2): the full read (presented
  * by TicketIssuePresenter), re-linking, the assigned priority, cancelling,
  * the store history of a catalog issue, and the checks that records belong
  * to a ticket.

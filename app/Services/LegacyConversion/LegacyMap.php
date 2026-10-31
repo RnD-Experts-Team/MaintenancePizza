@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services\MigrationV2;
+namespace App\Services\LegacyConversion;
 
 use Illuminate\Support\Facades\DB;
 
@@ -21,7 +21,7 @@ final class LegacyMap
 
     public static function has(string $legacyTable, int $legacyId, string $newTable): bool
     {
-        return DB::table('migration_v2_map')
+        return DB::table('legacy_conversion_map')
             ->where('legacy_table', $legacyTable)
             ->where('legacy_id', $legacyId)
             ->where('new_table', $newTable)
@@ -31,7 +31,7 @@ final class LegacyMap
     /** The first new row an old row became, or null. */
     public static function get(string $legacyTable, int $legacyId, string $newTable): ?int
     {
-        $id = DB::table('migration_v2_map')
+        $id = DB::table('legacy_conversion_map')
             ->where('legacy_table', $legacyTable)
             ->where('legacy_id', $legacyId)
             ->where('new_table', $newTable)
@@ -53,7 +53,7 @@ final class LegacyMap
      */
     public static function all(string $legacyTable, int $legacyId, string $newTable): array
     {
-        return DB::table('migration_v2_map')
+        return DB::table('legacy_conversion_map')
             ->where('legacy_table', $legacyTable)
             ->where('legacy_id', $legacyId)
             ->where('new_table', $newTable)
@@ -65,7 +65,7 @@ final class LegacyMap
 
     public static function put(string $legacyTable, int $legacyId, string $newTable, int $newId): void
     {
-        DB::table('migration_v2_map')->insertOrIgnore([
+        DB::table('legacy_conversion_map')->insertOrIgnore([
             'legacy_table' => $legacyTable,
             'legacy_id' => $legacyId,
             'new_table' => $newTable,
@@ -78,7 +78,7 @@ final class LegacyMap
     /** @param  array<string, mixed>  $context */
     public static function report(string $step, string $message, array $context = [], string $level = 'info'): void
     {
-        DB::table('migration_v2_report')->insert([
+        DB::table('legacy_conversion_report')->insert([
             'step' => $step,
             'level' => $level,
             'message' => $message,

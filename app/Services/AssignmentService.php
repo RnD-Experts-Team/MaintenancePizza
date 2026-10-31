@@ -16,7 +16,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Bookings -- "schedules" in the v2 contract (docs/MAINTENANCE-V2.md §2): a
+ * Bookings -- "schedules" in the contract (docs/MAINTENANCE.md §2): a
  * technician, a day (and optional hour), `kind` work or inspection, and the
  * trip that carries it.
  *

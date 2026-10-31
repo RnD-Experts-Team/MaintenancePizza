@@ -28,7 +28,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * that corrected them (`stock_count`).
  *
  * `paid_by` / `paid_by_technician_id` / `part_usage_id` are v1 columns kept
- * for the converted history; nothing in v2 writes them.
+ * for the converted history; nothing writes them any more.
  */
 class StockMovement extends Model
 {
