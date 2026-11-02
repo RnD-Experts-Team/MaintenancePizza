@@ -58,13 +58,13 @@ class InfoRequestWorkflowTest extends IssueWorkflowTestCase
         ], $this->headers())->assertOk()
             ->assertJsonPath('data.status', 'in_review')
             ->assertJsonPath('data.info_requests.0.answer', 'Photo attached')
-            ->assertJsonPath('data.info_requests.0.answered_via', 'store')
+            ->assertJsonPath('data.info_requests.0.answered_by_name', null)
             ->assertJsonPath('data.info_requests.0.answered_by.name', 'Store Manager Mo')
             ->assertJsonPath('data.info_requests.0.attachments.0.original_name', 'label.jpg');
 
         $events = $this->outbox(IssueEventPublisher::INFO_ANSWERED);
         $this->assertCount(1, $events);
-        $this->assertSame('store', $events[0]->payload['data']['answered_via']);
+        $this->assertNull($events[0]->payload['data']['answered_by_name']);
         $this->assertSame(31, $events[0]->payload['data']['answered_by']);
     }
 
@@ -72,13 +72,13 @@ class InfoRequestWorkflowTest extends IssueWorkflowTestCase
     {
         $id = $this->ask();
 
-        $this->act("info-requests/{$id}/answer", ['answer' => 'It is model X-200', 'via' => 'specialist'])->assertOk()
+        $this->act("info-requests/{$id}/answer", ['answer' => 'It is model X-200', 'answered_by_name' => '  Sara, by phone '])->assertOk()
             ->assertJsonPath('data.status', 'in_review')
-            ->assertJsonPath('data.info_requests.0.answered_via', 'specialist')
+            ->assertJsonPath('data.info_requests.0.answered_by_name', 'Sara, by phone')
             ->assertJsonPath('data.info_requests.0.answered_by.id', $this->authUser->id);
 
         $this->assertStringStartsWith(
-            "The specialist recorded the store's answer",
+            'The store answered (Sara, by phone): It is model X-200',
             $this->issue->statusChanges()->latest('id')->value('reason'),
         );
     }

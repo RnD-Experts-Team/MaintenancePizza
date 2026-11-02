@@ -137,10 +137,10 @@ returns the issue with:
   priority, assigned_priority, impact, contact_name, contact_phone, status,
   status_label, step, target_completion_at, next_action, work_performed,
   resolution, store_confirmed_at, store_confirmed_working,
-  store_confirmed_via, closed_at, created_at, creator {id,name}.
+  store_confirmed_by_name, closed_at, created_at, creator {id,name}.
 - `technicians` (assigned to): [{id, name, phone, category}]
 - `info_requests`: [{id, question, asked_by {name}, created_at, answer,
-  answered_via store|specialist, answered_by {name}, answered_at, mistaken}]
+  answered_by_name (typed, optional), answered_by {name}, answered_at, mistaken}]
 - `inspections`: [{id, technician {id,name}, status scheduled|done|cancelled,
   scheduled_date, scheduled_time, done_at, findings, recommended_repair,
   parts_needed, estimated_cost, attachments, notes, mistaken}]
@@ -200,7 +200,7 @@ not fit the current status → 422 with a plain reason.
 |---|---|---|
 | `review` | target_completion_at?, next_action?, assigned_priority? | new → in_review. In every other open status (in_review, waiting_on_store, inspection, waiting_approval, scheduled, work_done) it only updates these fields and the status stays; refused once closed/cancelled |
 | `info-requests` | question (required), files[] | → waiting_on_store; outbox `maintenance.issue.info_requested` |
-| `info-requests/{request}/answer` | answer (required), files[], via? store\|specialist (default: store when the caller is not MOS… just take the body value, default store) | → in_review; outbox `maintenance.issue.info_answered` |
+| `info-requests/{request}/answer` | answer (required), files[], answered_by_name? (who answered, free text, max 120) | → in_review; outbox `maintenance.issue.info_answered` |
 | `inspections` | technician_id, scheduled_date, scheduled_time?, instructions? | → inspection; creates a `kind=inspection` schedule + an inspection(status scheduled) + adds the issue to the technician's open trip for that date (TripService::scheduleIssue). Response adds `trip_link` {url_token, expires_after_hours} when a NEW token was issued. |
 | `inspections/{inspection}/result` | findings (required), recommended_repair?, parts_needed?, estimated_cost?, files[] | marks the inspection done; status unchanged (stays inspection) |
 | `approval-request` | amount (required), inspection_id? | → waiting_approval; outbox `maintenance.issue.approval_needed` with level |
@@ -208,7 +208,7 @@ not fit the current status → 422 with a plain reason.
 | `schedule` | technician_id, date, time?, expected_completion_date?, instructions? | → scheduled; creates a `kind=work` schedule, adds the issue to the technician's trip (same as inspections), puts the technician on the issue. `trip_link` as above. |
 | `schedules/{assignment}/move` | date, time?, reason | writes an assignment delay; moves the trip stop to the matching trip. The old day's trip is REMOVED when that leaves it with no stops and it was never used (no session ever, link never opened, no purchases / notes / files, not mistaken) |
 | `work-done` | work_performed (required), files[] (before/after photos), warranty? {body, expiry_date} | scheduled → work_done (the specialist recording it for the technician) |
-| `confirmation` | working (bool), note?, via store\|specialist | records store_confirmed_*; working=false → in_review with next_action "Schedule more work" |
+| `confirmation` | working (bool), note?, confirmed_by_name? (who said so, free text, max 120) | records store_confirmed_*; working=false → in_review with next_action "Schedule more work" |
 | `close` | resolution repaired\|fixed_by_troubleshooting\|not_needed\|replaced, final_note?, what_we_learned?, override_reason? | → closed. Checklist keys: `resolved` (store confirmed working, or resolution fixed_by_troubleshooting/not_needed), `cost_recorded` (a payment line on the issue, or resolution fixed_by_troubleshooting/not_needed), `invoice_attached` (a linked payment has an attachment, same exemption), `notes_completed` (work_performed set, same exemption). Any not done → 422 unless `override_reason` is given (logged in the status change reason). |
 | `jump` | status (any), reason (required) | the escape hatch: any status → any status, logged |
 | `cancel` | reason | existing endpoint, keep |

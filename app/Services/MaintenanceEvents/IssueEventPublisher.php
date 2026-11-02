@@ -70,7 +70,7 @@ class IssueEventPublisher
             'info_request_id' => $request->id,
             'question' => $request->question,
             'answer' => $request->answer,
-            'answered_via' => $request->answered_via,
+            'answered_by_name' => $request->answered_by_name,
             'answered_by' => $request->answered_by,
         ]);
     }

@@ -31130,12 +31130,11 @@
                   "answer": {
                     "type": "string"
                   },
-                  "via": {
+                  "answered_by_name": {
                     "type": "string",
-                    "enum": [
-                      "store",
-                      "specialist"
-                    ]
+                    "maxLength": 120,
+                    "nullable": true,
+                    "description": "Who answered, as typed. Optional."
                   },
                   "files": {
                     "type": "array",
@@ -31158,12 +31157,11 @@
                   "answer": {
                     "type": "string"
                   },
-                  "via": {
+                  "answered_by_name": {
                     "type": "string",
-                    "enum": [
-                      "store",
-                      "specialist"
-                    ]
+                    "maxLength": 120,
+                    "nullable": true,
+                    "description": "Who answered, as typed. Optional."
                   },
                   "files": {
                     "type": "array",
@@ -32037,12 +32035,11 @@
                   "note": {
                     "type": "string"
                   },
-                  "via": {
+                  "confirmed_by_name": {
                     "type": "string",
-                    "enum": [
-                      "store",
-                      "specialist"
-                    ]
+                    "maxLength": 120,
+                    "nullable": true,
+                    "description": "Who answered, as typed. Optional."
                   }
                 },
                 "required": [

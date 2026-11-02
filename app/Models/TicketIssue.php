@@ -46,7 +46,7 @@ class TicketIssue extends Model
         'resolution',
         'store_confirmed_at',
         'store_confirmed_working',
-        'store_confirmed_via',
+        'store_confirmed_by_name',
         'store_confirmed_by',
         'closed_at',
     ];

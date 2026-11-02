@@ -35,7 +35,7 @@ class IssueInfoRequestController extends Controller
             $ticketIssue,
             $infoRequest,
             $request->validated('answer'),
-            $request->validated('via') ?? 'store',
+            $request->validated('answered_by_name'),
             (array) $request->file('files', []),
             $request->user(),
         );

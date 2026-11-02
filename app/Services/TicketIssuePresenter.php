@@ -139,7 +139,7 @@ class TicketIssuePresenter
             'resolution' => $this->enum($issue->resolution),
             'store_confirmed_at' => $issue->store_confirmed_at,
             'store_confirmed_working' => $issue->store_confirmed_working,
-            'store_confirmed_via' => $issue->store_confirmed_via,
+            'store_confirmed_by_name' => $issue->store_confirmed_by_name,
             'store_confirmed_by' => $issue->relationLoaded('storeConfirmer') && $issue->storeConfirmer
                 ? $this->user($issue->storeConfirmer)
                 : null,
@@ -212,7 +212,7 @@ class TicketIssuePresenter
             'asked_by' => $r->asker ? $this->user($r->asker) : null,
             'created_at' => $r->created_at,
             'answer' => $r->answer,
-            'answered_via' => $r->answered_via,
+            'answered_by_name' => $r->answered_by_name,
             'answered_by' => $r->answerer ? $this->user($r->answerer) : null,
             'answered_at' => $r->answered_at,
             'mistaken' => (bool) $r->mistaken,
@@ -639,7 +639,7 @@ class TicketIssuePresenter
             }
             $add($r->created_at, 'info_requested', 'Asked the store: '.$r->question, $r->asker?->name);
             if ($r->answered_at !== null) {
-                $who = $r->answered_via === 'specialist' ? "The store's answer (by phone)" : 'The store answered';
+                $who = 'The store answered'.($r->answered_by_name ? " ({$r->answered_by_name})" : '');
                 $add($r->answered_at, 'info_answered', "{$who}: {$r->answer}", $r->answerer?->name);
             }
         }
@@ -720,7 +720,7 @@ class TicketIssuePresenter
         }
 
         if ($issue->store_confirmed_at !== null) {
-            $how = $issue->store_confirmed_via === 'specialist' ? ' (by phone)' : '';
+            $how = $issue->store_confirmed_by_name ? " ({$issue->store_confirmed_by_name})" : '';
             $add($issue->store_confirmed_at, 'store_confirmed', ($issue->store_confirmed_working ? 'The store says it works now' : 'The store says it still does not work').$how, $issue->storeConfirmer?->name);
         }
 

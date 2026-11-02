@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * "We need a photo of the label" -- a question the office asks the store
  * during review, and the store's answer. Answered by the store in the
  * dashboard, or by the specialist on their behalf after a phone call
- * (`answered_via` store|specialist). Files sent with either side are its
+ * (`answered_by_name`: who answered, typed, optional). Files sent with either side are its
  * attachments.
  */
 class IssueInfoRequest extends Model
@@ -22,7 +22,7 @@ class IssueInfoRequest extends Model
         'question',
         'asked_by',
         'answer',
-        'answered_via',
+        'answered_by_name',
         'answered_by',
         'answered_at',
         'mistaken',

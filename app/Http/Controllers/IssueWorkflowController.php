@@ -48,7 +48,7 @@ class IssueWorkflowController extends Controller
             $ticketIssue,
             $request->boolean('working'),
             $request->validated('note'),
-            $request->validated('via') ?? 'store',
+            $request->validated('confirmed_by_name'),
             $request->user(),
         );
 

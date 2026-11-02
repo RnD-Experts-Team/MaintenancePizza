@@ -186,19 +186,19 @@ class IssueWorkflowService
 
     /**
      * The store says whether it works now (contract: `confirmation`), by
-     * itself or through the specialist (`via`). Not working sends the issue
+     * itself or through the specialist (`byName`: who said so, optional). Not working sends the issue
      * back to review with "Schedule more work".
      */
-    public function confirm(TicketIssue $issue, bool $working, ?string $note, string $via, User $by): TicketIssue
+    public function confirm(TicketIssue $issue, bool $working, ?string $note, ?string $byName, User $by): TicketIssue
     {
-        return DB::transaction(function () use ($issue, $working, $note, $via, $by) {
+        return DB::transaction(function () use ($issue, $working, $note, $byName, $by) {
             $issue = $this->lock($issue);
             $this->assertCan($issue, self::CONFIRMATION);
 
             $issue->forceFill([
                 'store_confirmed_at' => now(),
                 'store_confirmed_working' => $working,
-                'store_confirmed_via' => $via,
+                'store_confirmed_by_name' => InfoRequestService::name($byName),
                 'store_confirmed_by' => $by->id,
             ]);
 
@@ -217,7 +217,7 @@ class IssueWorkflowService
             $issue->next_action = self::NEXT_AFTER_NOT_WORKING;
             $issue->save();
 
-            $who = $via === 'specialist' ? 'The store said by phone' : 'The store says';
+            $who = 'The store says'.($issue->store_confirmed_by_name ? " ({$issue->store_confirmed_by_name})" : '');
             TicketStatusService::changeIssueStatus(
                 $issue,
                 IssueStatus::InReview,

@@ -4,7 +4,6 @@ namespace App\Http\Requests;
 
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 /**
  * The store's answer to a question -- typed by the store, or by the
@@ -24,7 +23,8 @@ class IssueInfoAnswerRequest extends FormRequest
     {
         return [
             'answer' => ['required', 'string', 'max:10000'],
-            'via' => ['nullable', Rule::in(['store', 'specialist'])],
+            // Optional: who gave the answer, as typed ("Sara, by phone").
+            'answered_by_name' => ['nullable', 'string', 'max:120'],
             'files' => ['nullable', 'array'],
             'files.*' => ['file', 'max:10240'],
         ];

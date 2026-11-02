@@ -116,7 +116,7 @@ class IssueWorkflowTest extends IssueWorkflowTestCase
         $this->act('confirmation', ['working' => true])->assertOk()
             ->assertJsonPath('data.status', 'work_done')
             ->assertJsonPath('data.store_confirmed_working', true)
-            ->assertJsonPath('data.store_confirmed_via', 'store')
+            ->assertJsonPath('data.store_confirmed_by_name', null)
             ->assertJsonPath('data.store_confirmed_by.id', $this->authUser->id)
             ->assertJsonPath('data.workflow.next.0.action', 'close')
             ->assertJsonPath('data.workflow.checklist.0.key', 'resolved')
@@ -127,15 +127,15 @@ class IssueWorkflowTest extends IssueWorkflowTestCase
     {
         $this->putStatus(IssueStatus::WorkDone);
 
-        $this->act('confirmation', ['working' => false, 'note' => 'Still warm at 2pm', 'via' => 'specialist'])->assertOk()
+        $this->act('confirmation', ['working' => false, 'note' => 'Still warm at 2pm', 'confirmed_by_name' => 'Sara, by phone'])->assertOk()
             ->assertJsonPath('data.status', 'in_review')
             ->assertJsonPath('data.next_action', 'Schedule more work')
             ->assertJsonPath('data.store_confirmed_working', false)
-            ->assertJsonPath('data.store_confirmed_via', 'specialist')
+            ->assertJsonPath('data.store_confirmed_by_name', 'Sara, by phone')
             ->assertJsonPath('data.notes.0.body', 'Still warm at 2pm');
 
         $this->assertSame(
-            'The store said by phone it still does not work: Still warm at 2pm',
+            'The store says (Sara, by phone) it still does not work: Still warm at 2pm',
             $this->issue->statusChanges()->latest('id')->value('reason'),
         );
     }

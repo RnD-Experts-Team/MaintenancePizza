@@ -65,9 +65,9 @@ class InfoRequestService
      *
      * @param  array<int, UploadedFile>  $files
      */
-    public function answer(TicketIssue $issue, IssueInfoRequest $request, string $answer, string $via, array $files, User $by): IssueInfoRequest
+    public function answer(TicketIssue $issue, IssueInfoRequest $request, string $answer, ?string $byName, array $files, User $by): IssueInfoRequest
     {
-        return DB::transaction(function () use ($issue, $request, $answer, $via, $files, $by) {
+        return DB::transaction(function () use ($issue, $request, $answer, $byName, $files, $by) {
             $issue = $this->workflow->lock($issue);
             $this->workflow->assertCan($issue, IssueWorkflowService::ANSWER);
 
@@ -83,7 +83,7 @@ class InfoRequestService
 
             $request->fill([
                 'answer' => $answer,
-                'answered_via' => $via,
+                'answered_by_name' => self::name($byName),
                 'answered_by' => $by->id,
                 'answered_at' => now(),
             ])->save();
@@ -97,7 +97,7 @@ class InfoRequestService
                 ->exists();
 
             if ($issue->status === IssueStatus::WaitingOnStore && !$stillOpen) {
-                $who = $via === 'specialist' ? 'The specialist recorded the store\'s answer' : 'The store answered';
+                $who = 'The store answered'.($request->answered_by_name ? " ({$request->answered_by_name})" : '');
                 TicketStatusService::changeIssueStatus($issue, IssueStatus::InReview, $who.': '.Str::limit($answer, 200));
             }
 
@@ -105,5 +105,13 @@ class InfoRequestService
 
             return $request;
         });
+    }
+
+    /** A typed "who answered", trimmed; blank means not given. */
+    public static function name(?string $name): ?string
+    {
+        $name = trim((string) $name);
+
+        return $name === '' ? null : $name;
     }
 }
