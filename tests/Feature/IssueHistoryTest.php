@@ -40,7 +40,7 @@ class IssueHistoryTest extends TestCase
             . ($query ? '?' . http_build_query($query) : '');
     }
 
-    private function ovenTicket(?Store $store = null, string $createdAt = '2026-09-01 10:00:00', IssueStatus $status = IssueStatus::Pending): Ticket
+    private function ovenTicket(?Store $store = null, string $createdAt = '2026-09-01 10:00:00', IssueStatus $status = IssueStatus::New): Ticket
     {
         $ticket = Ticket::factory()->for($store ?? $this->store)->create(['created_at' => $createdAt]);
         TicketIssue::factory()->for($ticket)->create([
@@ -84,13 +84,15 @@ class IssueHistoryTest extends TestCase
     {
         $ticket = Ticket::factory()->for($this->store)->create();
         $root = TicketIssue::factory()->for($ticket)->create([
-            'issue_id' => $this->oven->id, 'status' => IssueStatus::Deferred->value,
+            'issue_id' => $this->oven->id, 'status' => IssueStatus::Closed->value,
         ]);
         $child = TicketIssue::factory()->for($ticket)->create([
-            'issue_id' => $this->oven->id, 'status' => IssueStatus::Complete->value, 'parent_id' => $root->id,
+            'issue_id' => $this->oven->id, 'status' => IssueStatus::Closed->value, 'parent_id' => $root->id,
+            // When it closed is the issue's own closed_at.
+            'closed_at' => '2026-09-20 16:30:00',
         ]);
         IssueStatusChange::query()->create([
-            'ticket_issue_id' => $child->id, 'from_status' => 'in_progress', 'to_status' => 'complete',
+            'ticket_issue_id' => $child->id, 'from_status' => 'scheduled', 'to_status' => 'closed',
         ])->forceFill(['created_at' => '2026-09-20 16:30:00'])->save();
 
         $technician = Technician::factory()->create(['name' => 'Ahmed']);
@@ -101,15 +103,15 @@ class IssueHistoryTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonCount(2, 'data.0.issues')
-            ->assertJsonPath('data.0.status.value', 'complete')
+            ->assertJsonPath('data.0.status.value', 'closed')
             ->assertJsonPath('data.0.completed_at', '2026-09-20T16:30:00.000000Z')
             ->assertJsonPath('data.0.technicians', [['id' => $technician->id, 'name' => 'Ahmed']]);
     }
 
     public function test_open_only_keeps_tickets_where_the_issue_is_still_open(): void
     {
-        $open = $this->ovenTicket(status: IssueStatus::Assigned);
-        $this->ovenTicket(status: IssueStatus::Complete);
+        $open = $this->ovenTicket(status: IssueStatus::Scheduled);
+        $this->ovenTicket(status: IssueStatus::Closed);
         $this->ovenTicket(status: IssueStatus::Cancelled);
 
         $this->getJson($this->url(['open_only' => 1]), $this->headers())

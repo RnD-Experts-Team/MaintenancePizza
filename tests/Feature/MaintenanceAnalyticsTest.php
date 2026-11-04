@@ -51,7 +51,7 @@ class MaintenanceAnalyticsTest extends TestCase
      * An Oven ticket opened at $at -- created then, so its updated_at is $at
      * too (its issue touches it). The clock is put back afterwards.
      */
-    private function ovenTicket(string $at, ?Store $store = null, string $status = 'pending'): Ticket
+    private function ovenTicket(string $at, ?Store $store = null, string $status = 'new'): Ticket
     {
         $now = now();
         $this->travelTo($at);
@@ -102,12 +102,11 @@ class MaintenanceAnalyticsTest extends TestCase
     public function test_completions_and_how_long_they_took(): void
     {
         $this->travelTo('2026-10-04 10:00:00');
-        $ticket = $this->ovenTicket('2026-10-04 10:00:00', status: 'in_progress');
+        $ticket = $this->ovenTicket('2026-10-04 10:00:00', status: 'scheduled');
         $issue = $ticket->ticketIssues()->first();
 
         $this->travelTo('2026-10-05 16:00:00'); // 30 hours later, inside the range
-        $this->postJson("/api/stores/{$this->store->store_number}/tickets/{$ticket->id}/issues/status",
-            ['ticket_issue_ids' => [$issue->id], 'status' => 'complete'], $this->headers())->assertOk();
+        TicketStatusService::changeIssueStatus($issue, IssueStatus::Closed);
 
         $summary = $this->getJson($this->url('summary'), $this->headers())->assertOk()->json('data');
 
@@ -146,15 +145,15 @@ class MaintenanceAnalyticsTest extends TestCase
     public function test_untouched_means_open_and_unchanged_for_a_day_or_more(): void
     {
         $silent = $this->ovenTicket('2026-10-01 09:00:00');
-        $this->changeAt($silent, '2026-10-04 09:00:00', IssueStatus::Assigned);
+        $this->changeAt($silent, '2026-10-04 09:00:00', IssueStatus::Scheduled);
 
         $neverTouched = $this->ovenTicket('2026-10-03 09:00:00');
 
         $busy = $this->ovenTicket('2026-10-01 09:00:00');
-        $this->changeAt($busy, '2026-10-06 11:00:00', IssueStatus::Assigned);
+        $this->changeAt($busy, '2026-10-06 11:00:00', IssueStatus::Scheduled);
 
-        $this->ovenTicket('2026-09-01 09:00:00', status: IssueStatus::Complete->value);   // closed: not "untouched"
-        $this->ovenTicket('2026-09-01 09:00:00', status: IssueStatus::Deferred->value);
+        $this->ovenTicket('2026-09-01 09:00:00', status: IssueStatus::Closed->value);   // closed: not "untouched"
+        $this->ovenTicket('2026-09-01 09:00:00', status: IssueStatus::Closed->value);
 
         $this->travelTo('2026-10-06 12:00:00');
         $untouched = $this->getJson($this->url('watchlist'), $this->headers())->assertOk()->json('data.untouched');
@@ -172,15 +171,15 @@ class MaintenanceAnalyticsTest extends TestCase
         $theirs = $this->ovenTicket('2026-10-01 09:00:00', store: $other);
         $quiet = $this->ovenTicket('2026-10-01 09:00:00');
 
-        $this->changeAt($mine, '2026-10-05 13:00:00', IssueStatus::Assigned);
+        $this->changeAt($mine, '2026-10-05 13:00:00', IssueStatus::Scheduled);
         $this->travelTo('2026-10-05 14:00:00');
         $mine->ticketIssues()->first()->notes()->create(['body' => 'Tech booked for Monday']);
         $secret = $mine->notes()->make(['body' => 'Vendor quoted $900']);
         $secret->is_private = true;
         $secret->save();
 
-        $this->changeAt($theirs, '2026-10-05 13:00:00', IssueStatus::Assigned);   // another store
-        $this->changeAt($quiet, '2026-10-05 03:00:00', IssueStatus::Assigned);    // before the range
+        $this->changeAt($theirs, '2026-10-05 13:00:00', IssueStatus::Scheduled);   // another store
+        $this->changeAt($quiet, '2026-10-05 03:00:00', IssueStatus::Scheduled);    // before the range
 
         $this->travelTo('2026-10-06 12:00:00');
         $page = $this->getJson($this->url('activity'), $this->headers())->assertOk();
@@ -190,7 +189,7 @@ class MaintenanceAnalyticsTest extends TestCase
         $changes = $page->json('data.0.changes');
         $this->assertFalse($changes['opened']);
         $this->assertSame('Oven', $changes['status_changes'][0]['title']);
-        $this->assertSame(['Pending', 'Assigned'], [$changes['status_changes'][0]['from'], $changes['status_changes'][0]['to']]);
+        $this->assertSame(['New', 'Scheduled'], [$changes['status_changes'][0]['from'], $changes['status_changes'][0]['to']]);
         $this->assertSame(1, $changes['notes'], 'the private note is not counted');
 
         $this->assertSame(1, $this->getJson($this->url('summary'), $this->headers())->json('data.kpis.changed_tickets'));

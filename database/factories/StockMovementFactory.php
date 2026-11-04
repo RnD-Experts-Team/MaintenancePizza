@@ -19,7 +19,7 @@ class StockMovementFactory extends Factory
     {
         return [
             'moved_at' => now(),
-            'type' => StockMovementType::Purchase->value,
+            'type' => StockMovementType::Bought->value,
             'storage_location_id' => StorageLocation::factory(),
             'paid_by' => null,
             'paid_by_technician_id' => null,

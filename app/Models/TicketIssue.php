@@ -2,9 +2,10 @@
 
 namespace App\Models;
 
+use App\Enums\Impact;
 use App\Enums\IssueStatus;
-use App\Enums\PaymentStatus;
 use App\Enums\Priority;
+use App\Enums\Resolution;
 use App\Models\Concerns\HasNotesAndAttachments;
 use Database\Factories\TicketIssueFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -12,8 +13,16 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
+/**
+ * One problem on a ticket, and the unit the workflow moves
+ * (docs/MAINTENANCE.md §2): new → in_review → … → closed.
+ *
+ * The workflow columns are what each step writes down: `impact` and the
+ * contact at submission; `target_completion_at` / `next_action` at review;
+ * `work_performed` when the work is done; `store_confirmed_*` when the store
+ * says it works (or not); `resolution` and `closed_at` when it closes.
+ */
 class TicketIssue extends Model
 {
     /** @use HasFactory<TicketIssueFactory> */
@@ -28,6 +37,18 @@ class TicketIssue extends Model
         'description',
         'status',
         'parent_id',
+        'impact',
+        'contact_name',
+        'contact_phone',
+        'target_completion_at',
+        'next_action',
+        'work_performed',
+        'resolution',
+        'store_confirmed_at',
+        'store_confirmed_working',
+        'store_confirmed_by_name',
+        'store_confirmed_by',
+        'closed_at',
     ];
 
     /** Any change to an issue is a change to its ticket. */
@@ -42,6 +63,12 @@ class TicketIssue extends Model
             'priority' => Priority::class,
             'assigned_priority' => Priority::class,
             'status' => IssueStatus::class,
+            'impact' => Impact::class,
+            'resolution' => Resolution::class,
+            'target_completion_at' => 'datetime',
+            'store_confirmed_at' => 'datetime',
+            'store_confirmed_working' => 'boolean',
+            'closed_at' => 'datetime',
             'troubleshooting_confirmed_at' => 'datetime',
             'troubleshooting_snapshot' => 'array',
         ];
@@ -85,34 +112,85 @@ class TicketIssue extends Model
         return $this->hasMany(IssueStatusChange::class);
     }
 
-    /** @return BelongsToMany<Assignment, $this> */
+    /**
+     * The bookings on this issue (`kind` work|inspection) -- what the contract
+     * calls its schedules.
+     *
+     * @return BelongsToMany<Assignment, $this>
+     */
     public function assignments(): BelongsToMany
     {
         return $this->belongsToMany(Assignment::class, 'assignment_ticket_issue')->withTimestamps();
     }
 
-    /** @return BelongsToMany<Diagnosis, $this> */
-    public function diagnoses(): BelongsToMany
+    /**
+     * Alias of assignments(), in the contract's word.
+     *
+     * @return BelongsToMany<Assignment, $this>
+     */
+    public function schedules(): BelongsToMany
     {
-        return $this->belongsToMany(Diagnosis::class, 'diagnosis_ticket_issue')->withTimestamps();
+        return $this->assignments();
     }
 
-    /** @return BelongsToMany<AttendanceEntry, $this> */
-    public function attendanceEntries(): BelongsToMany
+    /** @return HasMany<IssueInfoRequest, $this> */
+    public function infoRequests(): HasMany
     {
-        return $this->belongsToMany(AttendanceEntry::class, 'attendance_entry_ticket_issue')->withTimestamps();
+        return $this->hasMany(IssueInfoRequest::class)->orderBy('id');
     }
 
-    /** @return BelongsToMany<PartUsage, $this> */
-    public function partUsages(): BelongsToMany
+    /** @return HasMany<IssueInspection, $this> */
+    public function inspections(): HasMany
     {
-        return $this->belongsToMany(PartUsage::class, 'part_ticket_issue')->withTimestamps();
+        return $this->hasMany(IssueInspection::class)->orderBy('id');
     }
 
-    /** @return BelongsToMany<PayEntry, $this> */
-    public function payEntries(): BelongsToMany
+    /** @return HasMany<IssueApproval, $this> */
+    public function approvals(): HasMany
     {
-        return $this->belongsToMany(PayEntry::class, 'pay_entry_ticket_issue')->withTimestamps();
+        return $this->hasMany(IssueApproval::class)->orderBy('id');
+    }
+
+    /**
+     * The trip visits this issue is on.
+     *
+     * @return HasMany<TripStopIssue, $this>
+     */
+    public function tripStopIssues(): HasMany
+    {
+        return $this->hasMany(TripStopIssue::class);
+    }
+
+    /**
+     * The payment lines that paid for this issue.
+     *
+     * @return BelongsToMany<PaymentLine, $this>
+     */
+    public function paymentLines(): BelongsToMany
+    {
+        return $this->belongsToMany(PaymentLine::class, 'payment_line_ticket_issue')->withTimestamps();
+    }
+
+    /** @return HasMany<TechnicianPurchase, $this> */
+    public function technicianPurchases(): HasMany
+    {
+        return $this->hasMany(TechnicianPurchase::class);
+    }
+
+    /**
+     * Stock movements caused by this issue (parts Used on it from storage).
+     *
+     * @return HasMany<StockMovement, $this>
+     */
+    public function stockMovements(): HasMany
+    {
+        return $this->hasMany(StockMovement::class);
+    }
+
+    /** @return HasMany<PartUnit, $this> */
+    public function partUnits(): HasMany
+    {
+        return $this->hasMany(PartUnit::class);
     }
 
     /** @return BelongsToMany<Warranty, $this> */
@@ -121,7 +199,11 @@ class TicketIssue extends Model
         return $this->belongsToMany(Warranty::class, 'warranty_ticket_issue')->withTimestamps();
     }
 
-    /** @return BelongsToMany<Technician, $this> */
+    /**
+     * The technicians put on this issue (the people it is assigned to).
+     *
+     * @return BelongsToMany<Technician, $this>
+     */
     public function technicians(): BelongsToMany
     {
         return $this->belongsToMany(Technician::class, 'technician_ticket_issue')
@@ -135,43 +217,9 @@ class TicketIssue extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    /** @return BelongsToMany<DailyPayLine, $this> */
-    public function dailyPayLines(): BelongsToMany
+    /** @return BelongsTo<User, $this> */
+    public function storeConfirmer(): BelongsTo
     {
-        return $this->belongsToMany(DailyPayLine::class, 'daily_pay_line_ticket_issue')->withTimestamps();
-    }
-
-    /**
-     * Whether everything this issue costs somebody has been settled through a
-     * pay sheet: its attendance hours and the parts a technician fronted.
-     *
-     * Anything still owed dominates, so an issue reads as unpaid until the last
-     * of its payables is on a sheet. An issue that costs nobody anything —
-     * no attendance, and no parts beyond what we bought ourselves — has nothing
-     * to pay rather than being perpetually unpaid.
-     *
-     * Derived, never stored; null when the records it reads are not loaded.
-     */
-    public function paymentStatus(): ?PaymentStatus
-    {
-        if (! $this->relationLoaded('attendanceEntries') || ! $this->relationLoaded('partUsages')) {
-            return null;
-        }
-
-        // toBase(): an Eloquent collection's merge() keys by model id and would
-        // call getKey() on these enums.
-        $statuses = $this->attendanceEntries
-            ->map(fn (AttendanceEntry $e) => $e->paymentStatus())
-            ->toBase()
-            ->merge($this->partUsages->map(fn (PartUsage $p) => $p->paymentStatus())->toBase())
-            ->filter();
-
-        return PaymentStatus::rollUp($statuses);
-    }
-
-    /** @return HasManyThrough<DailyPayEntry, DailyPayLine, $this> */
-    public function dailyPayEntries(): HasManyThrough
-    {
-        return $this->hasManyThrough(DailyPayEntry::class, DailyPayLine::class);
+        return $this->belongsTo(User::class, 'store_confirmed_by');
     }
 }

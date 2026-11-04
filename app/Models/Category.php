@@ -3,15 +3,21 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasNotesAndAttachments;
+use App\Models\Concerns\HasUniqueName;
 use Database\Factories\CategoryFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+/**
+ * A TECHNICIAN category (In-house, Company, Independent, ...): an editable
+ * list, names unique ignoring capitals and repeated spaces.
+ */
 class Category extends Model
 {
     /** @use HasFactory<CategoryFactory> */
-    use HasFactory, HasNotesAndAttachments;
+    use HasFactory, HasNotesAndAttachments, HasUniqueName;
 
     protected $fillable = ['name', 'description'];
 

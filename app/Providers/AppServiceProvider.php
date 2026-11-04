@@ -80,6 +80,12 @@ class AppServiceProvider extends ServiceProvider
             Limit::perMinute(10)->by('target:m:'.self::secretKey($request)),
             Limit::perHour(60)->by('target:h:'.self::secretKey($request)),
         ]);
+
+        // A technician's trip link: 60 requests a minute per LINK, not per IP --
+        // a crew on one store's Wi-Fi shares an IP, and a guessed token should
+        // be limited on its own.
+        RateLimiter::for('trip-link', fn (Request $request) => Limit::perMinute(60)
+            ->by('trip:'.hash('sha256', (string) $request->route('token')).'|'.$request->ip()));
     }
 
     /**

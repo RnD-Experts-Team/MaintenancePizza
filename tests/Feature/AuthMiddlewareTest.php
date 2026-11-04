@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Enums\IssueStatus;
 use App\Models\Attachment;
 use App\Models\IssueStatusChange;
 use App\Models\Store;
@@ -65,8 +64,8 @@ class AuthMiddlewareTest extends TestCase
         [$store, $ticket, $issue] = $this->ticket();
 
         $this->postJson(
-            "/api/stores/{$store->store_number}/tickets/{$ticket->id}/issues/status",
-            ['ticket_issue_ids' => [$issue->id], 'status' => IssueStatus::InProgress->value],
+            "/api/stores/{$store->store_number}/tickets/{$ticket->id}/issues/{$issue->id}/cancel",
+            ['reason' => 'Opened by mistake'],
             $this->headers(),
         )->assertOk();
 

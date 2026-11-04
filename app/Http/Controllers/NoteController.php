@@ -4,13 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreNoteRequest;
 use App\Models\Assignment;
-use App\Models\AttendanceEntry;
 use App\Models\Category;
-use App\Models\Diagnosis;
 use App\Models\Issue;
 use App\Models\Part;
-use App\Models\PartUsage;
-use App\Models\PayEntry;
 use App\Models\StockMovement;
 use App\Models\Store;
 use App\Models\StorageLocation;
@@ -41,26 +37,6 @@ class NoteController extends Controller
     public function ticketIssue(StoreNoteRequest $request, Store $store, Ticket $ticket, TicketIssue $ticketIssue): JsonResponse
     {
         return $this->make($request, $ticketIssue, true);
-    }
-
-    public function diagnosis(StoreNoteRequest $request, Store $store, Ticket $ticket, Diagnosis $diagnosis): JsonResponse
-    {
-        return $this->make($request, $diagnosis, true);
-    }
-
-    public function attendance(StoreNoteRequest $request, Store $store, Ticket $ticket, AttendanceEntry $attendanceEntry): JsonResponse
-    {
-        return $this->make($request, $attendanceEntry, true);
-    }
-
-    public function partUsage(StoreNoteRequest $request, Store $store, Ticket $ticket, PartUsage $partUsage): JsonResponse
-    {
-        return $this->make($request, $partUsage, true);
-    }
-
-    public function payEntry(StoreNoteRequest $request, Store $store, Ticket $ticket, PayEntry $payEntry): JsonResponse
-    {
-        return $this->make($request, $payEntry, true);
     }
 
     public function warranty(StoreNoteRequest $request, Store $store, Ticket $ticket, Warranty $warranty): JsonResponse

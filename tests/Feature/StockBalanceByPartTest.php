@@ -26,7 +26,7 @@ class StockBalanceByPartTest extends TestCase
         app(StockService::class)->record(
             [
                 'moved_at' => '2026-01-01 09:00:00',
-                'type' => StockMovementType::Purchase,
+                'type' => StockMovementType::Bought,
                 'storage_location_id' => $location->id,
             ],
             [[
@@ -111,7 +111,7 @@ class StockBalanceByPartTest extends TestCase
 
         // Drive b negative by the same amount, which only a reversal may do.
         app(StockService::class)->record(
-            ['moved_at' => '2026-01-02 09:00:00', 'type' => StockMovementType::Adjustment],
+            ['moved_at' => '2026-01-02 09:00:00', 'type' => StockMovementType::StockCount],
             [['part_id' => $part->id, 'storage_location_id' => $b->id, 'quantity' => '5', 'direction' => -1]],
             allowNegative: true
         );

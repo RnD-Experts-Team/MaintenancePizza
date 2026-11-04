@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Reports\ReportDatasets;
 use Illuminate\Cache\ArrayStore;
 use Illuminate\Cache\RateLimiter as CacheRateLimiter;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -232,12 +233,20 @@ class ThrottleTest extends TestCase
             ->values();
 
         $uploads = $routesWith('throttle:api-upload');
-        $this->assertCount(34, $uploads);
+        // 34 before the per-ticket attendance, part-usage, pay-entry and diagnosis
+        // records were replaced (10 upload routes gone); suppliers, payments and
+        // trips add 6 notes/attachments routes of their own.
+        $this->assertCount(30, $uploads);
         $this->assertTrue($uploads->every(fn ($r) => str_starts_with($r, 'POST ')
             && preg_match('#/(notes|attachments)$|attendance-entries$#', $r) === 1));
 
         $this->assertEqualsCanonicalizing(
-            ['GET|HEAD api/tickets/analytics', 'GET|HEAD api/stores/{store}/tickets/analytics'],
+            [
+                'GET|HEAD api/tickets/analytics',
+                'GET|HEAD api/stores/{store}/tickets/analytics',
+                // The report dataset queries: one literal route per dataset.
+                ...array_map(fn (string $dataset) => 'POST api/report-datasets/'.$dataset::KEY.'/query', ReportDatasets::DATASETS),
+            ],
             $routesWith('throttle:api-heavy')->all(),
         );
 

@@ -22,12 +22,8 @@ class TicketIssuesSheet implements FromCollection, WithHeadings, WithMapping, Wi
             'issue',
             'technicians',
             'assignments',
-            'attendanceEntries',
-            'diagnoses',
-            'partUsages',
-            'payEntries',
             'warranties',
-            'dailyPayLines',
+            'paymentLines',
         ])->orderBy('id')->get();
     }
 
@@ -37,9 +33,9 @@ class TicketIssuesSheet implements FromCollection, WithHeadings, WithMapping, Wi
     public function headings(): array
     {
         return [
-            'ID', 'Ticket ID', 'Title', 'Priority', 'Status', 'Description', 'Parent ID',
-            'Technician IDs', 'Assignment IDs', 'Attendance Entry IDs', 'Diagnosis IDs',
-            'Part Usage IDs', 'Pay Entry IDs', 'Warranty IDs', 'Daily Pay Line IDs',
+            'ID', 'Ticket ID', 'Title', 'Priority', 'Status', 'Impact', 'Description', 'Parent ID',
+            'Next Action', 'Target Completion', 'Work Performed', 'Resolution', 'Closed At',
+            'Technician IDs', 'Assignment IDs', 'Warranty IDs', 'Payment Line IDs',
             'Created By', 'Created At',
         ];
     }
@@ -56,16 +52,18 @@ class TicketIssuesSheet implements FromCollection, WithHeadings, WithMapping, Wi
             $issue->displayTitle(),
             $issue->priority->value,
             $issue->status->value,
+            $issue->impact?->value,
             $issue->description,
             $issue->parent_id,
+            $issue->next_action,
+            $issue->target_completion_at ? (string) $issue->target_completion_at : null,
+            $issue->work_performed,
+            $issue->resolution?->value,
+            $issue->closed_at ? (string) $issue->closed_at : null,
             $issue->technicians->pluck('id')->implode(', '),
             $issue->assignments->pluck('id')->implode(', '),
-            $issue->attendanceEntries->pluck('id')->implode(', '),
-            $issue->diagnoses->pluck('id')->implode(', '),
-            $issue->partUsages->pluck('id')->implode(', '),
-            $issue->payEntries->pluck('id')->implode(', '),
             $issue->warranties->pluck('id')->implode(', '),
-            $issue->dailyPayLines->pluck('id')->implode(', '),
+            $issue->paymentLines->pluck('id')->implode(', '),
             $issue->created_by,
             (string) $issue->created_at,
         ];

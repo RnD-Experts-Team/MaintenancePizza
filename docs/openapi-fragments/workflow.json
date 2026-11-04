@@ -1,0 +1,1483 @@
+{
+  "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/review": {
+    "post": {
+      "tags": [
+        "Issue Workflow"
+      ],
+      "summary": "Review an issue (new → in_review)",
+      "operationId": "reviewIssue",
+      "description": "new → in_review, setting the plan. While in_review it only updates these fields. Keys left out are kept; null clears. Refused (422 errors.status) in any other status.",
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Store"
+        },
+        {
+          "$ref": "#/components/parameters/Ticket"
+        },
+        {
+          "$ref": "#/components/parameters/TicketIssue"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "The issue, after the step",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "data"
+                ],
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "401": {
+          "$ref": "#/components/responses/Unauthenticated"
+        },
+        "404": {
+          "$ref": "#/components/responses/NotFound"
+        },
+        "422": {
+          "$ref": "#/components/responses/ValidationError"
+        }
+      },
+      "requestBody": {
+        "required": false,
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "target_completion_at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "nullable": true
+                },
+                "next_action": {
+                  "type": "string",
+                  "maxLength": 255,
+                  "nullable": true
+                },
+                "assigned_priority": {
+                  "$ref": "#/components/schemas/Priority"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/info-requests": {
+    "post": {
+      "tags": [
+        "Issue Workflow"
+      ],
+      "summary": "Ask the store a question (→ waiting_on_store)",
+      "operationId": "askStore",
+      "description": "Allowed in new, in_review, waiting_on_store. Files go on the info request. Writes outbox maintenance.issue.info_requested.",
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Store"
+        },
+        {
+          "$ref": "#/components/parameters/Ticket"
+        },
+        {
+          "$ref": "#/components/parameters/TicketIssue"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "The issue, after the step",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "data"
+                ],
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "401": {
+          "$ref": "#/components/responses/Unauthenticated"
+        },
+        "404": {
+          "$ref": "#/components/responses/NotFound"
+        },
+        "422": {
+          "$ref": "#/components/responses/ValidationError"
+        }
+      },
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "description": "Multipart only."
+                }
+              },
+              "required": [
+                "question"
+              ]
+            }
+          },
+          "multipart/form-data": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "description": "Multipart only."
+                }
+              },
+              "required": [
+                "question"
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/info-requests/{infoRequest}/answer": {
+    "post": {
+      "tags": [
+        "Issue Workflow"
+      ],
+      "summary": "Record the store's answer (→ in_review)",
+      "operationId": "answerStore",
+      "description": "Answered by the store (via=store, the default) or by the specialist after a phone call (via=specialist). The issue goes back to in_review once no other question is open. Refused on a closed/cancelled issue, a mistaken or already answered question (errors.answer). Writes outbox maintenance.issue.info_answered.",
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Store"
+        },
+        {
+          "$ref": "#/components/parameters/Ticket"
+        },
+        {
+          "$ref": "#/components/parameters/TicketIssue"
+        },
+        {
+          "name": "infoRequest",
+          "in": "path",
+          "required": true,
+          "description": "An info request of this issue (scoped).",
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "The issue, after the step",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "data"
+                ],
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "401": {
+          "$ref": "#/components/responses/Unauthenticated"
+        },
+        "404": {
+          "$ref": "#/components/responses/NotFound"
+        },
+        "422": {
+          "$ref": "#/components/responses/ValidationError"
+        }
+      },
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "answer": {
+                  "type": "string"
+                },
+                "via": {
+                  "type": "string",
+                  "enum": [
+                    "store",
+                    "specialist"
+                  ]
+                },
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "description": "Multipart only."
+                }
+              },
+              "required": [
+                "answer"
+              ]
+            }
+          },
+          "multipart/form-data": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "answer": {
+                  "type": "string"
+                },
+                "via": {
+                  "type": "string",
+                  "enum": [
+                    "store",
+                    "specialist"
+                  ]
+                },
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "description": "Multipart only."
+                }
+              },
+              "required": [
+                "answer"
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/inspections": {
+    "post": {
+      "tags": [
+        "Issue Workflow"
+      ],
+      "summary": "Book an inspection (→ inspection)",
+      "operationId": "bookInspection",
+      "description": "Allowed in new, in_review, inspection (a second opinion). Creates an inspection (scheduled), a kind=inspection schedule, puts the technician on the issue and the issue on the technician's OPEN trip for that date (TripService::scheduleIssue: the same trip for the same technician and day). trip_link only when a new trip was created.",
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Store"
+        },
+        {
+          "$ref": "#/components/parameters/Ticket"
+        },
+        {
+          "$ref": "#/components/parameters/TicketIssue"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "The issue, after the step",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "data"
+                ],
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                    "additionalProperties": true
+                  },
+                  "trip_link": {
+                    "type": "object",
+                    "description": "Only when this call CREATED a trip: its link's plain token, shown this once (only its hash is stored). Pass it on to the technician.",
+                    "properties": {
+                      "url_token": {
+                        "type": "string",
+                        "minLength": 40,
+                        "maxLength": 40
+                      },
+                      "expires_after_hours": {
+                        "type": "integer",
+                        "description": "The trip's link_idle_hours: the link dies after this long without use."
+                      },
+                      "trip_id": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "url_token",
+                      "expires_after_hours",
+                      "trip_id"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "401": {
+          "$ref": "#/components/responses/Unauthenticated"
+        },
+        "404": {
+          "$ref": "#/components/responses/NotFound"
+        },
+        "422": {
+          "$ref": "#/components/responses/ValidationError"
+        }
+      },
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "technician_id": {
+                  "type": "integer"
+                },
+                "scheduled_date": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "scheduled_time": {
+                  "type": "string",
+                  "pattern": "^\\d{2}:\\d{2}$",
+                  "example": "09:30"
+                },
+                "instructions": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "technician_id",
+                "scheduled_date"
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/inspections/{inspection}/result": {
+    "post": {
+      "tags": [
+        "Issue Workflow"
+      ],
+      "summary": "Record what the inspection found",
+      "operationId": "recordInspectionResult",
+      "description": "Marks the inspection done (and its pending trip task done); the issue's status does not change. Refused for an inspection already done/cancelled/mistaken, or a closed/cancelled issue. Files go on the inspection.",
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Store"
+        },
+        {
+          "$ref": "#/components/parameters/Ticket"
+        },
+        {
+          "$ref": "#/components/parameters/TicketIssue"
+        },
+        {
+          "name": "inspection",
+          "in": "path",
+          "required": true,
+          "description": "An inspection of this issue (scoped).",
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "The issue, after the step",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "data"
+                ],
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "401": {
+          "$ref": "#/components/responses/Unauthenticated"
+        },
+        "404": {
+          "$ref": "#/components/responses/NotFound"
+        },
+        "422": {
+          "$ref": "#/components/responses/ValidationError"
+        }
+      },
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "findings": {
+                  "type": "string"
+                },
+                "recommended_repair": {
+                  "type": "string"
+                },
+                "parts_needed": {
+                  "type": "string"
+                },
+                "estimated_cost": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "description": "Multipart only."
+                }
+              },
+              "required": [
+                "findings"
+              ]
+            }
+          },
+          "multipart/form-data": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "findings": {
+                  "type": "string"
+                },
+                "recommended_repair": {
+                  "type": "string"
+                },
+                "parts_needed": {
+                  "type": "string"
+                },
+                "estimated_cost": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "description": "Multipart only."
+                }
+              },
+              "required": [
+                "findings"
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/approval-request": {
+    "post": {
+      "tags": [
+        "Issue Workflow"
+      ],
+      "summary": "Ask for approval (→ waiting_approval)",
+      "operationId": "askApproval",
+      "description": "Allowed in new, in_review, inspection, waiting_approval. The level is the first of maintenance_settings.approval_levels whose (exclusive) max is above the amount. next_action says who must approve. Writes outbox maintenance.issue.approval_needed {amount, level, level_label, inspection_id}.",
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Store"
+        },
+        {
+          "$ref": "#/components/parameters/Ticket"
+        },
+        {
+          "$ref": "#/components/parameters/TicketIssue"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "The issue, after the step",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "data"
+                ],
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "401": {
+          "$ref": "#/components/responses/Unauthenticated"
+        },
+        "404": {
+          "$ref": "#/components/responses/NotFound"
+        },
+        "422": {
+          "$ref": "#/components/responses/ValidationError"
+        }
+      },
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "amount": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "inspection_id": {
+                  "type": "integer",
+                  "description": "An inspection of this issue."
+                }
+              },
+              "required": [
+                "amount"
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/approvals": {
+    "post": {
+      "tags": [
+        "Issue Workflow"
+      ],
+      "summary": "Record the approval decision (→ in_review)",
+      "operationId": "recordApproval",
+      "description": "Allowed in in_review, inspection, waiting_approval. Records amount, level (from the amount), decision, approver_name, note; files (the approval screenshot) go on the approval. next_action becomes \"Schedule the work\" (approved) or \"Find another option\" (rejected).",
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Store"
+        },
+        {
+          "$ref": "#/components/parameters/Ticket"
+        },
+        {
+          "$ref": "#/components/parameters/TicketIssue"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "The issue, after the step",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "data"
+                ],
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "401": {
+          "$ref": "#/components/responses/Unauthenticated"
+        },
+        "404": {
+          "$ref": "#/components/responses/NotFound"
+        },
+        "422": {
+          "$ref": "#/components/responses/ValidationError"
+        }
+      },
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "amount": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "decision": {
+                  "type": "string",
+                  "enum": [
+                    "approved",
+                    "rejected"
+                  ]
+                },
+                "approver_name": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string"
+                },
+                "inspection_id": {
+                  "type": "integer"
+                },
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "description": "Multipart only."
+                }
+              },
+              "required": [
+                "amount",
+                "decision",
+                "approver_name"
+              ]
+            }
+          },
+          "multipart/form-data": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "amount": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "decision": {
+                  "type": "string",
+                  "enum": [
+                    "approved",
+                    "rejected"
+                  ]
+                },
+                "approver_name": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string"
+                },
+                "inspection_id": {
+                  "type": "integer"
+                },
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "description": "Multipart only."
+                }
+              },
+              "required": [
+                "amount",
+                "decision",
+                "approver_name"
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/schedule": {
+    "post": {
+      "tags": [
+        "Issue Workflow"
+      ],
+      "summary": "Schedule the work (→ scheduled)",
+      "operationId": "scheduleWork",
+      "description": "Allowed in new, in_review, inspection, scheduled (more work). Creates a kind=work schedule (time on the schedule), puts the technician on the issue and the issue on his trip for that date. trip_link only when a new trip was created.",
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Store"
+        },
+        {
+          "$ref": "#/components/parameters/Ticket"
+        },
+        {
+          "$ref": "#/components/parameters/TicketIssue"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "The issue, after the step",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "data"
+                ],
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                    "additionalProperties": true
+                  },
+                  "trip_link": {
+                    "type": "object",
+                    "description": "Only when this call CREATED a trip: its link's plain token, shown this once (only its hash is stored). Pass it on to the technician.",
+                    "properties": {
+                      "url_token": {
+                        "type": "string",
+                        "minLength": 40,
+                        "maxLength": 40
+                      },
+                      "expires_after_hours": {
+                        "type": "integer",
+                        "description": "The trip's link_idle_hours: the link dies after this long without use."
+                      },
+                      "trip_id": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "url_token",
+                      "expires_after_hours",
+                      "trip_id"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "401": {
+          "$ref": "#/components/responses/Unauthenticated"
+        },
+        "404": {
+          "$ref": "#/components/responses/NotFound"
+        },
+        "422": {
+          "$ref": "#/components/responses/ValidationError"
+        }
+      },
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "technician_id": {
+                  "type": "integer"
+                },
+                "date": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "time": {
+                  "type": "string",
+                  "pattern": "^\\d{2}:\\d{2}$",
+                  "example": "09:30"
+                },
+                "expected_completion_date": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "instructions": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "technician_id",
+                "date"
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/schedules/{assignment}/move": {
+    "post": {
+      "tags": [
+        "Issue Workflow"
+      ],
+      "summary": "Move a booking",
+      "operationId": "moveSchedule",
+      "description": "Writes an assignment delay (old date/time, new, reason). When the DAY changes, the issue leaves the old trip (pending tasks only; an empty untouched stop is removed) and goes on the technician's trip for the new day; an inspection booking moves its inspection too. Status unchanged. Refused for a mistaken booking, a closed/cancelled issue, or no change (errors.date).",
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Store"
+        },
+        {
+          "$ref": "#/components/parameters/Ticket"
+        },
+        {
+          "$ref": "#/components/parameters/TicketIssue"
+        },
+        {
+          "name": "assignment",
+          "in": "path",
+          "required": true,
+          "description": "A schedule of this issue (scoped).",
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "The issue, after the step",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "data"
+                ],
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                    "additionalProperties": true
+                  },
+                  "trip_link": {
+                    "type": "object",
+                    "description": "Only when this call CREATED a trip: its link's plain token, shown this once (only its hash is stored). Pass it on to the technician.",
+                    "properties": {
+                      "url_token": {
+                        "type": "string",
+                        "minLength": 40,
+                        "maxLength": 40
+                      },
+                      "expires_after_hours": {
+                        "type": "integer",
+                        "description": "The trip's link_idle_hours: the link dies after this long without use."
+                      },
+                      "trip_id": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "url_token",
+                      "expires_after_hours",
+                      "trip_id"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "401": {
+          "$ref": "#/components/responses/Unauthenticated"
+        },
+        "404": {
+          "$ref": "#/components/responses/NotFound"
+        },
+        "422": {
+          "$ref": "#/components/responses/ValidationError"
+        }
+      },
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "date": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "time": {
+                  "type": "string",
+                  "pattern": "^\\d{2}:\\d{2}$",
+                  "example": "09:30"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "date",
+                "reason"
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/work-done": {
+    "post": {
+      "tags": [
+        "Issue Workflow"
+      ],
+      "summary": "Record the work done (scheduled → work_done)",
+      "operationId": "recordWorkDone",
+      "description": "Allowed in scheduled, inspection. work_performed, before/after photos (files, on the issue), optional warranty {body, expiry_date}. Pending work tasks on trips are marked done.",
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Store"
+        },
+        {
+          "$ref": "#/components/parameters/Ticket"
+        },
+        {
+          "$ref": "#/components/parameters/TicketIssue"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "The issue, after the step",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "data"
+                ],
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "401": {
+          "$ref": "#/components/responses/Unauthenticated"
+        },
+        "404": {
+          "$ref": "#/components/responses/NotFound"
+        },
+        "422": {
+          "$ref": "#/components/responses/ValidationError"
+        }
+      },
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "work_performed": {
+                  "type": "string"
+                },
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "description": "Multipart only."
+                },
+                "warranty": {
+                  "type": "object",
+                  "properties": {
+                    "body": {
+                      "type": "string"
+                    },
+                    "expiry_date": {
+                      "type": "string",
+                      "format": "date"
+                    }
+                  }
+                }
+              },
+              "required": [
+                "work_performed"
+              ]
+            }
+          },
+          "multipart/form-data": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "work_performed": {
+                  "type": "string"
+                },
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "description": "Multipart only."
+                },
+                "warranty": {
+                  "type": "object",
+                  "properties": {
+                    "body": {
+                      "type": "string"
+                    },
+                    "expiry_date": {
+                      "type": "string",
+                      "format": "date"
+                    }
+                  }
+                }
+              },
+              "required": [
+                "work_performed"
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/confirmation": {
+    "post": {
+      "tags": [
+        "Issue Workflow"
+      ],
+      "summary": "Record whether it works now",
+      "operationId": "recordConfirmation",
+      "description": "Allowed in work_done. Records store_confirmed_* (via store, the default, or specialist). working=false → in_review with next_action \"Schedule more work\". The note is added to the issue.",
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Store"
+        },
+        {
+          "$ref": "#/components/parameters/Ticket"
+        },
+        {
+          "$ref": "#/components/parameters/TicketIssue"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "The issue, after the step",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "data"
+                ],
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "401": {
+          "$ref": "#/components/responses/Unauthenticated"
+        },
+        "404": {
+          "$ref": "#/components/responses/NotFound"
+        },
+        "422": {
+          "$ref": "#/components/responses/ValidationError"
+        }
+      },
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "working": {
+                  "type": "boolean"
+                },
+                "note": {
+                  "type": "string"
+                },
+                "via": {
+                  "type": "string",
+                  "enum": [
+                    "store",
+                    "specialist"
+                  ]
+                }
+              },
+              "required": [
+                "working"
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/close": {
+    "post": {
+      "tags": [
+        "Issue Workflow"
+      ],
+      "summary": "Close the issue (→ closed)",
+      "operationId": "closeIssue",
+      "description": "Allowed in any open status. Checklist: resolved (store confirmed working), cost_recorded (a live payment line on the issue), invoice_attached (a linked live payment has a file), notes_completed (work_performed) -- all exempt for fixed_by_troubleshooting / not_needed. Anything missing → 422 errors.status (what is missing) + errors.checklist (the keys), unless override_reason is given (kept in the status change reason). final_note / what_we_learned become typed notes (final_notes / what_we_learned) on the issue.",
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Store"
+        },
+        {
+          "$ref": "#/components/parameters/Ticket"
+        },
+        {
+          "$ref": "#/components/parameters/TicketIssue"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "The issue, after the step",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "data"
+                ],
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "401": {
+          "$ref": "#/components/responses/Unauthenticated"
+        },
+        "404": {
+          "$ref": "#/components/responses/NotFound"
+        },
+        "422": {
+          "$ref": "#/components/responses/ValidationError"
+        }
+      },
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "resolution": {
+                  "type": "string",
+                  "enum": [
+                    "repaired",
+                    "fixed_by_troubleshooting",
+                    "not_needed",
+                    "replaced"
+                  ]
+                },
+                "final_note": {
+                  "type": "string"
+                },
+                "what_we_learned": {
+                  "type": "string"
+                },
+                "override_reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "resolution"
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/jump": {
+    "post": {
+      "tags": [
+        "Issue Workflow"
+      ],
+      "summary": "Change the status by hand",
+      "operationId": "jumpIssueStatus",
+      "description": "The escape hatch: any status → any status, reason required, logged as \"Changed by hand: <reason>\". Jumping to the status it already has → 422.",
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Store"
+        },
+        {
+          "$ref": "#/components/parameters/Ticket"
+        },
+        {
+          "$ref": "#/components/parameters/TicketIssue"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "The issue, after the step",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "data"
+                ],
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments, purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "401": {
+          "$ref": "#/components/responses/Unauthenticated"
+        },
+        "404": {
+          "$ref": "#/components/responses/NotFound"
+        },
+        "422": {
+          "$ref": "#/components/responses/ValidationError"
+        }
+      },
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "$ref": "#/components/schemas/IssueStatus"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status",
+                "reason"
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "/maintenance-settings": {
+    "get": {
+      "tags": [
+        "Settings"
+      ],
+      "summary": "Maintenance settings",
+      "operationId": "getMaintenanceSettings",
+      "description": "Approval thresholds and how long an idle trip link lives. Defaults: specialist < 300, manager < 1000, management above; 48 hours.",
+      "responses": {
+        "200": {
+          "description": "The settings in force (defaults where nothing is stored)",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "approval_levels": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "max": {
+                              "type": "string",
+                              "nullable": true,
+                              "description": "Exclusive upper bound (2-decimal string); null = no limit (last level only)."
+                            },
+                            "level": {
+                              "type": "string"
+                            },
+                            "label": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "trip_link_idle_hours": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 720
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "401": {
+          "$ref": "#/components/responses/Unauthenticated"
+        }
+      }
+    },
+    "put": {
+      "tags": [
+        "Settings"
+      ],
+      "summary": "Change maintenance settings",
+      "operationId": "updateMaintenanceSettings",
+      "description": "Each key optional. approval_levels replaces the list: lowest first, each {level (a-z0-9_), label, max}, maxes rising, only the last with max null.",
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "approval_levels": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "level",
+                      "label",
+                      "max"
+                    ],
+                    "properties": {
+                      "level": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "max": {
+                        "type": "number",
+                        "nullable": true
+                      }
+                    }
+                  }
+                },
+                "trip_link_idle_hours": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 720
+                }
+              }
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "The settings in force (defaults where nothing is stored)",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "approval_levels": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "max": {
+                              "type": "string",
+                              "nullable": true,
+                              "description": "Exclusive upper bound (2-decimal string); null = no limit (last level only)."
+                            },
+                            "level": {
+                              "type": "string"
+                            },
+                            "label": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "trip_link_idle_hours": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 720
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "401": {
+          "$ref": "#/components/responses/Unauthenticated"
+        },
+        "422": {
+          "$ref": "#/components/responses/ValidationError"
+        }
+      }
+    }
+  }
+}

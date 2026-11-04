@@ -2,11 +2,10 @@
 
 namespace App\Services;
 
-use App\Enums\PartUsagePayer;
 use App\Enums\StockMovementType;
 use App\Exceptions\InsufficientStockException;
 use App\Models\Part;
-use App\Models\PartUsage;
+use App\Models\PartUnit;
 use App\Models\StockBalance;
 use App\Models\StockBalancePlace;
 use App\Models\StockMovement;
@@ -27,8 +26,8 @@ use Illuminate\Validation\ValidationException;
  *     balance(part, location) = SUM(quantity * direction) over ALL lines
  *
  * unfiltered — `stock_movements.mistaken` is an audit flag with no arithmetic
- * effect. A mistake is corrected by writing an equal-and-opposite `reversal`
- * movement. Excluding flagged rows AND writing a reversal would correct the
+ * effect. A mistake is corrected by writing an equal-and-opposite `undone`
+ * movement. Excluding flagged rows AND writing an undo would correct the
  * same error twice, which is why the sum never filters.
  *
  * stock_balances is a cache of that sum, updated inside the same transaction.
@@ -40,11 +39,17 @@ class StockService
     /** Scale used for every quantity calculation. Matches decimal(_, 2). */
     private const SCALE = 2;
 
-    private const MOVEMENT_WITH = [
+    public const MOVEMENT_WITH = [
         'lines.part',
         'lines.storageLocation',
+        'lines.units',
+        'ticketIssue.ticket.store',
+        'ticketIssue.issue',
+        'paymentLine.payment.technician',
+        'paymentLine.payment.supplier',
         'storageLocation',
         'paidByTechnician',
+        'technician',
         'creator',
         'notes.creator',
         'notes.attachments.creator',
@@ -63,7 +68,9 @@ class StockService
      * Record one batch of stock moving, and apply it to the cached balances.
      *
      * @param  array<string, mixed>  $header
-     * @param  array<int, array<string, mixed>>  $lines  part_id, storage_location_id, quantity, direction, unit_cost?
+     * @param  array<int, array<string, mixed>>  $lines  part_id, storage_location_id, quantity, direction, unit_cost?,
+     *                                                serials? (serial numbers of a serial-tracked part, one per piece),
+     *                                                serials_key? (the 422 key for them; default lines.{i}.serials)
      * @param  bool  $allowNegative  Only ever true for reversals — see reverse().
      */
     public function record(array $header, array $lines, bool $allowNegative = false): StockMovement
@@ -100,9 +107,12 @@ class StockService
             $movement->created_by = Auth::id();
             $movement->save();
 
-            foreach ($lines as $line) {
-                $this->applyLine($movement, $line, $balances, $allowNegative);
+            $written = [];
+            foreach ($lines as $i => $line) {
+                $written[$i] = $this->applyLine($movement, $line, $balances, $allowNegative);
             }
+
+            $this->moveUnits($movement, $lines, $written);
 
             return $movement;
         });
@@ -115,7 +125,7 @@ class StockService
      * @param  array<string, mixed>  $line
      * @param  array<string, StockBalance>  $balances
      */
-    private function applyLine(StockMovement $movement, array $line, array $balances, bool $allowNegative): void
+    private function applyLine(StockMovement $movement, array $line, array $balances, bool $allowNegative): StockMovementLine
     {
         $partId = (int) $line['part_id'];
         $locationId = (int) $line['storage_location_id'];
@@ -123,7 +133,7 @@ class StockService
         $quantity = $this->scale($line['quantity']);
         $unitCost = isset($line['unit_cost']) ? (string) $line['unit_cost'] : null;
 
-        StockMovementLine::create([
+        $written = StockMovementLine::create([
             'stock_movement_id' => $movement->id,
             'part_id' => $partId,
             'storage_location_id' => $locationId,
@@ -163,6 +173,206 @@ class StockService
         }
 
         $balance->save();
+
+        return $written;
+    }
+
+    /**
+     * Move the serial-tracked pieces a movement's lines name
+     * (docs/MAINTENANCE.md §5), after its quantities are written:
+     *
+     *   out lines   the units must be in_stock at that line's location;
+     *               used → installed on the movement's ticket issue,
+     *               moved → in transit until an in line of the same move
+     *               takes them, anything else → damaged_lost;
+     *   in lines    bought → new units (carrying the payment line);
+     *               moved → the units this move took out, in_stock here;
+     *               anything else → an existing unit back in stock, or a
+     *               new one.
+     *
+     * Out lines go first, so a move can take a unit out at A and put it in at
+     * B whatever order its lines came in. A refusal is a 422 on the line's
+     * serials and rolls the whole movement back.
+     *
+     * @param  array<int, array<string, mixed>>  $lines
+     * @param  array<int, StockMovementLine>  $written
+     */
+    private function moveUnits(StockMovement $movement, array $lines, array $written): void
+    {
+        $withSerials = array_filter($lines, fn (array $l) => ! empty($l['serials']));
+        if ($withSerials === []) {
+            return;
+        }
+
+        $type = $movement->type instanceof StockMovementType ? $movement->type : StockMovementType::from((string) $movement->type);
+        $inTransit = [];
+        $order = array_merge(
+            array_keys(array_filter($withSerials, fn (array $l) => (int) $l['direction'] < 0)),
+            array_keys(array_filter($withSerials, fn (array $l) => (int) $l['direction'] > 0)),
+        );
+
+        foreach ($order as $i) {
+            $line = $lines[$i];
+            $key = $line['serials_key'] ?? "lines.{$i}.serials";
+            $serials = array_values(array_unique(array_map(fn ($v) => trim((string) $v), (array) $line['serials'])));
+            $partId = (int) $line['part_id'];
+            $locationId = (int) $line['storage_location_id'];
+            $partName = Part::withTrashed()->find($partId)?->name;
+
+            if (bccomp($this->scale($line['quantity']), $this->scale(count($serials)), self::SCALE) !== 0) {
+                throw ValidationException::withMessages([
+                    $key => 'Give one serial number for each piece: '.$this->scale($line['quantity']).' needed, '.count($serials).' given.',
+                ]);
+            }
+
+            $existing = PartUnit::query()->where('part_id', $partId)->whereIn('serial_number', $serials)->get()->keyBy('serial_number');
+            $unitIds = [];
+
+            foreach ($serials as $serial) {
+                $unit = $existing->get($serial);
+
+                if ((int) $line['direction'] < 0) {
+                    if ($unit === null || $unit->status !== 'in_stock' || (int) $unit->storage_location_id !== $locationId) {
+                        $where = StorageLocation::withTrashed()->find($locationId)?->name ?? 'that location';
+
+                        throw ValidationException::withMessages([
+                            $key => "Serial {$serial} of {$partName} is not in stock at {$where}.",
+                        ]);
+                    }
+
+                    $unit->fill(match ($type) {
+                        StockMovementType::Used => [
+                            'status' => 'installed',
+                            'ticket_issue_id' => $movement->ticket_issue_id,
+                            'storage_location_id' => null,
+                            'installed_at' => $movement->moved_at,
+                        ],
+                        StockMovementType::Moved => ['storage_location_id' => null],
+                        default => ['status' => 'damaged_lost'],
+                    })->save();
+
+                    if ($type === StockMovementType::Moved) {
+                        $inTransit[$partId][$serial] = $unit;
+                    }
+                } elseif ($type === StockMovementType::Moved) {
+                    if (! isset($inTransit[$partId][$serial])) {
+                        throw ValidationException::withMessages([
+                            $key => "Serial {$serial} arrives here but leaves nowhere: put it on the line it moves out of too.",
+                        ]);
+                    }
+
+                    $unit = $inTransit[$partId][$serial];
+                    unset($inTransit[$partId][$serial]);
+                    $unit->fill(['status' => 'in_stock', 'storage_location_id' => $locationId])->save();
+                } else {
+                    if ($unit !== null && ($type === StockMovementType::Bought || $unit->status === 'in_stock')) {
+                        throw ValidationException::withMessages([
+                            $key => $unit->status === 'in_stock'
+                                ? "Serial {$serial} of {$partName} is already in stock."
+                                : "Serial {$serial} of {$partName} is already recorded.",
+                        ]);
+                    }
+
+                    $unit ??= new PartUnit([
+                        'part_id' => $partId,
+                        'serial_number' => $serial,
+                        'payment_line_id' => $movement->payment_line_id,
+                        'created_by' => Auth::id(),
+                    ]);
+                    $unit->fill([
+                        'status' => 'in_stock',
+                        'storage_location_id' => $locationId,
+                        'ticket_issue_id' => null,
+                        'installed_at' => null,
+                    ])->save();
+                }
+
+                $unitIds[] = $unit->id;
+            }
+
+            $written[$i]->units()->attach($unitIds);
+        }
+
+        foreach ($inTransit as $serials) {
+            foreach (array_keys($serials) as $serial) {
+                throw ValidationException::withMessages([
+                    'lines' => "Serial {$serial} leaves but arrives nowhere: put it on the line it moves into too.",
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Put back the pieces an undone movement moved (called by reverse()):
+     *
+     *   it took units OUT   → back in stock where they were;
+     *   it brought units IN → a unit it created, still on that shelf, is
+     *       removed (it never existed); one that came from elsewhere goes
+     *       back to what the movement before made it (installed, damaged
+     *       or lost, in stock elsewhere); a unit that has moved on since is
+     *       left where it is.
+     *
+     * In lines are undone before out lines, so undoing a move ends with the
+     * unit back in stock at the place it left.
+     */
+    private function unmoveUnits(StockMovement $original, StockMovement $reversal): void
+    {
+        $original->load('lines.units');
+        $reversalLines = $reversal->lines()->orderBy('id')->get()->values();
+        $pairs = $original->lines->sortBy('id')->values()
+            ->map(fn (StockMovementLine $l, int $i) => [$l, $reversalLines[$i] ?? null])
+            ->filter(fn (array $p) => $p[0]->units->isNotEmpty())
+            ->sortByDesc(fn (array $p) => $p[0]->direction)
+            ->values();
+
+        foreach ($pairs as [$line, $undo]) {
+            foreach ($line->units as $unit) {
+                if ($line->direction < 0) {
+                    $unit->fill([
+                        'status' => 'in_stock',
+                        'storage_location_id' => $line->storage_location_id,
+                        'ticket_issue_id' => null,
+                        'installed_at' => null,
+                    ])->save();
+                    $undo?->units()->syncWithoutDetaching([$unit->id]);
+
+                    continue;
+                }
+
+                if ($unit->status !== 'in_stock' || (int) $unit->storage_location_id !== (int) $line->storage_location_id) {
+                    continue;
+                }
+
+                $previous = StockMovementLine::query()
+                    ->with('movement')
+                    ->whereHas('units', fn (Builder $q) => $q->whereKey($unit->id))
+                    ->where('id', '<', $line->id)
+                    ->orderByDesc('id')
+                    ->first();
+
+                if ($previous === null) {
+                    $unit->delete();
+
+                    continue;
+                }
+
+                if ((int) $previous->stock_movement_id !== (int) $original->id) {
+                    $before = $previous->movement?->type;
+                    $unit->fill(match (true) {
+                        $previous->direction < 0 && $before === StockMovementType::Used => [
+                            'status' => 'installed',
+                            'storage_location_id' => null,
+                            'ticket_issue_id' => $previous->movement->ticket_issue_id,
+                            'installed_at' => $previous->movement->moved_at,
+                        ],
+                        $previous->direction < 0 => ['status' => 'damaged_lost', 'storage_location_id' => $previous->storage_location_id],
+                        default => ['status' => 'in_stock', 'storage_location_id' => $previous->storage_location_id],
+                    })->save();
+                }
+
+                $undo?->units()->syncWithoutDetaching([$unit->id]);
+            }
+        }
     }
 
     /**
@@ -193,80 +403,6 @@ class StockService
         return $rows->keyBy(fn (StockBalance $b) => $this->key($b->part_id, $b->storage_location_id))->all();
     }
 
-    // ------------------------------------------------------- Part usage hooks
-
-    /**
-     * A part taken off our shelf for a job: stock goes down. Rejects (and rolls
-     * back the part usage with it) when there is not enough.
-     */
-    public function drawForPartUsage(PartUsage $usage): ?StockMovement
-    {
-        if (! $usage->drawsFromStorage()) {
-            return null;
-        }
-
-        return $this->record([
-            'moved_at' => $usage->created_at ?? now(),
-            'type' => StockMovementType::Draw,
-            'storage_location_id' => $usage->storage_location_id,
-            'paid_by' => $usage->paid_by,
-            'paid_by_technician_id' => $usage->paid_by_technician_id,
-            'part_usage_id' => $usage->id,
-        ], [[
-            'part_id' => $usage->part_id,
-            'storage_location_id' => $usage->storage_location_id,
-            'quantity' => $usage->quantity,
-            'direction' => -1,
-            'unit_cost' => $usage->unit_cost,
-        ]]);
-    }
-
-    /**
-     * Parts bought for a job but not all used, handed back to a shelf: stock
-     * goes up. Note the asymmetry with drawForPartUsage() — a `purchased`
-     * usage with a return writes only this inbound movement, because those
-     * parts are entering inventory for the first time. The ledger stays
-     * literal about what physically moved.
-     */
-    public function returnForPartUsage(PartUsage $usage): ?StockMovement
-    {
-        if (! $usage->returnsToStorage()) {
-            return null;
-        }
-
-        return $this->record([
-            'moved_at' => $usage->created_at ?? now(),
-            'type' => StockMovementType::Return,
-            'storage_location_id' => $usage->returned_to_storage_location_id,
-            'paid_by' => $usage->paid_by,
-            'paid_by_technician_id' => $usage->paid_by_technician_id,
-            'part_usage_id' => $usage->id,
-        ], [[
-            'part_id' => $usage->part_id,
-            'storage_location_id' => $usage->returned_to_storage_location_id,
-            'quantity' => $usage->returned_quantity,
-            'direction' => 1,
-            'unit_cost' => $usage->unit_cost,
-        ]]);
-    }
-
-    /**
-     * Undo every movement a part usage generated, because the usage was marked
-     * mistaken. Idempotent: a movement that already has a reversal is skipped.
-     *
-     * @return array<int, StockMovement>
-     */
-    public function reverseForPartUsage(PartUsage $usage): array
-    {
-        return $usage->stockMovements()
-            ->whereDoesntHave('reversal')
-            ->where('type', '!=', StockMovementType::Reversal->value)
-            ->with('lines')
-            ->get()
-            ->map(fn (StockMovement $m) => $this->reverse($m))
-            ->all();
-    }
-
     /**
      * Write the equal-and-opposite of a movement. The original is left exactly
      * as it was and flagged `mistaken` for display.
@@ -277,8 +413,7 @@ class StockService
             $movement->loadMissing('lines');
 
             // Already reversed: hand back the reversal that exists rather than
-            // writing a second one. reverseForPartUsage() has always guarded
-            // this way; the controller path did not, so pressing "mistaken"
+            // writing a second one. Without this guard, pressing "mistaken"
             // twice wrote two opposite movements and took the balance past zero
             // in the other direction.
             $existing = StockMovement::query()
@@ -290,11 +425,14 @@ class StockService
 
             $reversal = $this->record([
                 'moved_at' => now(),
-                'type' => StockMovementType::Reversal,
+                'type' => StockMovementType::Undone,
                 'storage_location_id' => $movement->storage_location_id,
                 'paid_by' => $movement->paid_by,
                 'paid_by_technician_id' => $movement->paid_by_technician_id,
-                'part_usage_id' => $movement->part_usage_id,
+                'technician_id' => $movement->technician_id,
+                'payment_line_id' => $movement->payment_line_id,
+                'ticket_issue_id' => $movement->ticket_issue_id,
+                'stock_count_id' => $movement->stock_count_id,
                 'reverses_stock_movement_id' => $movement->id,
                 'body' => "Reverses movement #{$movement->id}.",
             ], $movement->lines->map(fn (StockMovementLine $l) => [
@@ -310,6 +448,8 @@ class StockService
                 // allowed to go negative; stock:reconcile reports it. This is
                 // the ONLY place allowNegative is true.
                 allowNegative: true);
+
+            $this->unmoveUnits($movement, $reversal);
 
             $movement->update(['mistaken' => true]);
 
@@ -347,6 +487,18 @@ class StockService
 
         if (! empty($filters['paid_by_technician_ids'])) {
             $query->whereIn('paid_by_technician_id', array_filter((array) $filters['paid_by_technician_ids']));
+        }
+
+        if (! empty($filters['ticket_issue_ids'])) {
+            $query->whereIn('ticket_issue_id', array_filter((array) $filters['ticket_issue_ids']));
+        }
+
+        if (! empty($filters['stock_count_id'])) {
+            $query->where('stock_count_id', (int) $filters['stock_count_id']);
+        }
+
+        if (! empty($filters['payment_id'])) {
+            $query->whereIn('payment_line_id', DB::table('payment_lines')->where('payment_id', (int) $filters['payment_id'])->select('id'));
         }
 
         if (! empty($filters['moved_from'])) {
@@ -914,6 +1066,41 @@ class StockService
     }
 
     /**
+     * The average cost of one piece of each part at one location: the FIFO
+     * value there divided by the quantity there. Where that location holds
+     * nothing to average (none on hand, or no price), the part's average
+     * across all locations, then the last price paid, then null.
+     *
+     * @param  list<int>  $partIds
+     * @return array<int, string|null>  keyed by part id, 4 decimals
+     */
+    public function averageCosts(array $partIds, int $locationId): array
+    {
+        $valuation = $this->valuePartsFifo($partIds);
+        $out = [];
+
+        foreach (array_values(array_unique(array_map('intval', $partIds))) as $partId) {
+            $part = $valuation[$partId] ?? null;
+            $cost = $this->averageUnitCost($part['locations'][$locationId] ?? null)
+                ?? $this->averageUnitCost($part);
+
+            if ($cost === null || bccomp($cost, '0', 4) < 0) {
+                $last = DB::table('stock_movement_lines')
+                    ->where('part_id', $partId)
+                    ->where('direction', 1)
+                    ->whereNotNull('unit_cost')
+                    ->orderByDesc('id')
+                    ->value('unit_cost');
+                $cost = $last === null ? null : number_format((float) $last, 4, '.', '');
+            }
+
+            $out[$partId] = $cost;
+        }
+
+        return $out;
+    }
+
+    /**
      * What we have paid for this part, and when.
      *
      * The honest answer to "what does this cost us" once the price has moved:
@@ -983,19 +1170,38 @@ class StockService
                 'value' => $movement->type->value,
                 'label' => $movement->type->label(),
             ],
+            'type_label' => $movement->type->label(),
             'storage_location_id' => $movement->storage_location_id,
             'storage_location' => $movement->relationLoaded('storageLocation') && $movement->storageLocation
                 ? $this->locations->present($movement->storageLocation)
                 : null,
-            'paid_by' => $movement->paid_by
-                ? ['value' => $movement->paid_by->value, 'label' => $movement->paid_by->label()]
-                : null,
+            // v1 history only: who paid, on movements converted from part usages.
+            'paid_by' => $movement->paid_by,
             'paid_by_technician_id' => $movement->paid_by_technician_id,
             'paid_by_technician' => $movement->relationLoaded('paidByTechnician') && $movement->paidByTechnician
                 ? $this->catalog->presentTechnician($movement->paidByTechnician)
                 : null,
+            // Who did it (took, moved, returned the parts), when recorded.
+            'technician' => $movement->relationLoaded('technician') && $movement->technician
+                ? ['id' => $movement->technician->id, 'name' => $movement->technician->name]
+                : null,
             'body' => $movement->body,
-            'part_usage_id' => $movement->part_usage_id,
+            'payment_line_id' => $movement->payment_line_id,
+            'ticket_issue_id' => $movement->ticket_issue_id,
+            // The issue the parts were used on (used), when there is one.
+            'ticket_issue' => $movement->relationLoaded('ticketIssue') && $movement->ticketIssue ? [
+                'id' => $movement->ticketIssue->id,
+                'ticket_id' => $movement->ticketIssue->ticket_id,
+                'title' => $movement->ticketIssue->displayTitle(),
+                'store_number' => $movement->ticketIssue->ticket?->store?->store_number ?? $movement->ticketIssue->ticket?->other_store,
+            ] : null,
+            // The payment that bought them (bought, and its undo).
+            'payment' => $movement->relationLoaded('paymentLine') && $movement->paymentLine?->payment ? [
+                'id' => $movement->paymentLine->payment->id,
+                'paid_at' => $movement->paymentLine->payment->paid_at?->toDateString(),
+                'paid_to' => $movement->paymentLine->payment->paidTo(),
+            ] : null,
+            'stock_count_id' => $movement->stock_count_id,
             'reverses_stock_movement_id' => $movement->reverses_stock_movement_id,
             'mistaken' => $movement->mistaken,
             'lines' => $movement->relationLoaded('lines')
@@ -1039,6 +1245,10 @@ class StockService
             'signed_quantity' => bcmul($this->scale($line->quantity), (string) $line->direction, self::SCALE),
             'unit_cost' => $line->unit_cost,
             'total_cost' => $line->total_cost,
+            // The serial numbers of the pieces this line moved (serial-tracked parts).
+            'serials' => $line->relationLoaded('units')
+                ? $line->units->pluck('serial_number')->sort()->values()->all()
+                : [],
         ];
     }
 
@@ -1104,10 +1314,12 @@ class StockService
      *
      * A LIST rather than a map, because the order is the address: "C / 8 / 5"
      * only means shelf-row-column if it comes out in that order every time.
+     * Public so a payment's storage lines show the same address
+     * (PaymentService::placesOf).
      *
      * @return array<int, array<string, mixed>>
      */
-    private function presentPlace(StockBalance $balance): array
+    public function presentPlace(StockBalance $balance): array
     {
         if (! $balance->relationLoaded('places')) {
             return [];

@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\DailyPayEntry;
 use App\Models\Part;
 use App\Models\Store;
 use App\Models\Technician;
@@ -101,7 +100,8 @@ class MigrationBackfillTest extends TestCase
     {
         $this->reopenPaymentColumn();
 
-        $entry = DailyPayEntry::create(['date' => '2026-09-01']);
+        // Raw rows: the v1 models are gone, the v1 tables stay until a later cleanup.
+        $entryId = DB::table('daily_pay_entries')->insertGetId(['date' => '2026-09-01', 'created_at' => now(), 'updated_at' => now()]);
         $technicianA = Technician::factory()->create();
         $technicianB = Technician::factory()->create();
         $storeA = Store::factory()->create();
@@ -117,7 +117,7 @@ class MigrationBackfillTest extends TestCase
 
         foreach ($rows as $row) {
             $ids[] = DB::table('daily_pay_lines')->insertGetId($row + [
-                'daily_pay_entry_id' => $entry->id,
+                'daily_pay_entry_id' => $entryId,
                 'daily_pay_payment_id' => null,
                 'hours_overridden' => false,
                 'created_at' => now(),

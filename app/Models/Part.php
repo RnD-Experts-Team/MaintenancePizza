@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasNotesAndAttachments;
+use App\Models\Concerns\HasUniqueName;
 use Database\Factories\PartFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,23 +11,46 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * A part in the catalog, with what people look for on a shelf (brand,
+ * model, part number, the unit it is counted in). With `track_serials` on,
+ * every piece is its own PartUnit; otherwise it is counted by quantity.
+ */
 class Part extends Model
 {
     /** @use HasFactory<PartFactory> */
-    use HasFactory, HasNotesAndAttachments, SoftDeletes;
+    use HasFactory, HasNotesAndAttachments, HasUniqueName, SoftDeletes;
 
-    protected $fillable = ['name', 'description'];
+    public const UNITS = ['each', 'box', 'pack', 'ft', 'm', 'gal', 'l', 'kg', 'lb', 'set'];
 
-    /** @return HasMany<PartUsage, $this> */
-    public function partUsages(): HasMany
+    protected $fillable = ['name', 'description', 'brand', 'model', 'part_number', 'unit', 'track_serials'];
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
     {
-        return $this->hasMany(PartUsage::class);
+        return [
+            'track_serials' => 'boolean',
+        ];
     }
 
     /** @return HasMany<StockBalance, $this> */
     public function stockBalances(): HasMany
     {
         return $this->hasMany(StockBalance::class);
+    }
+
+    /** @return HasMany<PartUnit, $this> */
+    public function units(): HasMany
+    {
+        return $this->hasMany(PartUnit::class);
+    }
+
+    /** @return HasMany<PaymentLine, $this> */
+    public function paymentLines(): HasMany
+    {
+        return $this->hasMany(PaymentLine::class);
     }
 
     /**

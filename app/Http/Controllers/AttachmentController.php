@@ -4,13 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreAttachmentRequest;
 use App\Models\Assignment;
-use App\Models\AttendanceEntry;
 use App\Models\Category;
-use App\Models\Diagnosis;
 use App\Models\Issue;
 use App\Models\Part;
-use App\Models\PartUsage;
-use App\Models\PayEntry;
 use App\Models\StockMovement;
 use App\Models\Store;
 use App\Models\StorageLocation;
@@ -40,26 +36,6 @@ class AttachmentController extends Controller
     public function ticketIssue(StoreAttachmentRequest $request, Store $store, Ticket $ticket, TicketIssue $ticketIssue): JsonResponse
     {
         return $this->make($request, $ticketIssue);
-    }
-
-    public function diagnosis(StoreAttachmentRequest $request, Store $store, Ticket $ticket, Diagnosis $diagnosis): JsonResponse
-    {
-        return $this->make($request, $diagnosis);
-    }
-
-    public function attendance(StoreAttachmentRequest $request, Store $store, Ticket $ticket, AttendanceEntry $attendanceEntry): JsonResponse
-    {
-        return $this->make($request, $attendanceEntry);
-    }
-
-    public function partUsage(StoreAttachmentRequest $request, Store $store, Ticket $ticket, PartUsage $partUsage): JsonResponse
-    {
-        return $this->make($request, $partUsage);
-    }
-
-    public function payEntry(StoreAttachmentRequest $request, Store $store, Ticket $ticket, PayEntry $payEntry): JsonResponse
-    {
-        return $this->make($request, $payEntry);
     }
 
     public function warranty(StoreAttachmentRequest $request, Store $store, Ticket $ticket, Warranty $warranty): JsonResponse

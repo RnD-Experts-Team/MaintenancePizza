@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Enums\IssueStatus;
 use App\Models\Issue;
 use App\Models\MaintenanceOutboxEvent;
 use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\TicketIssue;
+use App\Services\TicketStatusService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Queue;
@@ -57,12 +59,13 @@ class TicketUpdateNotificationsTest extends TestCase
             ->all();
     }
 
+    /**
+     * Move the issue as a workflow step would (the workflow actions all end in
+     * TicketStatusService::changeIssueStatus).
+     */
     private function setStatus(string $status): void
     {
-        $this->postJson("/api/stores/{$this->store->store_number}/tickets/{$this->ticket->id}/issues/status", [
-            'ticket_issue_ids' => [$this->oven->id],
-            'status' => $status,
-        ], $this->headers())->assertSuccessful();
+        TicketStatusService::changeIssueStatus($this->oven->fresh(), IssueStatus::from($status));
     }
 
     public function test_opening_a_ticket_is_not_an_update(): void
@@ -74,9 +77,9 @@ class TicketUpdateNotificationsTest extends TestCase
 
     public function test_changes_go_out_once_grouped_to_the_store_managers(): void
     {
-        $this->setStatus('assigned');
+        $this->setStatus('in_review');
         $this->travel(1)->minutes();
-        $this->setStatus('in_progress');
+        $this->setStatus('scheduled');
         $this->postJson("/api/stores/{$this->store->store_number}/tickets/{$this->ticket->id}/notes", [
             'body' => 'Tech is on the way',
             'files' => [UploadedFile::fake()->create('quote.pdf', 10)],
@@ -92,7 +95,7 @@ class TicketUpdateNotificationsTest extends TestCase
         $this->assertSame(['Store Manager'], $data['roles']);
         $this->assertSame(['03795-00001'], $data['stores']);
         $this->assertSame("Ticket #{$this->ticket->id} for Store 03795-00001 was updated", $data['payload']['title']);
-        $this->assertSame('Oven: Pending → In Progress · 1 new note, 1 new file', $data['payload']['body']);
+        $this->assertSame('Oven: New → Scheduled · 1 new note, 1 new file', $data['payload']['body']);
         $this->assertSame("/dashboard/maintenance-tickets/{$this->ticket->id}?store=03795-00001", $data['payload']['action_url']);
 
         // Told: nothing goes out again until something else changes.
@@ -100,18 +103,18 @@ class TicketUpdateNotificationsTest extends TestCase
         $this->artisan('tickets:send-update-notifications')->assertSuccessful();
         $this->assertCount(1, $this->updates());
 
-        $this->setStatus('complete');
+        $this->setStatus('closed');
         $this->travel(1)->minutes();
         $this->artisan('tickets:send-update-notifications')->assertSuccessful();
 
         $updates = $this->updates();
         $this->assertCount(2, $updates);
-        $this->assertSame('Oven: In Progress → Complete', $updates[1]->payload['data']['payload']['body']);
+        $this->assertSame('Oven: Scheduled → Closed', $updates[1]->payload['data']['payload']['body']);
     }
 
     public function test_only_recently_changed_tickets_are_looked_at(): void
     {
-        $this->setStatus('complete');
+        $this->setStatus('closed');
 
         // The scheduler was down for two days: that change is stale, let go.
         $this->travel(2)->days();
@@ -148,5 +151,20 @@ class TicketUpdateNotificationsTest extends TestCase
         $this->artisan('tickets:send-update-notifications')->assertSuccessful();
 
         $this->assertSame('1 new note', $this->updates()[0]->payload['data']['payload']['body']);
+    }
+
+    public function test_an_open_question_from_the_office_goes_first(): void
+    {
+        $this->postJson("/api/stores/{$this->store->store_number}/tickets/{$this->ticket->id}/issues/{$this->oven->id}/info-requests", [
+            'question' => 'Is the pilot light on?',
+        ], $this->headers())->assertOk();
+        $this->travel(1)->minutes();
+
+        $this->artisan('tickets:send-update-notifications')->assertSuccessful();
+
+        $this->assertSame(
+            'Oven: the office asks "Is the pilot light on?" · Oven: New → Waiting on store',
+            $this->updates()[0]->payload['data']['payload']['body'],
+        );
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\AssignPriorityRequest;
+use App\Http\Requests\TicketIssueLookupRequest;
 use App\Http\Requests\UpdateTicketIssueRequest;
 use App\Models\Store;
 use App\Models\Ticket;
@@ -16,6 +17,15 @@ class TicketIssueController extends Controller
         private TicketIssueService $issues,
         private TicketService $tickets,
     ) {}
+
+    /**
+     * The issue pickers (`GET ticket-issues`): a light row per issue across
+     * every store, filtered by search, store and status.
+     */
+    public function lookup(TicketIssueLookupRequest $request)
+    {
+        return ['data' => $this->issues->lookup($request->validated())];
+    }
 
     /**
      * List every issue of a ticket with its full workflow history.

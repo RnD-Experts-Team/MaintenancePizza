@@ -8,94 +8,40 @@ use App\Models\IssueStatusChange;
 use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\TicketIssue;
+use App\Models\Trip;
+use App\Models\Warranty;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * Issue-level lifecycle: the full "one look" listing/detail, status changes
- * (with history), deferral (spawns a child), attaching technicians, and the
- * validation helper that confirms issues belong to a ticket.
+ * Issue-level reads and the few direct edits left after the workflow moved
+ * into its own actions (docs/MAINTENANCE.md §2): the full read (presented
+ * by TicketIssuePresenter), re-linking, the assigned priority, cancelling,
+ * the store history of a catalog issue, and the checks that records belong
+ * to a ticket.
  */
 class TicketIssueService
 {
-    /**
-     * Eager loads for the full per-issue history.
-     *
-     * @var list<string>
-     */
-    private array $detailWith = [
-        'issue',
-        'parent',
-        'children',
-        'creator',
-        'statusChanges.creator',
-        'notes.creator',
-        'notes.attachments.creator',
-        'attachments.creator',
-        'diagnoses.creator',
-        'diagnoses.attachments.creator',
-        'diagnoses.notes.creator',
-        'diagnoses.notes.attachments.creator',
-        'attendanceEntries.creator',
-        // Without this every session reaches the ticket page with events: [],
-        // which reads as "nothing recorded" -- the stream shows nothing and a
-        // still-open session is indistinguishable from a closed one.
-        'attendanceEntries.events',
-        'attendanceEntries.dailyPayPayments.entry',
-        'attendanceEntries.dailyPayPayments.technician',
-        'attendanceEntries.technician',
-        'attendanceEntries.attachments.creator',
-        'attendanceEntries.notes.creator',
-        'attendanceEntries.notes.attachments.creator',
-        'dailyPayLines',
-        'partUsages.creator',
-        'partUsages.dailyPayPayments.entry',
-        'partUsages.dailyPayPayments.technician',
-        'partUsages.part',
-        'partUsages.paidByTechnician',
-        'partUsages.storageLocation',
-        'partUsages.returnedToStorageLocation',
-        'partUsages.stockMovements',
-        'partUsages.attachments.creator',
-        'partUsages.notes.creator',
-        'partUsages.notes.attachments.creator',
-        'payEntries.creator',
-        'payEntries.technician',
-        'payEntries.attachments.creator',
-        'payEntries.notes.creator',
-        'payEntries.notes.attachments.creator',
-        'warranties.creator',
-        'warranties.attachments.creator',
-        'warranties.notes.creator',
-        'warranties.notes.attachments.creator',
-        'assignments.creator',
-        'assignments.delays.creator',
-        'assignments.attachments.creator',
-        'assignments.notes.creator',
-        'assignments.notes.attachments.creator',
-        'technicians.creator',
-    ];
-
     public function __construct(
-        private WorkflowRecordService $workflow,
-        private AssignmentService $assignments,
         private CatalogService $catalog,
-        private NoteService $notes,
-        private AttachmentService $attachments,
+        private TicketIssuePresenter $presenter,
+        private IssueWorkflowService $workflow,
     ) {
     }
 
     /**
+     * Every issue of a ticket, each with its full read (one eager load for
+     * all of them).
+     *
      * @return array<int, array<string, mixed>>
      */
     public function index(Ticket $ticket): array
     {
-        return $ticket->ticketIssues()->with($this->detailWith)->get()
-            ->map(fn(TicketIssue $i) => $this->present($i))->all();
+        return $ticket->ticketIssues()->orderBy('id')->with(TicketIssuePresenter::with())->get()
+            ->map(fn (TicketIssue $i) => $this->present($i))->all();
     }
 
     /**
@@ -103,56 +49,32 @@ class TicketIssueService
      */
     public function show(TicketIssue $ticketIssue): array
     {
-        return $this->present($ticketIssue->load($this->detailWith));
+        $fresh = TicketIssue::query()->whereKey($ticketIssue->id)->with(TicketIssuePresenter::with())->firstOrFail();
+
+        return $this->present($fresh);
     }
 
     /**
-     * Apply a status to one or many issues (the ticket status then derives).
+     * The body every workflow action answers with: the issue's full read,
+     * plus `trip_link` when the action created a trip -- its plain token is
+     * shown this once and never again (only its hash is stored), so the
+     * dashboard must pass it on to the technician now.
      *
-     * @param  array<int>  $ticketIssueIds
-     * @return array<int, array<string, mixed>>
+     * @return array{data: array<string, mixed>, trip_link?: array{url_token: string, expires_after_hours: int, trip_id: int}}
      */
-    public function changeStatuses(Ticket $ticket, array $ticketIssueIds, string $status): array
+    public function respond(TicketIssue $issue, ?string $token = null, ?Trip $trip = null): array
     {
-        $to = IssueStatus::from($status);
-        $issues = $ticket->ticketIssues()->whereIn('id', $ticketIssueIds)->get();
+        $body = ['data' => $this->show($issue)];
 
-        DB::transaction(function () use ($issues, $to) {
-            foreach ($issues as $issue) {
-                TicketStatusService::changeIssueStatus($issue, $to);
-            }
-        });
+        if ($token !== null && $trip !== null) {
+            $body['trip_link'] = [
+                'url_token' => $token,
+                'expires_after_hours' => (int) $trip->link_idle_hours,
+                'trip_id' => $trip->id,
+            ];
+        }
 
-        return $issues->load(['issue', 'creator', 'statusChanges.creator'])
-            ->map(fn(TicketIssue $i) => $this->present($i))->all();
-    }
-
-    /**
-     * Defer an issue (records the reason) and spawn a pending child.
-     *
-     * @return array<string, mixed>
-     */
-    public function defer(Ticket $ticket, TicketIssue $ticketIssue, string $reason): array
-    {
-        $child = DB::transaction(function () use ($ticket, $ticketIssue, $reason) {
-            TicketStatusService::changeIssueStatus($ticketIssue, IssueStatus::Deferred, $reason);
-
-            $child = new TicketIssue([
-                'ticket_id' => $ticket->id,
-                'issue_id' => $ticketIssue->issue_id,
-                'other_title' => $ticketIssue->other_title,
-                'priority' => $ticketIssue->priority->value,
-                'description' => $ticketIssue->description,
-                'status' => IssueStatus::Pending->value,
-                'parent_id' => $ticketIssue->id,
-            ]);
-            $child->created_by = Auth::id();
-            $child->save();
-
-            return $child;
-        });
-
-        return $this->present($child->load(['issue', 'parent', 'creator']));
+        return $body;
     }
 
     /**
@@ -165,7 +87,7 @@ class TicketIssueService
         $ticketIssue->issue_id = $issueId;
         $ticketIssue->save();
 
-        return $this->present($ticketIssue->fresh(['issue', 'creator']));
+        return $this->show($ticketIssue);
     }
 
     /**
@@ -179,82 +101,44 @@ class TicketIssueService
         $ticketIssue->assigned_priority = $priority;
         $ticketIssue->save();
 
-        return $this->present($ticketIssue->fresh(['issue', 'creator']));
+        return $this->show($ticketIssue);
     }
 
     /**
-     * Cancel all non-cancelled issues on a ticket, making its derived status Cancelled.
+     * Cancel every open issue on a ticket. Closed issues stay closed -- the
+     * work on them happened -- so a ticket with one closed and one cancelled
+     * issue reads as closed.
      */
     public function cancelAll(Ticket $ticket, string $reason): void
     {
         DB::transaction(function () use ($ticket, $reason) {
             $ticket->ticketIssues()
-                ->where('status', '!=', IssueStatus::Cancelled->value)
+                ->whereNotIn('status', array_map(fn (IssueStatus $s) => $s->value, IssueStatus::terminal()))
                 ->get()
-                ->each(fn(TicketIssue $issue) => TicketStatusService::changeIssueStatus($issue, IssueStatus::Cancelled, $reason));
+                ->each(fn (TicketIssue $issue) => TicketStatusService::changeIssueStatus($issue, IssueStatus::Cancelled, $reason));
         });
     }
 
     /**
-     * Cancel an issue (records the reason). Unlike deferral it spawns no child.
+     * Cancel an issue (records the reason in its status history).
      *
      * @return array<string, mixed>
      */
     public function cancel(TicketIssue $ticketIssue, string $reason): array
     {
-        DB::transaction(function () use ($ticketIssue, $reason) {
-            TicketStatusService::changeIssueStatus($ticketIssue, IssueStatus::Cancelled, $reason);
-        });
+        $this->workflow->cancel($ticketIssue, $reason);
 
-        return $this->present($ticketIssue->load(['issue', 'creator', 'statusChanges.creator']));
-    }
-
-    /**
-     * Mark an issue as Waiting (records the reason it's blocked). Unlike
-     * deferral it spawns no child — the same issue resumes once unblocked.
-     *
-     * @return array<string, mixed>
-     */
-    public function wait(TicketIssue $ticketIssue, string $reason): array
-    {
-        DB::transaction(function () use ($ticketIssue, $reason) {
-            TicketStatusService::changeIssueStatus($ticketIssue, IssueStatus::Waiting, $reason);
-        });
-
-        return $this->present($ticketIssue->load(['issue', 'creator', 'statusChanges.creator']));
-    }
-
-    /**
-     * Attach technicians to one or more issues (no schedule).
-     *
-     * @param  array<int>  $ticketIssueIds
-     * @param  array<int>  $technicianIds
-     * @return array<int, array<string, mixed>>
-     */
-    public function attachTechnicians(Ticket $ticket, array $ticketIssueIds, array $technicianIds): array
-    {
-        $pivot = ['created_by' => Auth::id()];
-        $technicians = collect($technicianIds)->mapWithKeys(fn($id) => [$id => $pivot])->all();
-        $issues = $ticket->ticketIssues()->whereIn('id', $ticketIssueIds)->get();
-
-        DB::transaction(function () use ($issues, $technicians) {
-            foreach ($issues as $issue) {
-                $issue->technicians()->syncWithoutDetaching($technicians);
-            }
-        });
-
-        return $issues->load(['creator', 'technicians.creator'])->map(fn(TicketIssue $i) => $this->present($i))->all();
+        return $this->show($ticketIssue);
     }
 
     /**
      * Earlier tickets at a store that reported the same catalog issue -- "the
      * last Oven tickets for this store" -- newest first, one row per ticket.
      *
-     * Paginated by TICKET, not by issue row: a deferral spawns a child issue on
-     * the same ticket, and a ticket can carry the same catalog issue twice
+     * Paginated by TICKET, not by issue row: a ticket can carry the same catalog issue twice
      * ("oven 1", "oven 2"), so issue rows would show one ticket several times.
      * Each row folds its matching issues together and reports the newest one's
-     * status, which is where a deferral chain currently stands.
+     * status (a converted v1 deferral chain ends on its newest issue).
      *
      * Archived (soft-deleted) tickets are left out; so is `$excludeTicketId`,
      * normally the ticket being looked at.
@@ -277,11 +161,7 @@ class TicketIssueService
                 // TICKET's status from this relation -- it is deliberately partial.
                 'ticketIssues' => fn ($q) => $q->where('issue_id', $issue->id)
                     ->orderBy('id')
-                    ->with(['technicians' => fn ($t) => $t->withTrashed()->select('technicians.id', 'technicians.name')])
-                    ->withMax(
-                        ['statusChanges as completed_at' => fn ($s) => $s->where('to_status', IssueStatus::Complete->value)],
-                        'created_at'
-                    ),
+                    ->with(['technicians' => fn ($t) => $t->withTrashed()->select('technicians.id', 'technicians.name')]),
             ])
             ->orderByDesc('created_at')
             ->orderByDesc('id')
@@ -312,7 +192,7 @@ class TicketIssueService
             'status' => $latest
                 ? ['value' => $latest->status->value, 'label' => $latest->status->label()]
                 : null,
-            'completed_at' => $latest && $latest->status === IssueStatus::Complete ? $this->timestamp($latest->completed_at) : null,
+            'completed_at' => $latest && $latest->status === IssueStatus::Closed ? $latest->closed_at : null,
             'technicians' => $technicians,
             'issues' => $rows->map(fn (TicketIssue $i) => [
                 'id' => $i->id,
@@ -323,19 +203,10 @@ class TicketIssueService
                     ? ['value' => $i->assigned_priority->value, 'label' => $i->assigned_priority->label()]
                     : null,
                 'description' => Str::limit((string) $i->description, 160),
-                'completed_at' => $i->status === IssueStatus::Complete ? $this->timestamp($i->completed_at) : null,
+                'completed_at' => $i->status === IssueStatus::Closed ? $i->closed_at : null,
                 'created_at' => $i->created_at,
             ])->values()->all(),
         ];
-    }
-
-    /**
-     * An aggregate's raw DB datetime as a Carbon instance, so it serialises in
-     * the same ISO-8601 UTC shape as every model timestamp in the API.
-     */
-    private function timestamp(mixed $value): ?\Illuminate\Support\Carbon
-    {
-        return $value === null || $value === '' ? null : \Illuminate\Support\Carbon::parse($value);
     }
 
     /**
@@ -395,131 +266,22 @@ class TicketIssueService
     }
 
     /**
-     * The relaxed counterpart of validateIssuesBelongToTicket(): the record may
-     * span tickets, so long as it touches the one it is being filed under.
+     * The issue as the API shows it: the full read when its relations are
+     * loaded (TicketIssuePresenter::with()), the core fields otherwise.
      *
-     * Used by attendance, where a single visit legitimately covers issues on
-     * several tickets at the same store — one drive out, three tickets worked.
-     * Everything else (parts, assignments, diagnoses) still uses the strict
-     * check, which is why this is a separate method rather than a flag.
-     *
-     * @param  array<int|string>  $ids
+     * @return array<string, mixed>
      */
-    public function validateAtLeastOneIssueBelongsToTicket(Validator $validator, ?Ticket $ticket, array $ids): void
+    public function present(TicketIssue $issue): array
     {
-        if (!$ticket || empty($ids)) {
-            return;
-        }
-
-        $invalid = $this->issuesNotBelongingToTicket($ticket, $ids);
-
-        if (count($invalid) === count($ids)) {
-            $validator->errors()->add(
-                'ticket_issue_ids',
-                'At least one of the selected issues must belong to this ticket.'
-            );
-        }
-    }
-
-    /**
-     * Add a validation error for any id that is not a real ticket issue. The
-     * cross-ticket entry points have no parent ticket to check against, so
-     * existence is the only structural rule left.
-     *
-     * @param  array<int|string>  $ids
-     */
-    public function validateIssuesExist(Validator $validator, array $ids): void
-    {
-        if (empty($ids)) {
-            return;
-        }
-
-        $ids = array_map('intval', $ids);
-        $found = TicketIssue::query()->whereIn('id', $ids)->pluck('id')->all();
-        $missing = array_values(array_diff($ids, $found));
-
-        if (!empty($missing)) {
-            $validator->errors()->add(
-                'ticket_issue_ids',
-                'These issues do not exist: ' . implode(', ', $missing) . '.'
-            );
-        }
+        return $this->presenter->present($issue);
     }
 
     /**
      * @return array<string, mixed>
      */
-    public function present(TicketIssue $issue): array
+    public function presentWarranty(Warranty $warranty): array
     {
-        return [
-            'id' => $issue->id,
-            'ticket_id' => $issue->ticket_id,
-            'issue_id' => $issue->issue_id,
-            'issue' => $issue->relationLoaded('issue') && $issue->issue
-                ? $this->catalog->presentIssue($issue->issue)
-                : null,
-            'other_title' => $issue->other_title,
-            'display_title' => $issue->displayTitle(),
-            'priority' => ['value' => $issue->priority->value, 'label' => $issue->priority->label()],
-            'assigned_priority' => $issue->assigned_priority
-                ? ['value' => $issue->assigned_priority->value, 'label' => $issue->assigned_priority->label()]
-                : null,
-            'description' => $issue->description,
-            'status' => ['value' => $issue->status->value, 'label' => $issue->status->label()],
-            // Whether everything this issue costs anybody is on a pay sheet yet.
-            'payment' => $this->presentIssuePaymentStatus($issue),
-            'parent_id' => $issue->parent_id,
-            'children' => $issue->relationLoaded('children')
-                ? $issue->children->map(fn(TicketIssue $c) => $this->present($c))->all()
-                : null,
-            'diagnoses' => $this->mapLoaded($issue, 'diagnoses', fn($d) => $this->workflow->presentDiagnosis($d)),
-            'attendance_entries' => $this->mapLoaded($issue, 'attendanceEntries', fn($a) => $this->workflow->presentAttendance($a)),
-            'part_usages' => $this->mapLoaded($issue, 'partUsages', fn($p) => $this->workflow->presentPartUsage($p)),
-            'pay_entries' => $this->mapLoaded($issue, 'payEntries', fn($p) => $this->workflow->presentPayEntry($p)),
-            'warranties' => $this->mapLoaded($issue, 'warranties', fn($w) => $this->workflow->presentWarranty($w)),
-            'assignments' => $this->mapLoaded($issue, 'assignments', fn($a) => $this->assignments->present($a)),
-            'technicians' => $this->mapLoaded($issue, 'technicians', fn($t) => $this->catalog->presentTechnician($t)),
-            'status_changes' => $this->mapLoaded($issue, 'statusChanges', fn($s) => $this->presentStatusChange($s)),
-            'notes' => $this->notes->presentMany($issue),
-            'attachments' => $this->attachments->presentMany($issue),
-            // The troubleshooting the manager confirmed trying before opening
-            // the ticket, as it read then. Null when none was asked for.
-            'troubleshooting_confirmed_at' => $issue->troubleshooting_confirmed_at,
-            'troubleshooting_outcome' => $issue->troubleshooting_outcome,
-            'troubleshooting_guide_id' => $issue->troubleshooting_guide_id,
-            'troubleshooting_snapshot' => $issue->troubleshooting_snapshot,
-            'created_by' => $issue->created_by,
-            'creator' => $issue->relationLoaded('creator') && $issue->creator
-                ? $this->catalog->presentUser($issue->creator)
-                : null,
-            'created_at' => $issue->created_at,
-            'updated_at' => $issue->updated_at,
-        ];
-    }
-
-    /**
-     * The issue's own payment position: whether its hours and the parts a
-     * technician fronted are on a pay sheet yet, and which pay lines cover it.
-     *
-     * Anything still owed dominates the roll-up, so an issue reads as unpaid
-     * until the last of its payables is settled.
-     *
-     * @return array<string, mixed>|null
-     */
-    private function presentIssuePaymentStatus(TicketIssue $issue): ?array
-    {
-        $status = $issue->paymentStatus();
-
-        if ($status === null) {
-            return null;
-        }
-
-        return [
-            'status' => ['value' => $status->value, 'label' => $status->label()],
-            'daily_pay_line_ids' => $issue->relationLoaded('dailyPayLines')
-                ? $issue->dailyPayLines->pluck('id')->all()
-                : null,
-        ];
+        return $this->presenter->warranty($warranty);
     }
 
     /**
@@ -527,31 +289,64 @@ class TicketIssueService
      */
     public function presentStatusChange(IssueStatusChange $change): array
     {
-        return [
-            'id' => $change->id,
-            'ticket_issue_id' => $change->ticket_issue_id,
-            'from_status' => $change->from_status?->value,
-            'to_status' => $change->to_status->value,
-            'reason' => $change->reason,
-            'created_by' => $change->created_by,
-            'creator' => $change->relationLoaded('creator') && $change->creator
-                ? $this->catalog->presentUser($change->creator)
-                : null,
-            'created_at' => $change->created_at,
-        ];
+        return $this->presenter->statusChange($change);
     }
 
     /**
-     * Map a loaded relation through a presenter, or null when not loaded.
+     * The issue pickers' lookup (`GET ticket-issues`): a light row per issue,
+     * newest first, across every store -- never the full read.
      *
-     * @return array<int, mixed>|null
+     *   search    the catalog title, the free-text title, the description, or
+     *             the ticket id (digits, a leading # allowed)
+     *   store     a store number
+     *   statuses  any of IssueStatus
+     *   limit     default 20, at most 100
+     *
+     * Issues of a deleted ticket are left out.
+     *
+     * @param  array{search?: string|null, store?: string|null, statuses?: array<int, string>|null, limit?: int|string|null}  $filters
+     * @return array<int, array<string, mixed>>
      */
-    private function mapLoaded(TicketIssue $issue, string $relation, callable $present): ?array
+    public function lookup(array $filters): array
     {
-        if (!$issue->relationLoaded($relation)) {
-            return null;
+        $query = TicketIssue::query()
+            ->whereHas('ticket')
+            ->with(['issue', 'ticket.store']);
+
+        $store = trim((string) ($filters['store'] ?? ''));
+        if ($store !== '') {
+            $query->whereHas('ticket.store', fn ($q) => $q->where('store_number', $store));
         }
 
-        return $issue->{$relation}->map($present)->all();
+        if (! empty($filters['statuses'])) {
+            $query->whereIn('status', array_values((array) $filters['statuses']));
+        }
+
+        $search = trim((string) ($filters['search'] ?? ''));
+        if ($search !== '') {
+            $like = '%'.mb_strtolower(str_replace(['%', '_'], ['\%', '\_'], $search)).'%';
+            $number = ltrim($search, '#');
+
+            $query->where(fn ($q) => $q
+                ->whereRaw('LOWER(other_title) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(description) LIKE ?', [$like])
+                ->orWhereHas('issue', fn ($c) => $c->whereRaw('LOWER(title) LIKE ?', [$like]))
+                ->when(ctype_digit($number), fn ($id) => $id->orWhere('ticket_id', (int) $number)));
+        }
+
+        $limit = max(1, min(100, (int) ($filters['limit'] ?? 20)));
+
+        return $query->orderByDesc('id')->limit($limit)->get()
+            ->map(fn (TicketIssue $i) => [
+                'id' => $i->id,
+                'ticket_id' => $i->ticket_id,
+                'title' => $i->displayTitle(),
+                'status' => $i->status->value,
+                'status_label' => $i->status->label(),
+                'priority' => $i->priority === null ? null : ['value' => $i->priority->value, 'label' => $i->priority->label()],
+                'store' => $i->ticket?->store ? ['id' => $i->ticket->store->id, 'store_number' => $i->ticket->store->store_number] : null,
+                'other_store' => $i->ticket?->other_store,
+            ])
+            ->all();
     }
 }

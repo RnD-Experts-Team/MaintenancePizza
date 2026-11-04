@@ -2,23 +2,24 @@
 
 namespace Tests\Feature;
 
-use App\Models\AttendanceEntry;
-use App\Models\AttendanceEvent;
-use App\Models\DailyPayEntry;
-use App\Models\DailyPayLine;
-use App\Models\DailyPayPayment;
+use App\Enums\TripStatus;
 use App\Models\Issue;
+use App\Models\Payment;
+use App\Models\PaymentLine;
+use App\Models\StorageLocation;
 use App\Models\Store;
 use App\Models\Technician;
 use App\Models\Ticket;
 use App\Models\TicketIssue;
+use App\Models\Trip;
+use App\Models\TripSession;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\FakesAuthServer;
 use Tests\TestCase;
 
 /**
- * The Technicians page: pay from the daily pay sheets (by store and by kind,
- * both adding up to what was paid), work from attendance.
+ * The Technicians page on the new data: pay from payments (by store and by line
+ * type, both adding up to what was paid), work from trip sessions.
  */
 class TechnicianAnalyticsTest extends TestCase
 {
@@ -39,13 +40,13 @@ class TechnicianAnalyticsTest extends TestCase
 
     private Issue $oven;
 
-    private Issue $sink;
-
     private Technician $ahmad;
 
     private TicketIssue $ovenAtA;
 
     private TicketIssue $sinkAtB;
+
+    private PaymentLine $hourly;
 
     protected function setUp(): void
     {
@@ -55,83 +56,81 @@ class TechnicianAnalyticsTest extends TestCase
         $this->a = Store::factory()->create(['store_number' => '03795-00001']);
         $this->b = Store::factory()->create(['store_number' => '03795-00002']);
         $this->oven = Issue::factory()->create(['title' => 'Oven']);
-        $this->sink = Issue::factory()->create(['title' => 'Sink']);
+        $sink = Issue::factory()->create(['title' => 'Sink']);
         $this->ahmad = Technician::factory()->create(['name' => 'Ahmad']);
         Technician::factory()->create(['name' => 'Ben']);
 
         $this->ovenAtA = TicketIssue::factory()->for(Ticket::factory()->for($this->a))->create(['issue_id' => $this->oven->id, 'other_title' => null]);
-        $this->sinkAtB = TicketIssue::factory()->for(Ticket::factory()->for($this->b))->create(['issue_id' => $this->sink->id, 'other_title' => null]);
+        $this->sinkAtB = TicketIssue::factory()->for(Ticket::factory()->for($this->b))->create(['issue_id' => $sink->id, 'other_title' => null]);
+        $shelf = StorageLocation::factory()->create(['name' => 'Van']);
 
-        // Oct 5: store A, 2 h at $20 + $3 gas + $10 parts = $53; store B, a
-        // $100 lump sum; on the payment, $5 gas and $2 of parts no store
-        // carries. Paid: 40 + 100 + 3 + 5 + 12 = $160.
-        $this->sheet('2026-10-05', [
-            ['store' => $this->a, 'hours' => '2.00', 'gas' => '3.00', 'parts' => '10.00', 'lump' => null, 'total' => '53.00', 'issue' => $this->ovenAtA],
-            ['store' => $this->b, 'hours' => '0.00', 'gas' => '0.00', 'parts' => '0.00', 'lump' => '100.00', 'total' => '100.00', 'issue' => $this->sinkAtB],
-        ], paymentGas: '5.00', paymentParts: '12.00', total: '160.00');
+        // Oct 5: store A 2 h at $20 + $10 parts + $3 gas = $53; store B a $100
+        // fixed price; $7 of parts for the van. Paid: $160.
+        $oct5 = $this->payment('2026-10-05', [
+            ['type' => 'hourly', 'store_id' => $this->a->id, 'amount' => '40.00', 'hours' => '2.00', 'rate' => '20.00', 'issue' => $this->ovenAtA],
+            ['type' => 'parts', 'store_id' => $this->a->id, 'amount' => '10.00', 'issue' => $this->ovenAtA],
+            ['type' => 'gas', 'store_id' => $this->a->id, 'amount' => '3.00', 'issue' => $this->ovenAtA],
+            ['type' => 'fixed', 'store_id' => $this->b->id, 'amount' => '100.00', 'issue' => $this->sinkAtB],
+            ['type' => 'parts', 'storage_location_id' => $shelf->id, 'amount' => '7.00'],
+        ]);
+        $this->hourly = $oct5->lines()->where('type', 'hourly')->sole();
 
-        // Oct 6: outside the range.
-        $this->sheet('2026-10-06', [
-            ['store' => $this->a, 'hours' => '1.00', 'gas' => '0.00', 'parts' => '0.00', 'lump' => null, 'total' => '20.00', 'issue' => $this->ovenAtA],
-        ], paymentGas: '0.00', paymentParts: '0.00', total: '20.00');
+        // Oct 6: outside the range. A mistaken payment never counts.
+        $this->payment('2026-10-06', [['type' => 'hourly', 'store_id' => $this->a->id, 'amount' => '20.00', 'issue' => $this->ovenAtA]]);
+        $this->payment('2026-10-05', [['type' => 'fixed', 'store_id' => $this->a->id, 'amount' => '999.00']], mistaken: true);
 
-        $this->visit('2026-10-05 14:00:00', '2026-10-05 16:00:00', $this->ovenAtA);          // 2 h, in range
-        $this->visit('2026-10-05 17:00:00', '2026-10-05 18:00:00', $this->sinkAtB, mistaken: true);
-        $this->visit('2026-10-06 05:00:00', '2026-10-06 06:00:00', $this->ovenAtA);          // Oct 6 locally
+        $this->clocked('2026-10-05 14:00:00', '2026-10-05 16:00:00', $this->ovenAtA);              // 2 h, in range, not paid
+        $this->clocked('2026-10-05 08:00:00', '2026-10-05 09:00:00', $this->sinkAtB, paidBy: $this->hourly);
+        $this->clocked('2026-10-05 17:00:00', '2026-10-05 18:00:00', $this->sinkAtB, mistaken: true);
+        $this->clocked('2026-10-06 05:00:00', '2026-10-06 06:00:00', $this->ovenAtA);              // Oct 6 locally
     }
 
     /**
-     * @param  array<int, array{store: Store, hours: string, gas: string, parts: string, lump: ?string, total: string, issue: TicketIssue}>  $lines
+     * @param  array<int, array<string, mixed>>  $lines
      */
-    private function sheet(string $date, array $lines, string $paymentGas, string $paymentParts, string $total): void
+    private function payment(string $paidAt, array $lines, bool $mistaken = false): Payment
     {
-        $entry = DailyPayEntry::query()->create(['date' => $date]);
-        $payment = DailyPayPayment::query()->create([
-            'daily_pay_entry_id' => $entry->id,
+        $payment = Payment::query()->create([
+            'paid_at' => $paidAt,
             'technician_id' => $this->ahmad->id,
-            'hourly_payment_rate' => '20.00',
-            'gas' => $paymentGas,
-            'money_owed' => '0.00',
-            'frozen_reimbursable_parts' => $paymentParts,
-            'lines_total' => '0.00',
-            'total_amount' => $total,
-        ]);
-
-        $linesTotal = '0.00';
-        foreach ($lines as $l) {
-            $line = DailyPayLine::query()->create([
-                'daily_pay_entry_id' => $entry->id,
-                'daily_pay_payment_id' => $payment->id,
-                'technician_id' => $this->ahmad->id,
-                'store_id' => $l['store']->id,
-                'total_working_hours' => $l['hours'],
-                'travel_time' => '0.00',
-                'parts_run_time' => '0.00',
-                'total_break_time' => '0.00',
-                'gas' => $l['gas'],
-                'money_owed' => '0.00',
-                'lump_sum' => $l['lump'],
-                'frozen_reimbursable_parts' => $l['parts'],
-                'line_total' => $l['total'],
-            ]);
-            $line->ticketIssues()->attach($l['issue']->id);
-            $linesTotal = bcadd($linesTotal, $l['total'], 2);
-        }
-
-        $payment->update(['lines_total' => $linesTotal]);
-    }
-
-    private function visit(string $in, string $out, TicketIssue $issue, bool $mistaken = false): void
-    {
-        $entry = AttendanceEntry::factory()->create([
-            'technician_id' => $this->ahmad->id,
-            'start_clock' => $in,
-            'end_clock' => $out,
+            'method' => 'cash',
+            'total' => array_sum(array_map(fn ($l) => (float) $l['amount'], $lines)),
             'mistaken' => $mistaken,
         ]);
-        AttendanceEvent::query()->create(['attendance_entry_id' => $entry->id, 'kind' => 'clock_in', 'at' => $in]);
-        AttendanceEvent::query()->create(['attendance_entry_id' => $entry->id, 'kind' => 'clock_out', 'at' => $out]);
-        $entry->ticketIssues()->attach($issue->id);
+
+        foreach ($lines as $i => $l) {
+            $issue = $l['issue'] ?? null;
+            unset($l['issue']);
+            $line = $payment->lines()->create($l + ['sort_order' => $i]);
+            if ($issue !== null) {
+                $line->ticketIssues()->attach($issue->id);
+            }
+        }
+
+        return $payment;
+    }
+
+    private function clocked(string $in, string $out, TicketIssue $issue, bool $mistaken = false, ?PaymentLine $paidBy = null): TripSession
+    {
+        $trip = Trip::query()->create([
+            'technician_id' => $this->ahmad->id,
+            'status' => TripStatus::Open,
+            'planned_date' => substr($in, 0, 10),
+        ]);
+        $stop = $trip->stops()->create(['store_id' => $issue->ticket->store_id, 'status' => 'done']);
+        $stop->stopIssues()->create(['ticket_issue_id' => $issue->id, 'purpose' => 'work']);
+
+        $session = TripSession::query()->create([
+            'trip_id' => $trip->id,
+            'technician_id' => $this->ahmad->id,
+            'clock_in' => $in,
+            'clock_out' => $out,
+            'mistaken' => $mistaken,
+        ]);
+
+        $paidBy?->tripSessions()->attach($session->id, ['paid_minutes' => 60]);
+
+        return $session;
     }
 
     private function url(string $path, array $query = []): string
@@ -148,69 +147,66 @@ class TechnicianAnalyticsTest extends TestCase
         $this->assertSame('180.00', $data['kpis']['paid_all_time']);
         $this->assertSame(1, $data['kpis']['pay_days']);
 
-        $byStore = collect($data['paid_by_store'])->mapWithKeys(fn ($r) => [($r['payment_level'] ? 'payment' : $r['store_number']) => $r['amount']]);
-        $this->assertSame(['03795-00002' => '100.00', '03795-00001' => '53.00', 'payment' => '7.00'], $byStore->all());
+        $byStore = collect($data['paid_by_store'])->mapWithKeys(fn ($r) => [($r['store_number'] ?? $r['storage_location']['name']) => $r['amount']]);
+        $this->assertSame(['03795-00002' => '100.00', '03795-00001' => '53.00', 'Van' => '7.00'], $byStore->all());
 
         $this->assertSame([
-            'hourly_labour' => '40.00',
-            'lump_sums' => '100.00',
-            'gas' => '8.00',
-            'money_owed' => '0.00',
-            'parts_reimbursed' => '12.00',
+            'hourly' => '40.00',
+            'fixed' => '100.00',
+            'inspection' => '0.00',
+            'parts' => '17.00',
+            'gas' => '3.00',
+            'other' => '0.00',
         ], $data['paid_by_kind']);
 
         $this->assertCount(1, $data['pay_sheets']);
         $this->assertSame('2026-10-05', $data['pay_sheets'][0]['date']);
+        $this->assertSame('160.00', $data['pay_sheets'][0]['amount']);
     }
 
-    public function test_a_store_or_issue_filter_reads_the_matching_pay_lines(): void
+    public function test_a_store_or_issue_filter_reads_the_matching_payment_lines(): void
     {
         $this->getJson($this->url("technicians/{$this->ahmad->id}/analytics", ['stores' => ['03795-00002']]), $this->headers())
             ->assertOk()
             ->assertJsonPath('data.filtered_money', true)
             ->assertJsonPath('data.kpis.paid', '100.00')
             ->assertJsonCount(1, 'data.paid_by_store')
-            ->assertJsonPath('data.paid_by_kind.lump_sums', '100.00');
+            ->assertJsonPath('data.paid_by_kind.fixed', '100.00');
 
         $this->getJson($this->url("technicians/{$this->ahmad->id}/analytics", ['issue_ids' => [$this->oven->id]]), $this->headers())
             ->assertOk()
             ->assertJsonPath('data.kpis.paid', '53.00')
-            ->assertJsonPath('data.paid_by_kind.parts_reimbursed', '10.00');
+            ->assertJsonPath('data.paid_by_kind.parts', '10.00');
     }
 
-    public function test_work_is_the_pay_sheet_lines_plus_visits_not_paid_yet(): void
+    public function test_work_is_the_sessions_clocked_in_the_range(): void
     {
         $data = $this->getJson($this->url("technicians/{$this->ahmad->id}/analytics"), $this->headers())
             ->assertOk()->json('data');
 
-        // Oct 5's two pay lines (A and B) and the unpaid Oct 5 visit at A. The
-        // mistaken visit and the Oct 6 visit do not count.
-        $this->assertSame(3, $data['kpis']['visits']);
-        $this->assertEquals(4.0, $data['kpis']['hours']['work'], '2 h on the sheet + 2 h clocked');
+        // The two Oct 5 sessions; not the mistaken one, not Oct 6.
+        $this->assertSame(2, $data['kpis']['visits']);
+        $this->assertEquals(3.0, $data['kpis']['hours']['work']);
         $this->assertSame(2, $data['kpis']['stores_served']);
         $this->assertSame(2, $data['kpis']['issues_worked']);
         $this->assertSame('2026-10-05', $data['kpis']['last_pay_date']);
         $this->assertNotNull($data['kpis']['last_worked_at']);
 
-        $this->assertSame(['title' => 'Oven', 'visits' => 2], array_intersect_key($data['work_by_issue'][0], ['title' => 0, 'visits' => 0]));
-        $this->assertSame(['store' => '03795-00001', 'visits' => 2], array_intersect_key($data['work_by_store'][0], ['store' => 0, 'visits' => 0]));
-
-        $this->assertCount(3, $data['work_log']);
-        // Newest first; a pay-sheet day sorts at its end, after a visit that day.
-        $this->assertSame(['pay_sheet', 'pay_sheet', 'visit'], array_column($data['work_log'], 'source'));
-        $this->assertSame([true, true, false], array_column($data['work_log'], 'paid'));
+        $this->assertCount(2, $data['work_log']);
+        // Newest first; the earlier one was paid by the hourly line.
+        $this->assertSame([false, true], array_column($data['work_log'], 'paid'));
+        $this->assertSame(['session', 'session'], array_column($data['work_log'], 'source'));
+        $this->assertSame([['03795-00001'], ['03795-00002']], array_column($data['work_log'], 'stores'));
     }
 
-    public function test_a_visit_a_pay_sheet_claimed_is_counted_once_through_its_line(): void
+    public function test_a_store_filter_keeps_only_the_sessions_there(): void
     {
-        $visit = AttendanceEntry::query()->where('mistaken', false)->where('start_clock', '2026-10-05 14:00:00')->sole();
-        $line = DailyPayLine::query()->where('store_id', $this->a->id)->whereHas('entry', fn ($q) => $q->whereDate('date', '2026-10-05'))->sole();
-        $visit->dailyPayPayments()->attach($line->daily_pay_payment_id, ['daily_pay_line_id' => $line->id, 'work_minutes' => 120]);
+        $data = $this->getJson($this->url("technicians/{$this->ahmad->id}/analytics", ['stores' => ['03795-00001']]), $this->headers())
+            ->assertOk()->json('data');
 
-        $data = $this->getJson($this->url("technicians/{$this->ahmad->id}/analytics"), $this->headers())->assertOk()->json('data');
-
-        $this->assertSame(2, $data['kpis']['visits']);
+        $this->assertSame(1, $data['kpis']['visits']);
         $this->assertEquals(2.0, $data['kpis']['hours']['work']);
+        $this->assertSame(['title' => 'Oven', 'visits' => 1], array_intersect_key($data['work_by_issue'][0], ['title' => 0, 'visits' => 0]));
     }
 
     public function test_the_overview_lists_every_technician(): void
@@ -219,8 +215,9 @@ class TechnicianAnalyticsTest extends TestCase
 
         $rows = collect($data['technicians'])->keyBy('name');
         $this->assertSame('160.00', $rows['Ahmad']['paid']);
-        $this->assertSame(3, $rows['Ahmad']['visits']);
+        $this->assertSame(2, $rows['Ahmad']['visits']);
         $this->assertSame(2, $rows['Ahmad']['stores_served']);
+        $this->assertSame('2026-10-05', $rows['Ahmad']['last_pay_date']);
         $this->assertSame('0.00', $rows['Ben']['paid']);
         $this->assertSame(0, $rows['Ben']['visits']);
         $this->assertSame('160.00', $data['totals']['paid']);

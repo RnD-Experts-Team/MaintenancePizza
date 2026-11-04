@@ -2,18 +2,17 @@
 
 namespace Tests\Feature;
 
-use App\Models\Diagnosis;
+use App\Models\Assignment;
 use App\Models\Store;
-use App\Models\Technician;
 use App\Models\Ticket;
 use App\Models\TicketIssue;
-use App\Services\WorkflowRecordService;
+use App\Models\Warranty;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\FakesAuthServer;
 use Tests\TestCase;
 
 /**
- * /stores/{store}/tickets/{ticket}/diagnoses/{diagnosis}/... is not
+ * /stores/{store}/tickets/{ticket}/warranties/{warranty}/... is not
  * scope-bound, and pizzasys only authorises the STORE in the URL. Without the
  * check in the leaf requests (ChecksTicketRecord), a user cleared for their own
  * store could act on any other store's records by putting their store in front
@@ -30,7 +29,7 @@ class LeafRouteOwnershipTest extends TestCase
 
     private Ticket $theirTicket;
 
-    private int $theirDiagnosisId;
+    private Warranty $theirWarranty;
 
     protected function setUp(): void
     {
@@ -44,61 +43,56 @@ class LeafRouteOwnershipTest extends TestCase
         $this->theirTicket = Ticket::factory()->for($theirs)->create();
         $theirIssue = TicketIssue::factory()->for($this->theirTicket)->create();
 
-        $this->theirDiagnosisId = app(WorkflowRecordService::class)
-            ->createDiagnosis([$theirIssue->id], 'theirs', [])['id'];
+        $this->theirWarranty = Warranty::factory()->create();
+        $this->theirWarranty->ticketIssues()->attach($theirIssue->id);
     }
 
     public function test_another_stores_ticket_cannot_be_reached_through_my_store(): void
     {
         $this->postJson(
-            "/api/stores/{$this->mine->store_number}/tickets/{$this->theirTicket->id}/diagnoses/{$this->theirDiagnosisId}/mistaken",
-            [],
+            "/api/stores/{$this->mine->store_number}/tickets/{$this->theirTicket->id}/warranties/{$this->theirWarranty->id}/notes",
+            ['body' => 'sneaky'],
             $this->headers(),
         )->assertNotFound();
 
-        $this->assertFalse(Diagnosis::findOrFail($this->theirDiagnosisId)->mistaken);
+        $this->assertSame(0, $this->theirWarranty->notes()->count());
     }
 
     public function test_a_record_from_another_ticket_cannot_be_reached_through_my_ticket(): void
     {
         $this->postJson(
-            "/api/stores/{$this->mine->store_number}/tickets/{$this->myTicket->id}/diagnoses/{$this->theirDiagnosisId}/notes",
+            "/api/stores/{$this->mine->store_number}/tickets/{$this->myTicket->id}/warranties/{$this->theirWarranty->id}/notes",
             ['body' => 'sneaky'],
             $this->headers(),
         )->assertNotFound();
 
-        $this->assertSame(0, Diagnosis::findOrFail($this->theirDiagnosisId)->notes()->count());
+        $this->assertSame(0, $this->theirWarranty->notes()->count());
     }
 
     public function test_my_own_record_on_my_own_ticket_goes_through(): void
     {
-        $issue = $this->myTicket->ticketIssues()->first();
-        $mine = app(WorkflowRecordService::class)->createDiagnosis([$issue->id], 'mine', [])['id'];
+        $warranty = Warranty::factory()->create();
+        $warranty->ticketIssues()->attach($this->myTicket->ticketIssues()->first()->id);
 
         $this->postJson(
-            "/api/stores/{$this->mine->store_number}/tickets/{$this->myTicket->id}/diagnoses/{$mine}/mistaken",
-            [],
+            "/api/stores/{$this->mine->store_number}/tickets/{$this->myTicket->id}/warranties/{$warranty->id}/notes",
+            ['body' => 'Five years on the compressor'],
             $this->headers(),
-        )->assertSuccessful();
+        )->assertCreated();
     }
 
-    public function test_a_visit_spanning_two_of_my_tickets_is_reachable_through_either(): void
+    public function test_a_booking_spanning_two_of_my_tickets_is_reachable_through_either(): void
     {
         $second = Ticket::factory()->for($this->mine)->create();
         $issueA = $this->myTicket->ticketIssues()->first();
         $issueB = TicketIssue::factory()->for($second)->create();
-        $tech = Technician::factory()->create();
-        $issueA->technicians()->attach($tech->id);
 
-        $entryId = app(WorkflowRecordService::class)->createAttendance([
-            'technician_id' => $tech->id,
-            'ticket_issue_ids' => [$issueA->id, $issueB->id],
-            'start_clock' => '2026-10-06 09:00:00',
-        ], [], [])['id'];
+        $assignment = Assignment::factory()->create();
+        $assignment->ticketIssues()->attach([$issueA->id, $issueB->id]);
 
         foreach ([$this->myTicket, $second] as $ticket) {
             $this->postJson(
-                "/api/stores/{$this->mine->store_number}/tickets/{$ticket->id}/attendance-entries/{$entryId}/notes",
+                "/api/stores/{$this->mine->store_number}/tickets/{$ticket->id}/assignments/{$assignment->id}/notes",
                 ['body' => 'on the way'],
                 $this->headers(),
             )->assertCreated();

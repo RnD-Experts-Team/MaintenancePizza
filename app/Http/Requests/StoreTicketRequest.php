@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\Impact;
 use App\Enums\Priority;
 use App\Enums\TicketType;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -32,6 +33,10 @@ class StoreTicketRequest extends FormRequest
             'issues.*.other_title' => ['nullable', 'string', 'max:255', 'required_without:issues.*.issue_id'],
             'issues.*.priority' => ['required', Rule::enum(Priority::class)],
             'issues.*.description' => ['required', 'string'],
+            // How badly the store is affected, and who to call back.
+            'issues.*.impact' => ['nullable', Rule::enum(Impact::class)],
+            'issues.*.contact_name' => ['nullable', 'string', 'max:255'],
+            'issues.*.contact_phone' => ['nullable', ...StoreTechnicianRequest::PHONE_RULES],
             // Optional notes per issue (body + optional type; files added separately via POST .../notes)
             'issues.*.notes' => ['nullable', 'array'],
             'issues.*.notes.*.body' => ['required_with:issues.*.notes.*', 'string', 'max:10000'],

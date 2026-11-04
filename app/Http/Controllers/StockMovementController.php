@@ -28,6 +28,9 @@ class StockMovementController extends Controller
             'storage_location_ids',
             'paid_by',
             'paid_by_technician_ids',
+            'ticket_issue_ids',
+            'stock_count_id',
+            'payment_id',
             'moved_from',
             'moved_to',
             'per_page',
@@ -36,6 +39,11 @@ class StockMovementController extends Controller
         ]));
     }
 
+    /**
+     * Record stock moving by hand: used (optionally on a ticket issue),
+     * returned, moved, opening stock, damaged or lost. Serial-tracked parts
+     * name their pieces on each line (`serials[]`).
+     */
     public function store(StoreStockMovementRequest $request): JsonResponse
     {
         $data = $request->validated();
@@ -49,6 +57,8 @@ class StockMovementController extends Controller
                     'storage_location_id' => $data['storage_location_id'] ?? null,
                     'paid_by' => $data['paid_by'] ?? null,
                     'paid_by_technician_id' => $data['paid_by_technician_id'] ?? null,
+                    'technician_id' => $data['technician_id'] ?? null,
+                    'ticket_issue_id' => $type === StockMovementType::Used ? ($data['ticket_issue_id'] ?? null) : null,
                     'body' => $data['body'] ?? null,
                 ],
                 array_map(fn (array $line) => $line + ['direction' => $type->defaultDirection()], $data['lines']),
@@ -82,6 +92,14 @@ class StockMovementController extends Controller
      */
     public function mistaken(StockMovement $stockMovement): JsonResponse
     {
+        // Parts bought on a payment are undone with the payment (edit it or
+        // mark it mistaken), so the payment and the shelf never disagree.
+        if ($stockMovement->type === StockMovementType::Bought && $stockMovement->payment_line_id !== null && ! $stockMovement->mistaken) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'status' => 'These parts were bought on a payment: edit that payment or mark it mistaken instead.',
+            ]);
+        }
+
         $reversal = $this->stock->reverse($stockMovement);
 
         return response()->json([
@@ -92,15 +110,6 @@ class StockMovementController extends Controller
 
     private function load(StockMovement $movement): StockMovement
     {
-        return $movement->load([
-            'lines.part',
-            'lines.storageLocation',
-            'storageLocation',
-            'paidByTechnician',
-            'creator',
-            'notes.creator',
-            'notes.attachments.creator',
-            'attachments.creator',
-        ]);
+        return $movement->load(StockService::MOVEMENT_WITH);
     }
 }

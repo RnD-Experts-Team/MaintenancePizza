@@ -143,21 +143,21 @@ class TicketSearchFilterTest extends TestCase
      */
     public function test_q_narrows_the_other_filters_rather_than_widening_them(): void
     {
-        // Matches q, but its issue is complete.
+        // Matches q, but its issue is closed.
         $completed = Ticket::factory()->create();
         TicketIssue::factory()->for($completed)->create([
             'other_title' => 'Fryer not heating',
-            'status' => IssueStatus::Complete->value,
+            'status' => IssueStatus::Closed->value,
         ]);
 
-        // Matches q AND is still pending.
+        // Matches q AND is still new.
         $pending = Ticket::factory()->create();
         TicketIssue::factory()->for($pending)->create([
             'other_title' => 'Fryer thermostat drifting',
-            'status' => IssueStatus::Pending->value,
+            'status' => IssueStatus::New->value,
         ]);
 
-        $found = $this->filter(['q' => 'fryer', 'issue_statuses' => ['pending']]);
+        $found = $this->filter(['q' => 'fryer', 'issue_statuses' => ['new']]);
 
         $this->assertContains($pending->id, $found);
         $this->assertNotContains($completed->id, $found);

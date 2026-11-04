@@ -1,0 +1,573 @@
+{
+  "/maintenance-analytics/{section}": {
+    "get": {
+      "tags": [
+        "Analytics"
+      ],
+      "summary": "Maintenance analytics: tickets, finances, coverage",
+      "description": "`summary`: KPIs, tickets filed in the range (each issue flagged when it recurs at that store), and chart series (by issue, by store, open work by status, completions by issue with average hours).\n\n`activity`: the tickets that changed in the range (the ticket or one of its issues has updated_at in it), most recently changed first, paginated -- each with `changes`: whether it was opened then, its issues' status changes (title, from, to, by, at), and how many notes and files were added. Locked notes are never counted.\n\n`watchlist`: now -- open tickets with no change for `untouched_days` (default 1) or more, longest silence first (`last_change_at`, `days_silent`); and catalog issues reported on at least `recurring_min` tickets at one store in the `recurring_days` days up to `to`.\n\n`from`/`to` are INSTANTS: send the viewer's local midnights converted to UTC, so 'yesterday' is the viewer's yesterday.\n\n`finances` (docs/MAINTENANCE.md §6): where the money went. `from`/`to` are DATES (YYYY-MM-DD; an instant is cut to its date), both included, at most 400 days. Summed from payment LINES; mistaken payments excluded. Filters (AND): `stores[]` = lines at those stores (other-store and storage lines drop out), `category_id` = lines of payments to technicians of that category (supplier payments drop out), `technician_id`, `supplier_id`. `totals.previous_spent` is the same number of days immediately before; `change_pct` is null when that was 0. `trend` is per ISO week (`period` = the Monday, YYYY-MM-DD) up to 92 days, per month (YYYY-MM) beyond, every period present. `by_store[].store_number` is a store number, `other` (other-store lines) or `storage` (parts bought for the shelf). `by_category` is technician categories only (id null = no category). A line linked to several ticket issues is shared evenly between them in `tickets.*`. `estimate_vs_actual` uses each issue's latest non-mistaken inspection estimate vs. what was paid on it in the range (top 50 by actual). `approvals_by_level` counts APPROVED, non-mistaken approvals decided in the range (store filter only), in the settings' level order. `recurring_costly`: the same catalog issue at the same store on 2+ tickets with spend in the range. `stock` ignores the payment filters (storage is global): `on_hand_value` = positive balances now x average cost; the others are the range's Bought / Used / Stock count (-/+) / Damaged or lost lines, each at its own unit cost, else the part's average cost (quantity-weighted cost of every priced inbound line; mistaken and undone movements left out). `unpaid` is what is owed NOW (not limited to the range): closed, non-mistaken sessions with no claim by a non-mistaken payment, and unpaid, non-mistaken technician purchases; filtered by technician/category (a supplier filter gives zeros), and by stores via the trip's stops / the purchase's ticket or stop.\n\n`coverage`: `stores[]` (default: every store that has had a ticket), `issue_ids[]` (default: every catalog issue not deleted), `category_id`. A technician (not deleted) covers a cell when he covers the store (coverage_stores) and the issue (covered issues). One cell per store x issue, ordered by store number then issue title. `gap` = technicians <= 1; `gaps` counts them. `average_rating` is the average of the non-null per-issue ratings of the cell's technicians (1-decimal string). KPIs: distinct technicians covering at least one requested store / issue / both; `emergency_available` = of those covering both, the ones available for emergencies.\n\n`stores[]` is required (at least one) for summary, activity and watchlist only.",
+      "operationId": "maintenanceAnalytics",
+      "parameters": [
+        {
+          "name": "section",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "enum": [
+              "summary",
+              "activity",
+              "watchlist",
+              "finances",
+              "coverage"
+            ]
+          }
+        },
+        {
+          "name": "stores[]",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": "Store numbers, e.g. 03795-00001. Required (at least one) for summary/activity/watchlist; optional for finances/coverage."
+        },
+        {
+          "name": "from",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Required except for coverage. An instant (date-time) for summary/activity/watchlist; a date (YYYY-MM-DD, included) for finances."
+        },
+        {
+          "name": "to",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Required except for coverage. summary/activity/watchlist: an exclusive instant, at most 92 days after `from`. finances: a date, included, at most 400 days in all."
+        },
+        {
+          "name": "recurring_min",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "Default 3"
+        },
+        {
+          "name": "recurring_days",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "Default 90"
+        },
+        {
+          "name": "untouched_days",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "Default 1"
+        },
+        {
+          "name": "page",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "activity only"
+        },
+        {
+          "name": "per_page",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "activity only (default 25, max 100)"
+        },
+        {
+          "name": "category_id",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "finances, coverage: technician category"
+        },
+        {
+          "name": "technician_id",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "finances only"
+        },
+        {
+          "name": "supplier_id",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "finances only"
+        },
+        {
+          "name": "issue_ids[]",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "description": "coverage only: catalog issue ids"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "The section",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "description": "Shape depends on the section; see description.",
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "description": "summary / activity / watchlist (see description)"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "range": {
+                            "type": "object",
+                            "properties": {
+                              "from": {
+                                "type": "string"
+                              },
+                              "to": {
+                                "type": "string"
+                              },
+                              "previous_from": {
+                                "type": "string"
+                              },
+                              "previous_to": {
+                                "type": "string"
+                              },
+                              "trend_by": {
+                                "type": "string",
+                                "enum": [
+                                  "week",
+                                  "month"
+                                ]
+                              }
+                            }
+                          },
+                          "totals": {
+                            "type": "object",
+                            "properties": {
+                              "spent": {
+                                "type": "string",
+                                "example": "120.00"
+                              },
+                              "previous_spent": {
+                                "type": "string",
+                                "example": "120.00"
+                              },
+                              "change_pct": {
+                                "type": "number",
+                                "nullable": true
+                              },
+                              "payments": {
+                                "type": "integer"
+                              },
+                              "lines": {
+                                "type": "integer"
+                              }
+                            }
+                          },
+                          "by_type": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "amount": {
+                                  "type": "string",
+                                  "example": "120.00"
+                                }
+                              }
+                            }
+                          },
+                          "trend": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "period": {
+                                  "type": "string"
+                                },
+                                "amount": {
+                                  "type": "string",
+                                  "example": "120.00"
+                                },
+                                "by_type": {
+                                  "type": "object",
+                                  "additionalProperties": {
+                                    "type": "string",
+                                    "example": "120.00"
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "by_store": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "store_number": {
+                                  "type": "string"
+                                },
+                                "amount": {
+                                  "type": "string",
+                                  "example": "120.00"
+                                }
+                              }
+                            }
+                          },
+                          "by_technician": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "integer"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "category": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "integer"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "nullable": true
+                                },
+                                "amount": {
+                                  "type": "string",
+                                  "example": "120.00"
+                                }
+                              }
+                            }
+                          },
+                          "by_supplier": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "integer"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "amount": {
+                                  "type": "string",
+                                  "example": "120.00"
+                                }
+                              }
+                            }
+                          },
+                          "by_category": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "integer",
+                                  "nullable": true
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "amount": {
+                                  "type": "string",
+                                  "example": "120.00"
+                                }
+                              }
+                            }
+                          },
+                          "stock": {
+                            "type": "object",
+                            "properties": {
+                              "on_hand_value": {
+                                "type": "string",
+                                "example": "120.00"
+                              },
+                              "bought_value": {
+                                "type": "string",
+                                "example": "120.00"
+                              },
+                              "used_value": {
+                                "type": "string",
+                                "example": "120.00"
+                              },
+                              "count_losses": {
+                                "type": "string",
+                                "example": "120.00"
+                              },
+                              "count_gains": {
+                                "type": "string",
+                                "example": "120.00"
+                              },
+                              "damaged_lost_value": {
+                                "type": "string",
+                                "example": "120.00"
+                              }
+                            }
+                          },
+                          "tickets": {
+                            "type": "object",
+                            "properties": {
+                              "cost_per_ticket_avg": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "top_tickets": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "ticket_id": {
+                                      "type": "integer"
+                                    },
+                                    "store_number": {
+                                      "type": "string",
+                                      "nullable": true
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "amount": {
+                                      "type": "string",
+                                      "example": "120.00"
+                                    }
+                                  }
+                                }
+                              },
+                              "by_issue": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "issue_id": {
+                                      "type": "integer",
+                                      "nullable": true
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "amount": {
+                                      "type": "string",
+                                      "example": "120.00"
+                                    },
+                                    "tickets": {
+                                      "type": "integer"
+                                    }
+                                  }
+                                }
+                              },
+                              "estimate_vs_actual": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "ticket_issue_id": {
+                                      "type": "integer"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "estimated": {
+                                      "type": "string",
+                                      "example": "120.00"
+                                    },
+                                    "actual": {
+                                      "type": "string",
+                                      "example": "120.00"
+                                    }
+                                  }
+                                }
+                              },
+                              "approvals_by_level": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "level": {
+                                      "type": "string"
+                                    },
+                                    "label": {
+                                      "type": "string"
+                                    },
+                                    "count": {
+                                      "type": "integer"
+                                    },
+                                    "amount": {
+                                      "type": "string",
+                                      "example": "120.00"
+                                    }
+                                  }
+                                }
+                              },
+                              "recurring_costly": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "store_number": {
+                                      "type": "string"
+                                    },
+                                    "issue_id": {
+                                      "type": "integer"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "tickets": {
+                                      "type": "integer"
+                                    },
+                                    "amount": {
+                                      "type": "string",
+                                      "example": "120.00"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "unpaid": {
+                            "type": "object",
+                            "properties": {
+                              "sessions": {
+                                "type": "integer"
+                              },
+                              "paid_minutes": {
+                                "type": "integer"
+                              },
+                              "purchases": {
+                                "type": "integer"
+                              },
+                              "purchases_total": {
+                                "type": "string",
+                                "example": "120.00"
+                              }
+                            }
+                          }
+                        },
+                        "description": "finances"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kpis": {
+                            "type": "object",
+                            "properties": {
+                              "technicians_for_stores": {
+                                "type": "integer"
+                              },
+                              "technicians_for_issues": {
+                                "type": "integer"
+                              },
+                              "technicians_for_both": {
+                                "type": "integer"
+                              },
+                              "emergency_available": {
+                                "type": "integer"
+                              }
+                            }
+                          },
+                          "cells": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "store_number": {
+                                  "type": "string"
+                                },
+                                "issue_id": {
+                                  "type": "integer"
+                                },
+                                "title": {
+                                  "type": "string"
+                                },
+                                "technicians": {
+                                  "type": "integer"
+                                },
+                                "emergency": {
+                                  "type": "integer"
+                                },
+                                "average_rating": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "gap": {
+                                  "type": "boolean"
+                                }
+                              }
+                            }
+                          },
+                          "gaps": {
+                            "type": "integer"
+                          }
+                        },
+                        "description": "coverage"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "401": {
+          "$ref": "#/components/responses/Unauthenticated"
+        },
+        "404": {
+          "description": "Unknown section"
+        },
+        "422": {
+          "$ref": "#/components/responses/ValidationError"
+        }
+      }
+    }
+  }
+}

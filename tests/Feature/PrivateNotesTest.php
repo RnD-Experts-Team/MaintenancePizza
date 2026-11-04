@@ -9,6 +9,7 @@ use App\Models\Store;
 use App\Models\Technician;
 use App\Models\Ticket;
 use App\Models\TicketIssue;
+use App\Models\Warranty;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -96,20 +97,16 @@ class PrivateNotesTest extends TestCase
 
     public function test_notes_on_records_are_found_under_their_record(): void
     {
-        $technician = Technician::factory()->create();
-        $this->oven->technicians()->attach($technician->id);
+        $warranty = Warranty::factory()->create();
+        $warranty->ticketIssues()->attach($this->oven->id);
 
-        $entryId = $this->postJson($this->ticketUrl('/attendance-entries'), [
-            'ticket_issue_ids' => [$this->oven->id], 'technician_id' => $technician->id, 'start_clock' => '2026-10-06 09:00:00',
-        ], $this->headers())->assertSuccessful()->json('data.id');
-
-        $this->postJson($this->ticketUrl("/attendance-entries/{$entryId}/notes"), [
+        $this->postJson($this->ticketUrl("/warranties/{$warranty->id}/notes"), [
             'body' => 'Paid him cash', 'is_private' => true,
         ], $this->headers())->assertCreated();
 
         $this->assertSame([], $this->getJson($this->ticketUrl('/notes'), $this->headers())->json('data'));
         $this->assertSame(
-            ['type' => 'attendance_entry', 'id' => $entryId],
+            ['type' => 'warranty', 'id' => $warranty->id],
             $this->getJson($this->ticketUrl('/notes/all'), $this->headers())->json('data.0.owner'),
         );
     }

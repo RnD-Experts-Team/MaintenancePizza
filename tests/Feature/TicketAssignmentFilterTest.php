@@ -138,13 +138,13 @@ class TicketAssignmentFilterTest extends TestCase
 
         $ticket = Ticket::factory()->create();
 
-        $late = TicketIssue::factory()->for($ticket)->create(['status' => IssueStatus::Assigned->value]);
+        $late = TicketIssue::factory()->for($ticket)->create(['status' => IssueStatus::Scheduled->value]);
         $this->scheduleIssue($late, $yesterday);
 
-        $done = TicketIssue::factory()->for($ticket)->create(['status' => IssueStatus::Complete->value]);
+        $done = TicketIssue::factory()->for($ticket)->create(['status' => IssueStatus::Closed->value]);
         $this->scheduleIssue($done, $yesterday);
 
-        $upcoming = TicketIssue::factory()->for($ticket)->create(['status' => IssueStatus::Assigned->value]);
+        $upcoming = TicketIssue::factory()->for($ticket)->create(['status' => IssueStatus::Scheduled->value]);
         $this->scheduleIssue($upcoming, $tomorrow);
 
         $this->assertSame(1, $this->attention()['overdue']);
@@ -158,7 +158,7 @@ class TicketAssignmentFilterTest extends TestCase
     public function test_the_latest_assignment_is_by_creation_order_not_by_date(): void
     {
         $ticket = Ticket::factory()->create();
-        $issue = TicketIssue::factory()->for($ticket)->create(['status' => IssueStatus::Assigned->value]);
+        $issue = TicketIssue::factory()->for($ticket)->create(['status' => IssueStatus::Scheduled->value]);
 
         $this->scheduleIssue($issue, Carbon::tomorrow()->toDateString());
         $this->scheduleIssue($issue, Carbon::yesterday()->toDateString());
@@ -169,7 +169,7 @@ class TicketAssignmentFilterTest extends TestCase
     public function test_a_mistaken_assignment_never_makes_an_issue_overdue(): void
     {
         $ticket = Ticket::factory()->create();
-        $issue = TicketIssue::factory()->for($ticket)->create(['status' => IssueStatus::Assigned->value]);
+        $issue = TicketIssue::factory()->for($ticket)->create(['status' => IssueStatus::Scheduled->value]);
         $this->scheduleIssue($issue, Carbon::yesterday()->toDateString(), mistaken: true);
 
         $this->assertSame(0, $this->attention()['overdue']);
@@ -178,7 +178,7 @@ class TicketAssignmentFilterTest extends TestCase
     public function test_an_issue_that_was_never_assigned_is_not_overdue(): void
     {
         $ticket = Ticket::factory()->create();
-        TicketIssue::factory()->for($ticket)->create(['status' => IssueStatus::Pending->value]);
+        TicketIssue::factory()->for($ticket)->create(['status' => IssueStatus::New->value]);
 
         $this->assertSame(0, $this->attention()['overdue']);
     }
@@ -186,15 +186,15 @@ class TicketAssignmentFilterTest extends TestCase
     public function test_stuck_counts_waiting_issues_and_agrees_with_the_status_breakdown(): void
     {
         $ticket = Ticket::factory()->create();
-        TicketIssue::factory()->for($ticket)->create(['status' => IssueStatus::Waiting->value]);
-        TicketIssue::factory()->for($ticket)->create(['status' => IssueStatus::Waiting->value]);
-        TicketIssue::factory()->for($ticket)->create(['status' => IssueStatus::Pending->value]);
+        TicketIssue::factory()->for($ticket)->create(['status' => IssueStatus::WaitingOnStore->value]);
+        TicketIssue::factory()->for($ticket)->create(['status' => IssueStatus::WaitingOnStore->value]);
+        TicketIssue::factory()->for($ticket)->create(['status' => IssueStatus::New->value]);
 
         $request = Request::create('/api/tickets/analytics', 'GET', []);
         $summary = app(TicketAnalyticsService::class)->summarize($request);
 
         $fromBreakdown = collect($summary['issues']['status_breakdown'])
-            ->firstWhere('status', IssueStatus::Waiting->value)['count'];
+            ->firstWhere('status', IssueStatus::WaitingOnStore->value)['count'];
 
         $this->assertSame(2, $summary['attention']['stuck']);
         $this->assertSame($fromBreakdown, $summary['attention']['stuck']);
@@ -218,14 +218,14 @@ class TicketAssignmentFilterTest extends TestCase
 
         $wanted = Ticket::factory()->create();
         $a = TicketIssue::factory()->for($wanted)->create([
-            'status' => IssueStatus::Assigned->value,
+            'status' => IssueStatus::Scheduled->value,
             'other_title' => 'Fryer not heating',
         ]);
         $this->scheduleIssue($a, $yesterday);
 
         $other = Ticket::factory()->create();
         $b = TicketIssue::factory()->for($other)->create([
-            'status' => IssueStatus::Assigned->value,
+            'status' => IssueStatus::Scheduled->value,
             'other_title' => 'Door handle loose',
         ]);
         $this->scheduleIssue($b, $yesterday);

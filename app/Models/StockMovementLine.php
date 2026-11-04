@@ -6,6 +6,7 @@ use Database\Factories\StockMovementLineFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class StockMovementLine extends Model
 {
@@ -51,5 +52,15 @@ class StockMovementLine extends Model
     public function storageLocation(): BelongsTo
     {
         return $this->belongsTo(StorageLocation::class);
+    }
+
+    /**
+     * The serial-tracked pieces this line moved, one per unit of quantity.
+     *
+     * @return BelongsToMany<PartUnit, $this>
+     */
+    public function units(): BelongsToMany
+    {
+        return $this->belongsToMany(PartUnit::class, 'stock_movement_line_part_unit')->withTimestamps();
     }
 }

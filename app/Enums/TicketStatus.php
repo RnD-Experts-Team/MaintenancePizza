@@ -2,28 +2,34 @@
 
 namespace App\Enums;
 
+/**
+ * A ticket's status. Never stored: it is DERIVED from its issues by
+ * TicketStatusService (and its SQL twin in TicketService), so it mirrors
+ * IssueStatus value for value.
+ */
 enum TicketStatus: string
 {
-    case Pending = 'pending';
-    case Assigned = 'assigned';
-    case InProgress = 'in_progress';
-    case Waiting = 'waiting';
-    case Complete = 'complete';
+    case New = 'new';
+    case InReview = 'in_review';
+    case WaitingOnStore = 'waiting_on_store';
+    case Inspection = 'inspection';
+    case WaitingApproval = 'waiting_approval';
+    case Scheduled = 'scheduled';
+    case WorkDone = 'work_done';
+    case Closed = 'closed';
     case Cancelled = 'cancelled';
 
-    /**
-     * Human-readable label for the status.
-     */
     public function label(): string
     {
-        return match ($this) {
-            self::Pending => 'Pending',
-            self::Assigned => 'Assigned',
-            self::InProgress => 'In Progress',
-            self::Waiting => 'Waiting',
-            self::Complete => 'Complete',
-            self::Cancelled => 'Cancelled',
-        };
+        return IssueStatus::from($this->value)->label();
+    }
+
+    /**
+     * @return array<int, self>
+     */
+    public static function terminal(): array
+    {
+        return [self::Closed, self::Cancelled];
     }
 
     /**

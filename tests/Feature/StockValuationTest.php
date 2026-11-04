@@ -35,7 +35,7 @@ class StockValuationTest extends TestCase
     private function buy(string $quantity, ?string $unitCost, string $at, ?StorageLocation $where = null)
     {
         return app(StockService::class)->record(
-            ['moved_at' => $at, 'type' => StockMovementType::Purchase],
+            ['moved_at' => $at, 'type' => StockMovementType::Bought],
             [array_filter([
                 'part_id' => $this->part->id,
                 'storage_location_id' => ($where ?? $this->shelf)->id,
@@ -49,7 +49,7 @@ class StockValuationTest extends TestCase
     private function draw(string $quantity, string $at, ?StorageLocation $where = null)
     {
         return app(StockService::class)->record(
-            ['moved_at' => $at, 'type' => StockMovementType::Draw],
+            ['moved_at' => $at, 'type' => StockMovementType::Used],
             [[
                 'part_id' => $this->part->id,
                 'storage_location_id' => ($where ?? $this->shelf)->id,
@@ -123,7 +123,7 @@ class StockValuationTest extends TestCase
     public function test_stock_with_no_recorded_price_is_worth_nothing_and_says_so(): void
     {
         app(StockService::class)->record(
-            ['moved_at' => '2026-01-01 09:00:00', 'type' => StockMovementType::InitialCount],
+            ['moved_at' => '2026-01-01 09:00:00', 'type' => StockMovementType::OpeningStock],
             [[
                 'part_id' => $this->part->id,
                 'storage_location_id' => $this->shelf->id,
@@ -161,7 +161,7 @@ class StockValuationTest extends TestCase
         $before = $this->value()['value'];
 
         app(StockService::class)->record(
-            ['moved_at' => '2026-05-01 09:00:00', 'type' => StockMovementType::TransferOut],
+            ['moved_at' => '2026-05-01 09:00:00', 'type' => StockMovementType::Moved],
             [
                 ['part_id' => $this->part->id, 'storage_location_id' => $this->shelf->id, 'quantity' => '4', 'direction' => -1],
                 ['part_id' => $this->part->id, 'storage_location_id' => $van->id, 'quantity' => '4', 'direction' => 1],
@@ -221,7 +221,7 @@ class StockValuationTest extends TestCase
     public function test_value_follows_quantity_negative(): void
     {
         $return = app(StockService::class)->record(
-            ['moved_at' => '2026-01-01 09:00:00', 'type' => StockMovementType::Return],
+            ['moved_at' => '2026-01-01 09:00:00', 'type' => StockMovementType::Returned],
             [[
                 'part_id' => $this->part->id,
                 'storage_location_id' => $this->shelf->id,

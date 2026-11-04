@@ -28,7 +28,7 @@ class StockMovementsSheet implements FromCollection, WithHeadings, WithMapping, 
     {
         return [
             'ID', 'Moved At', 'Type', 'Location', 'Paid By', 'Paid By Technician',
-            'Body', 'Part Usage ID', 'Reverses Movement ID', 'Mistaken', 'Created By', 'Created At',
+            'Body', 'Payment Line ID', 'Ticket Issue ID', 'Stock Count ID', 'Reverses Movement ID', 'Mistaken', 'Created By', 'Created At',
         ];
     }
 
@@ -43,10 +43,12 @@ class StockMovementsSheet implements FromCollection, WithHeadings, WithMapping, 
             (string) $movement->moved_at,
             $movement->type->label(),
             $movement->storageLocation?->name,
-            $movement->paid_by?->label(),
+            $movement->paid_by,
             $movement->paidByTechnician?->name,
             $movement->body,
-            $movement->part_usage_id,
+            $movement->payment_line_id,
+            $movement->ticket_issue_id,
+            $movement->stock_count_id,
             $movement->reverses_stock_movement_id,
             $movement->mistaken ? 'yes' : 'no',
             $movement->created_by,

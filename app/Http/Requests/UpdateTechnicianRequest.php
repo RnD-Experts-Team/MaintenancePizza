@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Rules\UniqueName;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -23,8 +24,12 @@ class UpdateTechnicianRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['sometimes', 'required', 'string', 'max:255'],
+            'name' => ['sometimes', 'required', 'string', 'max:255', new UniqueName('technicians', 'technician', $this->route('technician')?->id)],
             'phone' => ['sometimes', ...StoreTechnicianRequest::PHONE_RULES],
+            'contact_person' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'hourly_rate' => ['sometimes', 'nullable', 'numeric', 'min:0', 'max:100000'],
+            'emergency_available' => ['sometimes', 'boolean'],
+            'emergency_notes' => ['sometimes', 'nullable', 'string', 'max:2000'],
             'category_id' => ['sometimes', 'nullable', 'integer', 'exists:categories,id'],
             // Where they are based, the stores they can cover, and notes about
             // it. Coverage is the whole list, replaced on every save.

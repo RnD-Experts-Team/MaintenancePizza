@@ -25,7 +25,7 @@ class TicketIssueFactory extends Factory
             'priority' => Priority::Medium->value,
             'assigned_priority' => null,
             'description' => $this->faker->sentence(),
-            'status' => IssueStatus::Pending->value,
+            'status' => IssueStatus::New->value,
             'parent_id' => null,
         ];
     }

@@ -3,8 +3,6 @@
 namespace App\Services;
 
 use App\Enums\IssueStatus;
-use App\Enums\PartUsagePayer;
-use App\Enums\PaymentStatus;
 use App\Enums\Priority;
 use App\Enums\TicketStatus;
 use App\Enums\TicketType;
@@ -12,6 +10,7 @@ use App\Jobs\PublishOutboxEventJob;
 use App\Models\Issue;
 use App\Models\Store;
 use App\Models\Ticket;
+use App\Models\Technician;
 use App\Models\TicketIssue;
 use App\Services\MaintenanceEvents\MaintenanceEventFactory;
 use App\Services\MaintenanceEvents\MaintenanceOutboxService;
@@ -31,7 +30,10 @@ use Illuminate\Support\Facades\DB;
 class TicketService
 {
     /**
-     * @var list<string>
+     * Eager loads of a presented ticket. The constructor adds the issues'
+     * technicians (a closure, which a property default cannot hold).
+     *
+     * @var array<int|string, string|\Closure>
      */
     private array $listWith = [
         'store',
@@ -50,6 +52,10 @@ class TicketService
         private NoteService $notes,
         private AttachmentService $attachments,
     ) {
+        // Who each issue is assigned to, for the list's light `technicians`
+        // (one query for the whole page; see presentListIssue()). Removed
+        // technicians too, as on the issue's own read.
+        $this->listWith['ticketIssues.technicians'] = fn ($q) => $q->withTrashed();
     }
 
     /**
@@ -111,7 +117,10 @@ class TicketService
                     'other_title' => $line['other_title'] ?? null,
                     'priority'    => $line['priority'],
                     'description' => $line['description'],
-                    'status'      => IssueStatus::Pending->value,
+                    'status'      => IssueStatus::New->value,
+                    'impact'        => $line['impact'] ?? null,
+                    'contact_name'  => $line['contact_name'] ?? null,
+                    'contact_phone' => $line['contact_phone'] ?? null,
                 ]);
                 $issue->created_by = Auth::id();
                 $issue->save();
@@ -167,7 +176,10 @@ class TicketService
                     'other_title' => $line['other_title'] ?? null,
                     'priority'    => $line['priority'],
                     'description' => $line['description'],
-                    'status'      => IssueStatus::Pending->value,
+                    'status'      => IssueStatus::New->value,
+                    'impact'        => $line['impact'] ?? null,
+                    'contact_name'  => $line['contact_name'] ?? null,
+                    'contact_phone' => $line['contact_phone'] ?? null,
                 ]);
                 $issue->created_by = Auth::id();
                 $issue->save();
@@ -317,7 +329,7 @@ class TicketService
             'notes'       => $this->notes->presentMany($ticket),
             'attachments' => $this->attachments->presentMany($ticket),
             'issues'      => $ticket->relationLoaded('ticketIssues')
-                ? $ticket->ticketIssues->map(fn(TicketIssue $i) => $this->issues->present($i))->all()
+                ? $ticket->ticketIssues->map(fn(TicketIssue $i) => $this->presentListIssue($i))->all()
                 : null,
             'issues_count' => $ticket->ticket_issues_count ?? null,
             'created_by'   => $ticket->created_by,
@@ -328,6 +340,27 @@ class TicketService
             'updated_at'  => $ticket->updated_at,
             'deleted_at'  => $ticket->deleted_at,
         ];
+    }
+
+    /**
+     * An issue row of a ticket: the core read, with `technicians` cut down
+     * to [{id, name}] -- the list only says who it is assigned to; the full
+     * read (phone, category) is the issue's own.
+     *
+     * @return array<string, mixed>
+     */
+    private function presentListIssue(TicketIssue $issue): array
+    {
+        $row = $this->issues->present($issue);
+
+        if ($issue->relationLoaded('technicians')) {
+            $row['technicians'] = $issue->technicians
+                ->map(fn (Technician $t) => ['id' => $t->id, 'name' => $t->name])
+                ->values()
+                ->all();
+        }
+
+        return $row;
     }
 
     /**
@@ -400,7 +433,7 @@ class TicketService
             });
         }
 
-        // ?statuses[]=pending&statuses[]=assigned (OR logic)
+        // ?statuses[]=new&statuses[]=scheduled (OR logic)
         $statusValues = array_filter((array) $request->query('statuses', []));
         $statuses = array_values(array_filter(
             array_map(fn($v) => TicketStatus::tryFrom((string) $v), $statusValues)
@@ -415,7 +448,7 @@ class TicketService
             $query->whereHas('ticketIssues', fn(Builder $q) => $q->whereIn('issue_id', $issueIds));
         }
 
-        // ?issue_statuses[]=pending&issue_statuses[]=assigned
+        // ?issue_statuses[]=new&issue_statuses[]=scheduled
         $issueStatuses = array_filter((array) $request->query('issue_statuses', []));
         if (!empty($issueStatuses)) {
             $query->whereHas('ticketIssues', fn(Builder $q) => $q->whereIn('status', $issueStatuses));
@@ -460,9 +493,8 @@ class TicketService
         $assignedTo   = $request->query('assigned_to');
         if ($assignedFrom || $assignedTo) {
             $query->whereHas('ticketIssues.assignments', function (Builder $q) use ($assignedFrom, $assignedTo) {
-                // Mistaken assignments never count, exactly as mistaken part
-                // usages never count in part_cost_* and mistaken payables never
-                // count in payment_statuses.
+                // Mistaken bookings never count, exactly as mistaken payments
+                // never count in part_cost_*.
                 $q->where('assignments.mistaken', false);
 
                 // Plain where, NOT whereDate: assigned_date is a DATE column, so
@@ -477,7 +509,7 @@ class TicketService
             });
         }
 
-        // ?changed_statuses[]=assigned&changed_statuses[]=complete&changed_statuses[]=waiting
+        // ?changed_statuses[]=scheduled&changed_statuses[]=closed
         // &changed_from=2026-01-01&changed_to=2026-01-31
         // Tickets with an issue that changed TO any of these statuses within the date range.
         $changedStatusValues = array_filter((array) $request->query('changed_statuses', []));
@@ -501,34 +533,32 @@ class TicketService
             });
         }
 
-        // At least one issue whose summed (non-mistaken) part cost exceeds N.
+        // At least one issue whose (non-mistaken) parts spend exceeds N: the
+        // parts payment lines linked to it, on payments not marked mistaken.
         if (($single = $request->query('part_cost_single_gt')) !== null && $single !== '') {
             $query->whereHas('ticketIssues', function (Builder $q) use ($single) {
                 $q->whereIn('ticket_issues.id', function (QueryBuilder $sub) use ($single) {
-                    $sub->from('part_ticket_issue as pti')
-                        ->join('part_usages as pu', 'pu.id', '=', 'pti.part_usage_id')
-                        ->where('pu.mistaken', false)
-                        ->select('pti.ticket_issue_id')
-                        ->groupBy('pti.ticket_issue_id')
-                        ->havingRaw('SUM(pu.cost) > ?', [$single]);
+                    $this->partsLines($sub->from('payment_line_ticket_issue as plti'))
+                        ->select('plti.ticket_issue_id')
+                        ->groupBy('plti.ticket_issue_id')
+                        ->havingRaw('SUM(pl.amount) > ?', [$single]);
                 });
             });
         }
 
-        // Whole-ticket (non-mistaken) part cost exceeds N; a shared part counts once.
+        // Whole-ticket (non-mistaken) parts spend exceeds N; a line linked to
+        // several of its issues counts once.
         if (($total = $request->query('part_cost_total_gt')) !== null && $total !== '') {
-            $distinct = DB::table('ticket_issues as ti')
-                ->join('part_ticket_issue as pti', 'pti.ticket_issue_id', '=', 'ti.id')
-                ->join('part_usages as pu', 'pu.id', '=', 'pti.part_usage_id')
-                ->where('pu.mistaken', false)
+            $distinct = $this->partsLines(DB::table('ticket_issues as ti')
+                ->join('payment_line_ticket_issue as plti', 'plti.ticket_issue_id', '=', 'ti.id'))
                 ->distinct()
-                ->select('ti.ticket_id', 'pu.id as pu_id', 'pu.cost');
+                ->select('ti.ticket_id', 'pl.id as pl_id', 'pl.amount');
 
             $query->whereIn('tickets.id', function (QueryBuilder $sub) use ($distinct, $total) {
                 $sub->fromSub($distinct, 'd')
                     ->select('d.ticket_id')
                     ->groupBy('d.ticket_id')
-                    ->havingRaw('SUM(d.cost) > ?', [$total]);
+                    ->havingRaw('SUM(d.amount) > ?', [$total]);
             });
         }
 
@@ -542,15 +572,6 @@ class TicketService
         $creatorIds = array_filter((array) $request->query('creator_ids', []));
         if (!empty($creatorIds)) {
             $query->whereIn('created_by', $creatorIds);
-        }
-
-        // ?payment_statuses[]=unpaid&payment_statuses[]=paid (OR logic)
-        $paymentStatusValues = array_filter((array) $request->query('payment_statuses', []));
-        $paymentStatuses = array_values(array_filter(
-            array_map(fn($v) => PaymentStatus::tryFrom((string) $v), $paymentStatusValues)
-        ));
-        if (!empty($paymentStatuses)) {
-            $this->filterByPaymentStatuses($query, $paymentStatuses);
         }
 
         match ($request->query('trashed')) {
@@ -567,64 +588,16 @@ class TicketService
     }
 
     /**
-     * Filter by whether a ticket's work has been settled through a pay sheet.
-     *
-     * A "payable" is an attendance entry, or a part usage somebody other than
-     * us paid for; mistaken records are never payable. A payable counts as paid
-     * once a daily pay payment has claimed it.
-     *
-     *   unpaid       at least one payable is still unclaimed
-     *   paid         has payables, and every one of them is claimed
-     *   not_payable  has no payables at all
-     *
-     * Mirrors PaymentStatus::rollUp(), which is what the per-record status uses,
-     * so the filter and the badge always agree.
-     *
-     * @param  Builder<Ticket>  $query
-     * @param  array<int, PaymentStatus>  $statuses
+     * Join a payment_line_ticket_issue query (aliased plti) to its parts lines
+     * on payments that were not marked mistaken (aliases pl, p).
      */
-    private function filterByPaymentStatuses(Builder $query, array $statuses): void
+    private function partsLines(QueryBuilder $query): QueryBuilder
     {
-        $query->where(function (Builder $outer) use ($statuses) {
-            foreach ($statuses as $status) {
-                $outer->orWhere(fn(Builder $q) => match ($status) {
-                    PaymentStatus::Unpaid => $q->whereHas('ticketIssues', fn(Builder $i) => $this->whereHasPayable($i, claimed: false)),
-                    PaymentStatus::Paid => $q
-                        ->whereHas('ticketIssues', fn(Builder $i) => $this->whereHasPayable($i, claimed: true))
-                        ->whereDoesntHave('ticketIssues', fn(Builder $i) => $this->whereHasPayable($i, claimed: false)),
-                    PaymentStatus::NotPayable => $q
-                        ->whereDoesntHave('ticketIssues', fn(Builder $i) => $this->whereHasPayable($i, claimed: true))
-                        ->whereDoesntHave('ticketIssues', fn(Builder $i) => $this->whereHasPayable($i, claimed: false)),
-                });
-            }
-        });
-    }
-
-    /**
-     * Constrain an issue query to those carrying a payable that either has been
-     * claimed by a payment, or has not.
-     *
-     * @param  Builder<TicketIssue>  $query
-     */
-    private function whereHasPayable(Builder $query, bool $claimed): void
-    {
-        $exists = $claimed ? 'whereExists' : 'whereNotExists';
-
-        $query->where(function (Builder $inner) use ($exists) {
-            $inner
-                ->whereHas('attendanceEntries', fn(Builder $a) => $a
-                    ->where('attendance_entries.mistaken', false)
-                    ->{$exists}(fn(QueryBuilder $c) => $c
-                        ->from('daily_pay_payment_attendance_entry as claim')
-                        ->whereColumn('claim.attendance_entry_id', 'attendance_entries.id')))
-                ->orWhereHas('partUsages', fn(Builder $p) => $p
-                    ->where('part_usages.mistaken', false)
-                    // Parts we bought ourselves are nobody's to be paid back.
-                    ->where('part_usages.paid_by', '!=', PartUsagePayer::Us->value)
-                    ->{$exists}(fn(QueryBuilder $c) => $c
-                        ->from('daily_pay_payment_part_usage as claim')
-                        ->whereColumn('claim.part_usage_id', 'part_usages.id')));
-        });
+        return $query
+            ->join('payment_lines as pl', 'pl.id', '=', 'plti.payment_line_id')
+            ->join('payments as p', 'p.id', '=', 'pl.payment_id')
+            ->where('pl.type', 'parts')
+            ->where('p.mistaken', false);
     }
 
     /**
@@ -644,46 +617,49 @@ class TicketService
     }
 
     /**
+     * The SQL twin of TicketStatusService::for(): a ticket has derived status
+     * S when it has an issue in S and none in any status that wins over S
+     * (TicketStatusService::PRECEDENCE). Cancelled = has issues, all
+     * cancelled; closed = has issues, none open, not all cancelled; a ticket
+     * with no issues is new.
+     *
      * @param  Builder<Ticket>  $query
      */
     private function applyDerivedStatusClause(Builder $query, TicketStatus $status): void
     {
-        $hasStatus = fn(IssueStatus $s) => fn(Builder $q) => $q->where('status', $s->value);
+        $open = array_map(fn (IssueStatus $s) => $s->value, TicketStatusService::PRECEDENCE);
 
         match ($status) {
-            TicketStatus::Waiting => $query->whereHas('ticketIssues', $hasStatus(IssueStatus::Waiting)),
-
-            TicketStatus::InProgress => $query
-                ->whereHas('ticketIssues', $hasStatus(IssueStatus::InProgress))
-                ->whereDoesntHave('ticketIssues', $hasStatus(IssueStatus::Waiting)),
-
-            TicketStatus::Assigned => $query
-                ->whereHas('ticketIssues', $hasStatus(IssueStatus::Assigned))
-                ->whereDoesntHave('ticketIssues', $hasStatus(IssueStatus::InProgress))
-                ->whereDoesntHave('ticketIssues', $hasStatus(IssueStatus::Waiting)),
-
-            TicketStatus::Complete => $query
-                ->whereHas('ticketIssues')
-                ->whereDoesntHave('ticketIssues', fn(Builder $q) => $q->whereNotIn('status', [
-                    IssueStatus::Complete->value,
-                    IssueStatus::Deferred->value,
-                    IssueStatus::Cancelled->value,
-                ]))
-                ->whereHas('ticketIssues', fn(Builder $q) => $q->whereIn('status', [
-                    IssueStatus::Complete->value,
-                    IssueStatus::Deferred->value,
-                ])),
-
             TicketStatus::Cancelled => $query
                 ->whereHas('ticketIssues')
                 ->whereDoesntHave('ticketIssues', fn(Builder $q) => $q->where('status', '!=', IssueStatus::Cancelled->value)),
 
-            TicketStatus::Pending => $query
-                ->whereDoesntHave('ticketIssues', $hasStatus(IssueStatus::InProgress))
-                ->whereDoesntHave('ticketIssues', $hasStatus(IssueStatus::Assigned))
-                ->where(fn(Builder $q) => $q
-                    ->whereDoesntHave('ticketIssues')
-                    ->orWhereHas('ticketIssues', $hasStatus(IssueStatus::Pending))),
+            TicketStatus::Closed => $query
+                ->whereHas('ticketIssues', fn(Builder $q) => $q->where('status', IssueStatus::Closed->value))
+                ->whereDoesntHave('ticketIssues', fn(Builder $q) => $q->whereIn('status', $open)),
+
+            default => $this->applyOpenStatusClause($query, IssueStatus::from($status->value), $open),
         };
+    }
+
+    /**
+     * @param  Builder<Ticket>  $query
+     * @param  array<int, string>  $open  the open statuses in precedence order
+     */
+    private function applyOpenStatusClause(Builder $query, IssueStatus $status, array $open): void
+    {
+        $winners = array_slice($open, 0, (int) array_search($status->value, $open, true));
+
+        $has = fn (Builder $q) => $q
+            ->whereHas('ticketIssues', fn(Builder $i) => $i->where('status', $status->value))
+            ->when($winners !== [], fn (Builder $w) => $w->whereDoesntHave('ticketIssues', fn(Builder $i) => $i->whereIn('status', $winners)));
+
+        if ($status === IssueStatus::New) {
+            $query->where(fn (Builder $q) => $q->whereDoesntHave('ticketIssues')->orWhere($has));
+
+            return;
+        }
+
+        $has($query);
     }
 }

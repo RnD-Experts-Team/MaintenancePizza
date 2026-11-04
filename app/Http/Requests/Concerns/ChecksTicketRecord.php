@@ -8,13 +8,13 @@ use App\Services\TicketIssueService;
  * For the leaf routes under stores/{store}/tickets/{ticket}: the ticket must
  * be the store's, the record the URL names must be on that ticket, and a
  * reschedule must be its booking's. 404 otherwise -- those routes bind
- * records by id alone. On URLs without a ticket (catalog notes, the global
- * attendance routes) there is nothing to check.
+ * records by id alone. On URLs without a ticket (catalog notes, storage)
+ * there is nothing to check.
  */
 trait ChecksTicketRecord
 {
     /** Route parameters that name a record reaching tickets through its issues. */
-    private const TICKET_RECORD_PARAMETERS = ['assignment', 'diagnosis', 'attendanceEntry', 'partUsage', 'payEntry', 'warranty'];
+    private const TICKET_RECORD_PARAMETERS = ['assignment', 'warranty'];
 
     protected function checkTicketRecord(): void
     {

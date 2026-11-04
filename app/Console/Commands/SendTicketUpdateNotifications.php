@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Jobs\PublishOutboxEventJob;
+use App\Models\IssueInfoRequest;
 use App\Models\Ticket;
 use App\Models\TicketIssue;
 use App\Services\MaintenanceAnalyticsService;
@@ -11,6 +12,7 @@ use App\Services\MaintenanceEvents\MaintenanceOutboxService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class SendTicketUpdateNotifications extends Command
 {
@@ -49,7 +51,7 @@ class SendTicketUpdateNotifications extends Command
         foreach ($tickets as $ticket) {
             DB::transaction(function () use ($ticket, $analytics, $now) {
                 $since = $ticket->last_notified_at ?? $ticket->created_at;
-                $lines = $this->lines($analytics->changes($ticket, $since, $now));
+                $lines = $this->lines($analytics->changes($ticket, $since, $now), $this->questions($ticket, $since, $now));
 
                 // Nothing a Store Manager can see changed (a private note, a
                 // pay sheet claiming the work): nothing to say.
@@ -77,13 +79,37 @@ class SendTicketUpdateNotifications extends Command
     }
 
     /**
-     * A few short lines: each issue's status move (first to last), then how
-     * many notes and files were added. Four at most.
+     * Questions the office asked the store in the window and that are still
+     * open -- the one thing in the notification the Store Manager has to act
+     * on, so it goes first.
      *
-     * @param  array{opened: bool, status_changes: array<int, array<string, mixed>>, notes: int, files: int}  $changes
      * @return array<int, string>
      */
-    private function lines(array $changes): array
+    private function questions(Ticket $ticket, Carbon $since, Carbon $until): array
+    {
+        return IssueInfoRequest::query()
+            ->whereHas('ticketIssue', fn ($q) => $q->where('ticket_id', $ticket->id))
+            ->where('mistaken', false)
+            ->whereNull('answered_at')
+            ->where('created_at', '>', $since)
+            ->where('created_at', '<', $until)
+            ->with('ticketIssue.issue')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (IssueInfoRequest $r) => ($r->ticketIssue?->displayTitle() ?: 'Issue').': the office asks "'.Str::limit($r->question, 120).'"')
+            ->all();
+    }
+
+    /**
+     * A few short lines: the office's open questions, each issue's status
+     * move (first to last), then how many notes and files were added. Four
+     * at most.
+     *
+     * @param  array{opened: bool, status_changes: array<int, array<string, mixed>>, notes: int, files: int}  $changes
+     * @param  array<int, string>  $questions
+     * @return array<int, string>
+     */
+    private function lines(array $changes, array $questions = []): array
     {
         $moves = [];
         foreach ($changes['status_changes'] as $change) {
@@ -92,7 +118,7 @@ class SendTicketUpdateNotifications extends Command
             $moves[$title]['to'] = $change['to'];
         }
 
-        $lines = [];
+        $lines = $questions;
         foreach ($moves as $title => $move) {
             if ($move['from'] !== $move['to']) {
                 $lines[] = $move['from'] ? "{$title}: {$move['from']} → {$move['to']}" : "{$title}: {$move['to']}";
