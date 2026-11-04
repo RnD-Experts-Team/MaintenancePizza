@@ -520,6 +520,8 @@ class IssueWorkflowService
         $exempt = $resolution?->exemptsChecklist() ?? false;
 
         [$hasCost, $hasInvoice] = $this->paymentFacts($issue);
+        // An inspection fee typed at booking is a recorded cost too.
+        $hasCost = $hasCost || $issue->inspections()->where('mistaken', false)->whereNotNull('inspection_fee')->exists();
 
         $done = [
             'resolved' => $exempt || $issue->store_confirmed_working === true,

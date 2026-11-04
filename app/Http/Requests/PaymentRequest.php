@@ -3,7 +3,6 @@
 namespace App\Http\Requests;
 
 use App\Enums\PaymentLineType;
-use App\Enums\PaymentMethod;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -48,7 +47,8 @@ class PaymentRequest extends FormRequest
             'paid_at' => ['required', 'date'],
             'technician_id' => ['nullable', 'integer', 'exists:technicians,id'],
             'supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
-            'method' => ['nullable', Rule::in(PaymentMethod::values())],
+            // How we paid, from the editable list (GET /payment-methods).
+            'payment_method_id' => ['nullable', 'integer', 'exists:payment_methods,id'],
             'reference' => ['nullable', 'string', 'max:255'],
             'invoice_number' => ['nullable', 'string', 'max:255'],
             'note' => ['nullable', 'string', 'max:10000'],

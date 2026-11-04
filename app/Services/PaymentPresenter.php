@@ -21,6 +21,7 @@ class PaymentPresenter
     public const ROW_LOADS = [
         'technician.category',
         'supplier',
+        'paymentMethod',
         'lines.store',
         'attachments',
         'mistakenNote',
@@ -30,6 +31,7 @@ class PaymentPresenter
     public const SHOW_LOADS = [
         'technician.category',
         'supplier',
+        'paymentMethod',
         'creator',
         'lines.store',
         'lines.storageLocation',
@@ -102,8 +104,7 @@ class PaymentPresenter
             'id' => $payment->id,
             'paid_at' => $payment->paid_at?->toDateString(),
             'paid_to' => $paidTo,
-            'method' => $payment->method?->value,
-            'method_label' => $payment->method?->label(),
+            'payment_method' => $payment->paymentMethod ? ['id' => $payment->paymentMethod->id, 'name' => $payment->paymentMethod->name] : null,
             'reference' => $payment->reference,
             'invoice_number' => $payment->invoice_number,
             'total' => $this->money($payment->total),

@@ -154,7 +154,7 @@ class IssueWorkflowTest extends IssueWorkflowTestCase
     {
         $this->putStatus(IssueStatus::WorkDone);
 
-        $this->assertRefused($this->act('close', ['resolution' => 'repaired']))
+        $this->assertRefused($this->act('close', ['resolution' => 'repaired', 'final_note' => 'The fan motor was burnt; replaced it.']))
             ->assertJsonPath('errors.status.0', 'Not done yet: the store says it works, cost recorded, invoice attached, work notes written. Finish these first, or give a reason to close anyway.')
             ->assertJsonPath('errors.checklist', ['resolved', 'cost_recorded', 'invoice_attached', 'notes_completed']);
 
@@ -196,20 +196,20 @@ class IssueWorkflowTest extends IssueWorkflowTestCase
         $line = PaymentLine::query()->create(['payment_id' => $payment->id, 'type' => 'fixed', 'store_id' => $this->store->id, 'amount' => 120]);
         $line->ticketIssues()->attach($this->issue->id);
 
-        $this->act('close', ['resolution' => 'repaired'])->assertUnprocessable()
+        $this->act('close', ['resolution' => 'repaired', 'final_note' => 'The fan motor was burnt; replaced it.'])->assertUnprocessable()
             ->assertJsonPath('errors.checklist', ['invoice_attached']);
 
         $payment->attachments()->create(['path' => 'attachments/invoice.pdf', 'original_name' => 'invoice.pdf']);
 
         $this->read()->assertJsonPath('data.workflow.checklist.2', ['key' => 'invoice_attached', 'label' => 'Invoice attached', 'done' => true]);
 
-        $this->act('close', ['resolution' => 'repaired'])->assertOk()->assertJsonPath('data.status', 'closed');
+        $this->act('close', ['resolution' => 'repaired', 'final_note' => 'The fan motor was burnt; replaced it.'])->assertOk()->assertJsonPath('data.status', 'closed');
         $this->assertNull($this->issue->statusChanges()->latest('id')->value('reason'));
     }
 
     public function test_a_resolution_without_paid_work_needs_nothing_on_the_checklist(): void
     {
-        $this->act('close', ['resolution' => 'fixed_by_troubleshooting'])->assertOk()
+        $this->act('close', ['resolution' => 'fixed_by_troubleshooting', 'final_note' => 'The fan motor was burnt; replaced it.'])->assertOk()
             ->assertJsonPath('data.status', 'closed')
             ->assertJsonPath('data.workflow.checklist.1.done', true);
     }
@@ -218,7 +218,7 @@ class IssueWorkflowTest extends IssueWorkflowTestCase
     {
         $this->putStatus(IssueStatus::Closed);
 
-        $this->assertRefused($this->act('close', ['resolution' => 'not_needed', 'override_reason' => 'x']))
+        $this->assertRefused($this->act('close', ['resolution' => 'not_needed', 'override_reason' => 'x', 'final_note' => 'The fan motor was burnt; replaced it.']))
             ->assertJsonPath('errors.status.0', 'This issue is closed. Change its status first if it needs more work.');
     }
 

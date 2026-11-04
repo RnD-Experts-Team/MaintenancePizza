@@ -142,7 +142,7 @@ returns the issue with:
 - `info_requests`: [{id, question, asked_by {name}, created_at, answer,
   answered_by_name (typed, optional), answered_by {name}, answered_at, mistaken}]
 - `inspections`: [{id, technician {id,name}, status scheduled|done|cancelled,
-  scheduled_date, scheduled_time, done_at, findings, recommended_repair,
+  scheduled_date, scheduled_time, scheduled_time_to, inspection_fee, done_at, findings, recommended_repair,
   parts_needed, estimated_cost, attachments, notes, mistaken}]
 - `approvals`: [{id, amount, level, level_label, decision approved|rejected,
   approver_name, decided_at, note, inspection_id, attachments, mistaken}]
@@ -201,15 +201,15 @@ not fit the current status → 422 with a plain reason.
 | `review` | target_completion_at?, next_action?, assigned_priority? | new → in_review. In every other open status (in_review, waiting_on_store, inspection, waiting_approval, scheduled, work_done) it only updates these fields and the status stays; refused once closed/cancelled |
 | `info-requests` | question (required), files[] | → waiting_on_store; outbox `maintenance.issue.info_requested` |
 | `info-requests/{request}/answer` | answer (required), files[], answered_by_name? (who answered, free text, max 120) | → in_review; outbox `maintenance.issue.info_answered` |
-| `inspections` | technician_id, scheduled_date, scheduled_time?, instructions? | → inspection; creates a `kind=inspection` schedule + an inspection(status scheduled) + adds the issue to the technician's open trip for that date (TripService::scheduleIssue). Response adds `trip_link` {url_token, expires_after_hours} when a NEW token was issued. |
+| `inspections` | technician_id, scheduled_date, scheduled_time?, scheduled_time_to? (a window: the end needs a start and comes after it), inspection_fee? (what the inspection itself costs; it is the issue's inspection cost until a live payment line with that `issue_inspection_id` covers it — never both, `costs.inspection_fees` = fees still uncovered; a fee also ticks `cost_recorded`), instructions? | → inspection; creates a `kind=inspection` schedule + an inspection(status scheduled) + adds the issue to the technician's open trip for that date (TripService::scheduleIssue). Response adds `trip_link` {url_token, expires_after_hours} when a NEW token was issued. |
 | `inspections/{inspection}/result` | findings (required), recommended_repair?, parts_needed?, estimated_cost?, files[] | marks the inspection done; status unchanged (stays inspection) |
 | `approval-request` | amount (required), inspection_id? | → waiting_approval; outbox `maintenance.issue.approval_needed` with level |
 | `approvals` | amount, decision approved\|rejected, approver_name, note?, inspection_id?, files[] | records it; → in_review (next_action set to "Schedule the work" / "Find another option") |
-| `schedule` | technician_id, date, time?, expected_completion_date?, instructions? | → scheduled; creates a `kind=work` schedule, adds the issue to the technician's trip (same as inspections), puts the technician on the issue. `trip_link` as above. |
-| `schedules/{assignment}/move` | date, time?, reason | writes an assignment delay; moves the trip stop to the matching trip. The old day's trip is REMOVED when that leaves it with no stops and it was never used (no session ever, link never opened, no purchases / notes / files, not mistaken) |
+| `schedule` | technician_id, date, time?, time_to? (window), expected_completion_date?, instructions? | → scheduled; creates a `kind=work` schedule, adds the issue to the technician's trip (same as inspections), puts the technician on the issue. `trip_link` as above. |
+| `schedules/{assignment}/move` | date, time?, time_to?, reason | writes an assignment delay; moves the trip stop to the matching trip. The old day's trip is REMOVED when that leaves it with no stops and it was never used (no session ever, link never opened, no purchases / notes / files, not mistaken) |
 | `work-done` | work_performed (required), files[] (before/after photos), warranty? {body, expiry_date} | scheduled → work_done (the specialist recording it for the technician) |
 | `confirmation` | working (bool), note?, confirmed_by_name? (who said so, free text, max 120) | records store_confirmed_*; working=false → in_review with next_action "Schedule more work" |
-| `close` | resolution repaired\|fixed_by_troubleshooting\|not_needed\|replaced, final_note?, what_we_learned?, override_reason? | → closed. Checklist keys: `resolved` (store confirmed working, or resolution fixed_by_troubleshooting/not_needed), `cost_recorded` (a payment line on the issue, or resolution fixed_by_troubleshooting/not_needed), `invoice_attached` (a linked payment has an attachment, same exemption), `notes_completed` (work_performed set, same exemption). Any not done → 422 unless `override_reason` is given (logged in the status change reason). |
+| `close` | resolution repaired\|fixed_by_troubleshooting\|not_needed\|replaced, final_note (REQUIRED, ≥ 10 chars: what was wrong and how it was fixed), what_we_learned?, override_reason? | → closed. Checklist keys: `resolved` (store confirmed working, or resolution fixed_by_troubleshooting/not_needed), `cost_recorded` (a payment line on the issue, or resolution fixed_by_troubleshooting/not_needed), `invoice_attached` (a linked payment has an attachment, same exemption), `notes_completed` (work_performed set, same exemption). Any not done → 422 unless `override_reason` is given (logged in the status change reason). |
 | `jump` | status (any), reason (required) | the escape hatch: any status → any status, logged |
 | `cancel` | reason | existing endpoint, keep |
 | `assigned-priority` | existing, keep | |
@@ -358,14 +358,19 @@ Line amount rules (server computes, client previews):
 Payment total = sum of its lines.
 
 - `GET payments?from=&to=&technician_id=&supplier_id=&category_id=&store=&type=&search=&include_mistaken=1` (paginated; search matches invoice_number, reference, names)
-  → rows {id, paid_at, paid_to {type, id, name, category}, method, reference,
+  → rows {id, paid_at, paid_to {type, id, name, category}, payment_method {id, name}|null, reference,
   invoice_number, total, line_count, stores [store_number…], types [...],
   has_invoice, mistaken, mistaken_reason (the body of its `mistaken` note, or
   null), created_at}, and `meta.totals {count, total}`.
-- `POST payments` `{paid_at, technician_id?|supplier_id?, method?, reference?, invoice_number?, note?, notes[]?, files[], lines: [{type, store_id?|other_store?|storage_location_id?, description?, amount?, hours?, rate?, trip_session_ids[]?, ticket_issue_ids[]?, part_id?, quantity?, unit_cost?, bought_from_supplier_id?, destination?, place?, serials[]?, technician_purchase_ids[]?, miles?, issue_inspection_id?, notes[]?, files[]?}]}`
+- `POST payments` `{paid_at, technician_id?|supplier_id?, payment_method_id?, reference?, invoice_number?, note?, notes[]?, files[], lines: [{type, store_id?|other_store?|storage_location_id?, description?, amount?, hours?, rate?, trip_session_ids[]?, ticket_issue_ids[]?, part_id?, quantity?, unit_cost?, bought_from_supplier_id?, destination?, place?, serials[]?, technician_purchase_ids[]?, miles?, issue_inspection_id?, notes[]?, files[]?}]}`
   (multipart allowed: lines as JSON string in `lines`, or bracket notation).
-  method / reference / invoice_number are optional and the dashboard no longer
-  asks for them. Notes and files, as many as wanted, on the payment and on
+  payment_method_id picks from the editable list `GET/POST payment-methods`,
+  `PATCH/DELETE payment-methods/{id}` (names unique ignoring case and spaces;
+  delete refused with 422 while a payment uses it; seeded with Cash, Check,
+  Card, Bank transfer, Zelle, Other). The old `payments.method` column stays
+  for older readers and is no longer written. reference / invoice_number are
+  optional and the dashboard no longer asks for them. Payments can be
+  recorded for closed issues too (an invoice that comes in late). Notes and files, as many as wanted, on the payment and on
   each line: `notes[]` (strings; blank ones dropped, `note` still accepted)
   and `files[]` (≤ 10 MB each) on the payment; `lines[i][notes][]` and
   `lines[i][files][]` on a line. A line's files need bracket notation (they
@@ -431,7 +436,8 @@ Movement types (`App\Enums\StockMovementType`) and direction:
 bought +1, used −1, returned +1, moved (line says), opening_stock +1,
 stock_count (line says), damaged_lost −1, undone (line says).
 `POST stock-movements` accepts used, returned, moved, opening_stock,
-damaged_lost. bought only comes from a parts payment line; stock_count
+damaged_lost, each with an optional `technician_id` (who did it; presented as
+`technician {id, name}`). bought only comes from a parts payment line; stock_count
 only from applying a count; undone only from `/mistaken`. `used` may carry
 `ticket_issue_id` (from the ticket page or storage page); serial-tracked
 parts need `serials[]` on the line (units must be in_stock at that location;
@@ -485,3 +491,8 @@ emergency, average_rating|null, gap: technicians <= 1}], gaps (count) }`
 
 summary / activity / watchlist: as today, with the new statuses.
 `GET tickets/analytics`: status breakdown uses the new statuses.
+
+## Changes 2026-11-04
+
+- Tickets can no longer be deleted (`DELETE stores/{store}/tickets/{ticket}` removed).
+- `GET maintenance-analytics/finances` takes `technician_ids[]` (several technicians together); `technician_id` still works for one.

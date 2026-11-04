@@ -23,6 +23,8 @@ class IssueInspection extends Model
         'status',
         'scheduled_date',
         'scheduled_time',
+        'scheduled_time_to',
+        'inspection_fee',
         'done_at',
         'findings',
         'recommended_repair',

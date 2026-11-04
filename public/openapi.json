@@ -1566,6 +1566,11 @@
                         }
                       }
                     }
+                  },
+                  "technician_id": {
+                    "type": "integer",
+                    "nullable": true,
+                    "description": "The technician who did it."
                   }
                 },
                 "required": [
@@ -3292,31 +3297,6 @@
         }
       }
     },
-    "/stores/{store}/tickets/{ticket}": {
-      "delete": {
-        "tags": [
-          "Tickets"
-        ],
-        "summary": "Soft-delete ticket",
-        "operationId": "deleteTicket",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/Store"
-          },
-          {
-            "$ref": "#/components/parameters/Ticket"
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Soft-deleted"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthenticated"
-          }
-        }
-      }
-    },
     "/stores/{store}/tickets/{ticket}/assignments/{assignment}/attachments": {
       "post": {
         "tags": [
@@ -4251,6 +4231,20 @@
           },
           {
             "$ref": "#/components/parameters/PerPage"
+          },
+          {
+            "name": "stores[]",
+            "in": "query",
+            "required": false,
+            "description": "Technicians covering ANY of these store numbers (no ranking; `store` ranks by one).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
           }
         ],
         "responses": {
@@ -5363,6 +5357,20 @@
               }
             },
             "description": "coverage only: catalog issue ids"
+          },
+          {
+            "name": "technician_ids[]",
+            "in": "query",
+            "required": false,
+            "description": "finances: several technicians checked together (technician_id still works for one).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            "style": "form",
+            "explode": true
           }
         ],
         "responses": {
@@ -9625,18 +9633,6 @@
                     "type": "integer",
                     "nullable": true
                   },
-                  "method": {
-                    "type": "string",
-                    "nullable": true,
-                    "enum": [
-                      "cash",
-                      "check",
-                      "card",
-                      "bank_transfer",
-                      "zelle",
-                      "other"
-                    ]
-                  },
                   "reference": {
                     "type": "string",
                     "nullable": true
@@ -9804,6 +9800,11 @@
                       "type": "string"
                     },
                     "description": "New notes, as many as wanted (blank ones are dropped)"
+                  },
+                  "payment_method_id": {
+                    "type": "integer",
+                    "nullable": true,
+                    "description": "From GET /payment-methods."
                   }
                 },
                 "required": [
@@ -9828,18 +9829,6 @@
                   "supplier_id": {
                     "type": "integer",
                     "nullable": true
-                  },
-                  "method": {
-                    "type": "string",
-                    "nullable": true,
-                    "enum": [
-                      "cash",
-                      "check",
-                      "card",
-                      "bank_transfer",
-                      "zelle",
-                      "other"
-                    ]
                   },
                   "reference": {
                     "type": "string",
@@ -9872,6 +9861,11 @@
                       "type": "string"
                     },
                     "description": "New notes, as many as wanted (blank ones are dropped)"
+                  },
+                  "payment_method_id": {
+                    "type": "integer",
+                    "nullable": true,
+                    "description": "From GET /payment-methods."
                   }
                 },
                 "required": [
@@ -10983,18 +10977,6 @@
                     "type": "integer",
                     "nullable": true
                   },
-                  "method": {
-                    "type": "string",
-                    "nullable": true,
-                    "enum": [
-                      "cash",
-                      "check",
-                      "card",
-                      "bank_transfer",
-                      "zelle",
-                      "other"
-                    ]
-                  },
                   "reference": {
                     "type": "string",
                     "nullable": true
@@ -11195,6 +11177,11 @@
                       "type": "integer"
                     },
                     "description": "The payment's own files to take off (soft-deleted). Absent = keep them all"
+                  },
+                  "payment_method_id": {
+                    "type": "integer",
+                    "nullable": true,
+                    "description": "From GET /payment-methods."
                   }
                 },
                 "required": [
@@ -11220,18 +11207,6 @@
                   "supplier_id": {
                     "type": "integer",
                     "nullable": true
-                  },
-                  "method": {
-                    "type": "string",
-                    "nullable": true,
-                    "enum": [
-                      "cash",
-                      "check",
-                      "card",
-                      "bank_transfer",
-                      "zelle",
-                      "other"
-                    ]
                   },
                   "reference": {
                     "type": "string",
@@ -11283,6 +11258,11 @@
                       "type": "integer"
                     },
                     "description": "The payment's own files to take off (soft-deleted). Absent = keep them all"
+                  },
+                  "payment_method_id": {
+                    "type": "integer",
+                    "nullable": true,
+                    "description": "From GET /payment-methods."
                   }
                 },
                 "required": [
@@ -31275,6 +31255,18 @@
                   },
                   "instructions": {
                     "type": "string"
+                  },
+                  "scheduled_time_to": {
+                    "type": "string",
+                    "pattern": "^\\d{2}:\\d{2}$",
+                    "nullable": true,
+                    "description": "End of the window."
+                  },
+                  "inspection_fee": {
+                    "type": "number",
+                    "minimum": 0,
+                    "nullable": true,
+                    "description": "What the inspection costs, when known. Counts as its cost until a payment's inspection line covers it."
                   }
                 },
                 "required": [
@@ -31725,6 +31717,12 @@
                   },
                   "instructions": {
                     "type": "string"
+                  },
+                  "time_to": {
+                    "type": "string",
+                    "pattern": "^\\d{2}:\\d{2}$",
+                    "nullable": true,
+                    "description": "End of the window (after `time`; needs `time`)."
                   }
                 },
                 "required": [
@@ -31837,6 +31835,12 @@
                   },
                   "reason": {
                     "type": "string"
+                  },
+                  "time_to": {
+                    "type": "string",
+                    "pattern": "^\\d{2}:\\d{2}$",
+                    "nullable": true,
+                    "description": "End of the window (after `time`; needs `time`)."
                   }
                 },
                 "required": [
@@ -32118,7 +32122,9 @@
                     ]
                   },
                   "final_note": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 10,
+                    "description": "Required: what was wrong and how it was fixed."
                   },
                   "what_we_learned": {
                     "type": "string"
@@ -32128,6 +32134,7 @@
                   }
                 },
                 "required": [
+                  "final_note",
                   "resolution"
                 ]
               }
@@ -32636,6 +32643,187 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/payment-methods": {
+      "get": {
+        "tags": [
+          "Payment methods"
+        ],
+        "summary": "List payment methods",
+        "operationId": "listPaymentMethods",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PaymentMethod"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Payment methods"
+        ],
+        "summary": "Add a payment method",
+        "operationId": "createPaymentMethod",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "sort": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PaymentMethod"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/payment-methods/{paymentMethod}": {
+      "patch": {
+        "tags": [
+          "Payment methods"
+        ],
+        "summary": "Rename / reorder a payment method",
+        "operationId": "updatePaymentMethod",
+        "parameters": [
+          {
+            "name": "paymentMethod",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "sort": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PaymentMethod"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Payment methods"
+        ],
+        "summary": "Delete a payment method (refused while a payment uses it)",
+        "operationId": "deletePaymentMethod",
+        "parameters": [
+          {
+            "name": "paymentMethod",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -36549,6 +36737,24 @@
             "type": "string",
             "nullable": true,
             "description": "http(s) only"
+          }
+        }
+      },
+      "PaymentMethod": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sort": {
+            "type": "integer"
+          },
+          "payments_count": {
+            "type": "integer",
+            "nullable": true
           }
         }
       }

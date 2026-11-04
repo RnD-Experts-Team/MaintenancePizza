@@ -25,7 +25,8 @@ class IssueCloseRequest extends FormRequest
     {
         return [
             'resolution' => ['required', Rule::in(array_map(fn (Resolution $r) => $r->value, Resolution::closable()))],
-            'final_note' => ['nullable', 'string', 'max:20000'],
+            // What was wrong and how it was fixed: required to close.
+            'final_note' => ['required', 'string', 'min:10', 'max:20000'],
             'what_we_learned' => ['nullable', 'string', 'max:20000'],
             'override_reason' => ['nullable', 'string', 'max:5000'],
         ];

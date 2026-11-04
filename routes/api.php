@@ -14,6 +14,7 @@ use App\Http\Controllers\MaintenanceSettingController;
 use App\Http\Controllers\NoteController;
 use App\Http\Controllers\PartUnitController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\PaymentMethodController;
 use App\Http\Controllers\PublicTripController;
 use App\Http\Controllers\StockBalanceController;
 use App\Http\Controllers\StockCountController;
@@ -114,6 +115,12 @@ Route::middleware(['throttle:api', 'auth.token.store'])->group(function () {
     Route::post('categories', [CatalogController::class, 'categoriesStore'])->name('categories.store');
     Route::patch('categories/{category}', [CatalogController::class, 'categoriesUpdate'])->name('categories.update');
     Route::delete('categories/{category}', [CatalogController::class, 'categoriesDestroy'])->name('categories.destroy');
+
+    // How we paid: the editable list behind a payment's method.
+    Route::get('payment-methods', [PaymentMethodController::class, 'index'])->name('payment-methods.index');
+    Route::post('payment-methods', [PaymentMethodController::class, 'store'])->name('payment-methods.store');
+    Route::patch('payment-methods/{paymentMethod}', [PaymentMethodController::class, 'update'])->name('payment-methods.update');
+    Route::delete('payment-methods/{paymentMethod}', [PaymentMethodController::class, 'destroy'])->name('payment-methods.destroy');
 
     // The owner's settings: approval thresholds, how long an idle trip link
     // lives (docs/MAINTENANCE.md §2 "Settings").
@@ -329,7 +336,6 @@ Route::middleware(['throttle:api', 'auth.token.store'])->group(function () {
         Route::get('tickets', [TicketController::class, 'index'])->name('stores.tickets.index');
         Route::get('tickets/analytics', [TicketController::class, 'analytics'])->middleware('throttle:api-heavy')->name('stores.tickets.analytics');
         Route::post('tickets', [TicketController::class, 'store'])->name('stores.tickets.store');
-        Route::delete('tickets/{ticket}', [TicketController::class, 'destroy'])->name('stores.tickets.destroy');
         Route::post('tickets/{ticket}/restore', [TicketController::class, 'restore'])->withTrashed()->name('stores.tickets.restore');
         Route::post('tickets/{ticket}/cancel', TicketCancellationController::class)->name('stores.tickets.cancel');
         // Append a typed closing note (Final Notes / What we learned) — many allowed.

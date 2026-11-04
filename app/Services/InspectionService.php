@@ -31,7 +31,7 @@ class InspectionService
     }
 
     /**
-     * @param  array{technician_id: int, scheduled_date: string, scheduled_time?: string|null, instructions?: string|null}  $data
+     * @param  array{technician_id: int, scheduled_date: string, scheduled_time?: string|null, scheduled_time_to?: string|null, inspection_fee?: string|float|null, instructions?: string|null}  $data
      * @return array{inspection: IssueInspection, trip: Trip|null, token: string|null}
      */
     public function book(TicketIssue $issue, array $data, User $by): array
@@ -48,6 +48,8 @@ class InspectionService
                 'status' => InspectionStatus::Scheduled,
                 'scheduled_date' => Carbon::parse($data['scheduled_date'])->toDateString(),
                 'scheduled_time' => AssignmentService::time($data['scheduled_time'] ?? null),
+                'scheduled_time_to' => AssignmentService::time($data['scheduled_time_to'] ?? null),
+                'inspection_fee' => isset($data['inspection_fee']) && $data['inspection_fee'] !== '' ? number_format((float) $data['inspection_fee'], 2, '.', '') : null,
                 'created_by' => $by->id,
             ]);
 
@@ -61,6 +63,7 @@ class InspectionService
                 $data['instructions'] ?? null,
                 $by,
                 $inspection,
+                $data['scheduled_time_to'] ?? null,
             );
 
             $issue->next_action = null;

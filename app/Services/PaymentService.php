@@ -301,7 +301,7 @@ class PaymentService
             'paid_at' => $data['paid_at'],
             'technician_id' => $data['technician_id'] ?? null,
             'supplier_id' => $data['supplier_id'] ?? null,
-            'method' => $data['method'] ?? null,
+            'payment_method_id' => $data['payment_method_id'] ?? null,
             'reference' => $data['reference'] ?? null,
             'invoice_number' => $data['invoice_number'] ?? null,
         ];

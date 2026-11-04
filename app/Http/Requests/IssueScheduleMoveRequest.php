@@ -22,7 +22,8 @@ class IssueScheduleMoveRequest extends FormRequest
     {
         return [
             'date' => ['required', 'date'],
-            'time' => ['nullable', 'date_format:H:i'],
+            'time' => ['nullable', 'date_format:H:i', 'required_with:time_to'],
+            'time_to' => ['nullable', 'date_format:H:i', 'after:time'],
             'reason' => ['required', 'string', 'max:5000'],
         ];
     }

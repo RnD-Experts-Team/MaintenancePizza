@@ -36,7 +36,7 @@ class MaintenanceAnalyticsController extends Controller
                 $request->toDate(),
                 $request->filled('stores') ? $stores->pluck('id')->map(fn ($id) => (int) $id)->all() : null,
                 $request->filled('category_id') ? $request->integer('category_id') : null,
-                $request->filled('technician_id') ? $request->integer('technician_id') : null,
+                $request->technicianIds(),
                 $request->filled('supplier_id') ? $request->integer('supplier_id') : null,
             )];
         }

@@ -42,7 +42,7 @@ class AssignmentService
      * issue on the technician's trip, the technician on the issue, and the
      * issue → scheduled.
      *
-     * @param  array{technician_id: int, date: string, time?: string|null, expected_completion_date?: string|null, instructions?: string|null}  $data
+     * @param  array{technician_id: int, date: string, time?: string|null, time_to?: string|null, expected_completion_date?: string|null, instructions?: string|null}  $data
      * @return array{assignment: Assignment, trip: Trip|null, token: string|null}
      */
     public function scheduleWork(TicketIssue $issue, array $data, User $by): array
@@ -60,6 +60,8 @@ class AssignmentService
                 $data['expected_completion_date'] ?? null,
                 $data['instructions'] ?? null,
                 $by,
+                null,
+                $data['time_to'] ?? null,
             );
 
             $issue->next_action = null;
@@ -90,12 +92,14 @@ class AssignmentService
         ?string $instructions,
         User $by,
         ?IssueInspection $inspection = null,
+        ?string $timeTo = null,
     ): array {
         $assignment = new Assignment([
             'kind' => $kind,
             'technician_id' => $technician->id,
             'assigned_date' => Carbon::parse($date)->toDateString(),
             'assigned_hour' => self::time($time),
+            'assigned_hour_to' => self::time($timeTo),
             'expected_completion_date' => $expectedCompletion ? Carbon::parse($expectedCompletion)->toDateString() : null,
             'issue_inspection_id' => $inspection?->id,
         ]);
@@ -121,7 +125,7 @@ class AssignmentService
      * that happened stays history) and goes on the technician's trip for the
      * new day. The issue's status does not change.
      *
-     * @param  array{date: string, time?: string|null, reason: string}  $data
+     * @param  array{date: string, time?: string|null, time_to?: string|null, reason: string}  $data
      * @return array{assignment: Assignment, trip: Trip|null, token: string|null}
      */
     public function move(TicketIssue $issue, Assignment $assignment, array $data, User $by): array
@@ -139,9 +143,10 @@ class AssignmentService
 
             $newDate = Carbon::parse($data['date'])->toDateString();
             $newHour = self::time($data['time'] ?? null);
+            $newHourTo = self::time($data['time_to'] ?? null);
             $oldDate = $assignment->assigned_date?->toDateString();
 
-            if ($newDate === $oldDate && $newHour === self::time($assignment->assigned_hour)) {
+            if ($newDate === $oldDate && $newHour === self::time($assignment->assigned_hour) && $newHourTo === self::time($assignment->assigned_hour_to)) {
                 $this->workflow->refuse('The booking is already on that day and time.', 'date');
             }
 
@@ -175,6 +180,7 @@ class AssignmentService
 
             $assignment->assigned_date = $newDate;
             $assignment->assigned_hour = $newHour;
+            $assignment->assigned_hour_to = $newHourTo;
             $assignment->trip_id = $trip?->id;
             $assignment->save();
 
@@ -182,6 +188,7 @@ class AssignmentService
                 IssueInspection::query()->whereKey($assignment->issue_inspection_id)->update([
                     'scheduled_date' => $newDate,
                     'scheduled_time' => $newHour,
+                    'scheduled_time_to' => $newHourTo,
                 ]);
             }
 
@@ -216,6 +223,20 @@ class AssignmentService
         }
 
         return Carbon::createFromFormat(strlen(trim($time)) === 5 ? 'H:i' : 'H:i:s', trim($time))->format('H:i:s');
+    }
+
+    /**
+     * A booked window as written in text: " at 09:00", " 09:00–11:00", or "".
+     */
+    public static function window(?string $from, ?string $to): string
+    {
+        $from = self::showTime($from);
+        $to = self::showTime($to);
+        if ($from === null) {
+            return '';
+        }
+
+        return $to === null ? " at {$from}" : " {$from}–{$to}";
     }
 
     /**

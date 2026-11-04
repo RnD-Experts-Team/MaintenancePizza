@@ -107,7 +107,7 @@ class FinishedIssueTripsTest extends IssueWorkflowTestCase
         $trip = Trip::query()->sole();
         $this->clockOn($trip);
 
-        $this->act('close', ['resolution' => 'not_needed'])->assertOk()->assertJsonPath('data.status', 'closed');
+        $this->act('close', ['resolution' => 'not_needed', 'final_note' => 'The fan motor was burnt; replaced it.'])->assertOk()->assertJsonPath('data.status', 'closed');
 
         $row = TripStopIssue::query()->sole();
         $this->assertSame('not_done', $row->task_status);

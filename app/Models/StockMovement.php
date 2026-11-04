@@ -41,6 +41,7 @@ class StockMovement extends Model
         'storage_location_id',
         'paid_by',
         'paid_by_technician_id',
+        'technician_id',
         'body',
         'payment_line_id',
         'ticket_issue_id',
@@ -77,6 +78,13 @@ class StockMovement extends Model
     public function paidByTechnician(): BelongsTo
     {
         return $this->belongsTo(Technician::class, 'paid_by_technician_id');
+    }
+
+    /** The technician who did it (took, moved, returned the parts). Optional. */
+    /** @return BelongsTo<Technician, $this> */
+    public function technician(): BelongsTo
+    {
+        return $this->belongsTo(Technician::class)->withTrashed();
     }
 
     /** @return BelongsTo<PaymentLine, $this> */

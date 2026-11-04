@@ -100,6 +100,7 @@ class TicketIssueReadTest extends IssueWorkflowTestCase
                 'approved' => '380.00',
                 'labor' => '250.00',
                 'inspection' => '75.00',
+            'inspection_fees' => '0.00',
                 'parts' => '40.00',
                 'gas' => '12.50',
                 'other' => '5.00',

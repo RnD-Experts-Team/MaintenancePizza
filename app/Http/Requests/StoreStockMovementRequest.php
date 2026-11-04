@@ -34,6 +34,8 @@ class StoreStockMovementRequest extends FormRequest
             'paid_by_technician_id' => ['nullable', 'required_if:paid_by,technician', 'integer', 'exists:technicians,id'],
             // The ticket issue the parts were used on -- only on a `used` movement.
             'ticket_issue_id' => ['nullable', 'integer', 'exists:ticket_issues,id', Rule::prohibitedIf(fn () => $this->input('type') !== StockMovementType::Used->value)],
+            // The technician who did it (took the parts, moved them, ...). Optional.
+            'technician_id' => ['nullable', 'integer', 'exists:technicians,id'],
             'body' => ['nullable', 'string'],
             'lines' => ['required', 'array', 'min:1'],
             'lines.*.part_id' => ['required', 'integer', 'exists:parts,id'],

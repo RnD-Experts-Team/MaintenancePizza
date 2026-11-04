@@ -30,6 +30,7 @@ class Assignment extends Model
         'technician_id',
         'assigned_date',
         'assigned_hour',
+        'assigned_hour_to',
         'expected_completion_date',
         'trip_id',
         'issue_inspection_id',

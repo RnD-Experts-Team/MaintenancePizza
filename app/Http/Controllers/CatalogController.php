@@ -70,6 +70,7 @@ class CatalogController extends Controller
             'category_id',
             'emergency',
             'store',
+            'stores',
             'issue_id',
             'urgent',
         ]), $request->integer('per_page', 15));

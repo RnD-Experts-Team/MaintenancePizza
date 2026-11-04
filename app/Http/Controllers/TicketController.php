@@ -81,13 +81,6 @@ class TicketController extends Controller
         ], 201);
     }
 
-    public function destroy(Store $store, Ticket $ticket): Response
-    {
-        $this->tickets->delete($ticket);
-
-        return response()->noContent();
-    }
-
     public function restore(Store $store, Ticket $ticket)
     {
         return ['data' => $this->tickets->restore($ticket)];

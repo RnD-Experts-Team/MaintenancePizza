@@ -24,7 +24,9 @@ class IssueScheduleStoreRequest extends FormRequest
         return [
             'technician_id' => ['required', 'integer', Rule::exists('technicians', 'id')->whereNull('deleted_at')],
             'date' => ['required', 'date'],
-            'time' => ['nullable', 'date_format:H:i'],
+            // A window, not one hour: from `time` to `time_to` (both optional).
+            'time' => ['nullable', 'date_format:H:i', 'required_with:time_to'],
+            'time_to' => ['nullable', 'date_format:H:i', 'after:time'],
             'expected_completion_date' => ['nullable', 'date', 'after_or_equal:date'],
             'instructions' => ['nullable', 'string', 'max:5000'],
         ];

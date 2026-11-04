@@ -233,6 +233,8 @@ class TicketIssuePresenter
             'status_label' => $i->status->label(),
             'scheduled_date' => $i->scheduled_date?->toDateString(),
             'scheduled_time' => AssignmentService::showTime($i->scheduled_time),
+            'scheduled_time_to' => AssignmentService::showTime($i->scheduled_time_to),
+            'inspection_fee' => $i->inspection_fee === null ? null : $this->money($i->inspection_fee),
             'done_at' => $i->done_at,
             'findings' => $i->findings,
             'recommended_repair' => $i->recommended_repair,
@@ -279,6 +281,7 @@ class TicketIssuePresenter
             'technician' => $a->technician ? ['id' => $a->technician->id, 'name' => $a->technician->name] : null,
             'date' => $a->assigned_date?->toDateString(),
             'time' => AssignmentService::showTime($a->assigned_hour),
+            'time_to' => AssignmentService::showTime($a->assigned_hour_to),
             'expected_completion_date' => $a->expected_completion_date?->toDateString(),
             'trip_id' => $a->trip_id,
             'inspection_id' => $a->issue_inspection_id,
@@ -390,6 +393,11 @@ class TicketIssuePresenter
             }
         }
 
+        // An inspection's own fee (typed when it was booked) is its cost until a
+        // live payment line for that inspection takes over -- never both.
+        $fees = $this->unpaidInspectionFees($issue);
+        $sum['inspection'] = bcadd($sum['inspection'], $fees, 2);
+
         $labor = bcadd($sum['hourly'], $sum['fixed'], 2);
         $paid = array_reduce(array_values($sum), fn (string $c, string $v) => bcadd($c, $v, 2), '0.00');
 
@@ -398,6 +406,7 @@ class TicketIssuePresenter
             'approved' => $this->approved($issue),
             'labor' => $labor,
             'inspection' => $sum['inspection'],
+            'inspection_fees' => $fees,
             'parts' => $sum['parts'],
             'gas' => $sum['gas'],
             'other' => $sum['other'],
@@ -406,6 +415,30 @@ class TicketIssuePresenter
             'total_actual' => bcadd($paid, $stock, 2),
             'unpaid_purchases' => $unpaid,
         ];
+    }
+
+    /** Fees of live inspections that no live payment line pays yet. */
+    private function unpaidInspectionFees(TicketIssue $issue): string
+    {
+        if (!$issue->relationLoaded('inspections')) {
+            return '0.00';
+        }
+
+        $paid = [];
+        foreach ($this->liveLines($issue) as $line) {
+            if ($line->issue_inspection_id !== null) {
+                $paid[(int) $line->issue_inspection_id] = true;
+            }
+        }
+
+        $total = '0.00';
+        foreach ($issue->inspections as $i) {
+            if (!$i->mistaken && $i->inspection_fee !== null && !isset($paid[$i->id])) {
+                $total = bcadd($total, (string) $i->inspection_fee, 2);
+            }
+        }
+
+        return $total;
     }
 
     private function estimated(TicketIssue $issue): ?string
@@ -649,7 +682,7 @@ class TicketIssuePresenter
                 continue;
             }
             $tech = $i->technician?->name ?? 'a technician';
-            $when = $this->day($i->scheduled_date).($i->scheduled_time ? ' at '.AssignmentService::showTime($i->scheduled_time) : '');
+            $when = $this->day($i->scheduled_date).AssignmentService::window($i->scheduled_time, $i->scheduled_time_to);
             $add($i->created_at, 'inspection_booked', "Inspection booked with {$tech} for {$when}", $i->creator?->name);
             if ($i->done_at !== null) {
                 $estimate = $i->estimated_cost !== null ? ' (quote '.$this->cash($i->estimated_cost).')' : '';
@@ -671,7 +704,7 @@ class TicketIssuePresenter
             }
             // An inspection booking is already on the timeline as the inspection.
             if (($s->kind ?? 'work') === 'work') {
-                $when = $this->day($s->assigned_date).($s->assigned_hour ? ' at '.AssignmentService::showTime($s->assigned_hour) : '');
+                $when = $this->day($s->assigned_date).AssignmentService::window($s->assigned_hour, $s->assigned_hour_to);
                 $add($s->created_at, 'scheduled', 'Work booked with '.($s->technician?->name ?? 'a technician')." for {$when}", $s->creator?->name);
             }
             foreach ($s->delays as $d) {

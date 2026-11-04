@@ -49,6 +49,7 @@ class StockService
         'paymentLine.payment.supplier',
         'storageLocation',
         'paidByTechnician',
+        'technician',
         'creator',
         'notes.creator',
         'notes.attachments.creator',
@@ -428,6 +429,7 @@ class StockService
                 'storage_location_id' => $movement->storage_location_id,
                 'paid_by' => $movement->paid_by,
                 'paid_by_technician_id' => $movement->paid_by_technician_id,
+                'technician_id' => $movement->technician_id,
                 'payment_line_id' => $movement->payment_line_id,
                 'ticket_issue_id' => $movement->ticket_issue_id,
                 'stock_count_id' => $movement->stock_count_id,
@@ -1178,6 +1180,10 @@ class StockService
             'paid_by_technician_id' => $movement->paid_by_technician_id,
             'paid_by_technician' => $movement->relationLoaded('paidByTechnician') && $movement->paidByTechnician
                 ? $this->catalog->presentTechnician($movement->paidByTechnician)
+                : null,
+            // Who did it (took, moved, returned the parts), when recorded.
+            'technician' => $movement->relationLoaded('technician') && $movement->technician
+                ? ['id' => $movement->technician->id, 'name' => $movement->technician->name]
                 : null,
             'body' => $movement->body,
             'payment_line_id' => $movement->payment_line_id,

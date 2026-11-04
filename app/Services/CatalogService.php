@@ -159,6 +159,13 @@ class CatalogService
             $query->where('emergency_available', true);
         }
 
+        // stores[]: covers ANY of these stores (the page's store checklist). One
+        // store picked is sent as `store` instead, which also ranks the list.
+        $stores = array_values(array_filter(array_map('strval', (array) ($filters['stores'] ?? []))));
+        if ($stores !== []) {
+            $query->whereHas('coverageStores', fn ($q) => $q->whereIn('stores.store_number', $stores));
+        }
+
         $store = isset($filters['store']) && $filters['store'] !== '' ? (string) $filters['store'] : null;
         $issueId = ! empty($filters['issue_id']) ? (int) $filters['issue_id'] : null;
         $urgent = ! empty($filters['urgent']) && filter_var($filters['urgent'], FILTER_VALIDATE_BOOLEAN);

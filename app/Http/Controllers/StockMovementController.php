@@ -57,6 +57,7 @@ class StockMovementController extends Controller
                     'storage_location_id' => $data['storage_location_id'] ?? null,
                     'paid_by' => $data['paid_by'] ?? null,
                     'paid_by_technician_id' => $data['paid_by_technician_id'] ?? null,
+                    'technician_id' => $data['technician_id'] ?? null,
                     'ticket_issue_id' => $type === StockMovementType::Used ? ($data['ticket_issue_id'] ?? null) : null,
                     'body' => $data['body'] ?? null,
                 ],

@@ -176,13 +176,14 @@ class TechnicianAnalyticsService
         }
 
         $payments = DB::table('payments as p')
+            ->leftJoin('payment_methods as pm', 'pm.id', '=', 'p.payment_method_id')
             ->whereIn('p.technician_id', $technicianIds)
             ->where('p.mistaken', false)
             // Pay dates are days; whereDate so a stored time part never drops the last one.
             ->whereDate('p.paid_at', '>=', $f['date_from'])
             ->whereDate('p.paid_at', '<=', $f['date_to'])
             ->orderBy('p.paid_at')->orderBy('p.id')
-            ->get(['p.id', 'p.technician_id', 'p.paid_at', 'p.method', 'p.invoice_number', 'p.total']);
+            ->get(['p.id', 'p.technician_id', 'p.paid_at', 'pm.name as method', 'p.invoice_number', 'p.total']);
 
         $lines = DB::table('payment_lines as l')
             ->leftJoin('stores as s', 's.id', '=', 'l.store_id')

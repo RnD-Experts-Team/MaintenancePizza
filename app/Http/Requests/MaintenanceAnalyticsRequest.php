@@ -38,6 +38,21 @@ class MaintenanceAnalyticsRequest extends FormRequest
         return true;
     }
 
+    /**
+     * The technicians to narrow to: technician_ids[], else technician_id, else null (all).
+     *
+     * @return array<int, int>|null
+     */
+    public function technicianIds(): ?array
+    {
+        $ids = array_values(array_unique(array_map('intval', (array) $this->input('technician_ids', []))));
+        if ($ids === [] && $this->filled('technician_id')) {
+            $ids = [$this->integer('technician_id')];
+        }
+
+        return $ids === [] ? null : $ids;
+    }
+
     private function section(): string
     {
         return (string) $this->route('section');
@@ -55,7 +70,10 @@ class MaintenanceAnalyticsRequest extends FormRequest
                 'from' => ['required', 'date'],
                 'to' => ['required', 'date', 'after_or_equal:from'],
                 'category_id' => ['nullable', 'integer', 'exists:categories,id'],
+                // One technician (older callers) or several, checked off together.
                 'technician_id' => ['nullable', 'integer', 'exists:technicians,id'],
+                'technician_ids' => ['nullable', 'array', 'max:500'],
+                'technician_ids.*' => ['integer', 'distinct', 'exists:technicians,id'],
                 'supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
             ],
             'coverage' => [

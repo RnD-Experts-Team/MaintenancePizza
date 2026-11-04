@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\DB;
  *   stores       lines at those stores (other-store and storage lines drop out)
  *   category_id  lines of payments to TECHNICIANS of that category; supplier
  *                payments drop out (a supplier has no category)
- *   technician_id / supplier_id   lines of payments to that one
+ *   technician_ids / supplier_id  lines of payments to those technicians / that supplier
  *
  * A line linked to several ticket issues is shared evenly between them in the
  * ticket figures, so no money is counted twice.
@@ -63,9 +63,9 @@ class FinanceAnalyticsService
      * @param  array<int, int>|null  $storeIds  null = every store
      * @return array<string, mixed>
      */
-    public function report(Carbon $from, Carbon $to, ?array $storeIds, ?int $categoryId, ?int $technicianId, ?int $supplierId): array
+    public function report(Carbon $from, Carbon $to, ?array $storeIds, ?int $categoryId, ?array $technicianIds, ?int $supplierId): array
     {
-        $filters = compact('storeIds', 'categoryId', 'technicianId', 'supplierId');
+        $filters = compact('storeIds', 'categoryId', 'technicianIds', 'supplierId');
         $days = (int) $from->diffInDays($to) + 1;
         $prevTo = $from->copy()->subDay();
         $prevFrom = $prevTo->copy()->subDays($days - 1);
@@ -112,7 +112,7 @@ class FinanceAnalyticsService
      * paid_at is compared as `>= first day` and `< the day after the last`:
      * right whether the column holds "2026-10-05" or "2026-10-05 00:00:00".
      *
-     * @param  array{storeIds: array<int,int>|null, categoryId: int|null, technicianId: int|null, supplierId: int|null}  $f
+     * @param  array{storeIds: array<int,int>|null, categoryId: int|null, technicianIds: array<int,int>|null, supplierId: int|null}  $f
      */
     private function lines(Carbon $from, Carbon $to, array $f): Builder
     {
@@ -122,7 +122,7 @@ class FinanceAnalyticsService
             ->where('p.paid_at', '>=', $from->toDateString())
             ->where('p.paid_at', '<', $to->copy()->addDay()->toDateString())
             ->when($f['storeIds'] !== null, fn (Builder $q) => $q->whereIn('pl.store_id', $f['storeIds']))
-            ->when($f['technicianId'] !== null, fn (Builder $q) => $q->where('p.technician_id', $f['technicianId']))
+            ->when($f['technicianIds'] !== null, fn (Builder $q) => $q->whereIn('p.technician_id', $f['technicianIds']))
             ->when($f['supplierId'] !== null, fn (Builder $q) => $q->where('p.supplier_id', $f['supplierId']))
             ->when($f['categoryId'] !== null, fn (Builder $q) => $q->whereIn(
                 'p.technician_id',
@@ -531,7 +531,7 @@ class FinanceAnalyticsService
         }
 
         $technicians = fn (Builder $q, string $column) => $q
-            ->when($f['technicianId'] !== null, fn (Builder $q) => $q->where($column, $f['technicianId']))
+            ->when($f['technicianIds'] !== null, fn (Builder $q) => $q->whereIn($column, $f['technicianIds']))
             ->when($f['categoryId'] !== null, fn (Builder $q) => $q->whereIn(
                 $column,
                 DB::table('technicians')->select('id')->where('category_id', $f['categoryId']),

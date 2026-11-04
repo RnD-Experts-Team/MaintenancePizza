@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Enums\PaymentMethod;
+use App\Enums\PaymentMethod as LegacyPaymentMethod;
 use App\Models\Concerns\HasNotesAndAttachments;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -27,6 +27,7 @@ class Payment extends Model
         'paid_at',
         'technician_id',
         'supplier_id',
+        'payment_method_id',
         'method',
         'reference',
         'invoice_number',
@@ -42,7 +43,8 @@ class Payment extends Model
     {
         return [
             'paid_at' => 'date',
-            'method' => PaymentMethod::class,
+            // Old fixed list, kept for older readers; new payments use payment_method_id.
+            'method' => LegacyPaymentMethod::class,
             'total' => 'decimal:2',
             'mistaken' => 'boolean',
         ];
@@ -52,6 +54,13 @@ class Payment extends Model
     public function technician(): BelongsTo
     {
         return $this->belongsTo(Technician::class)->withTrashed();
+    }
+
+    /** How it was paid, from the editable list. */
+    /** @return BelongsTo<PaymentMethod, $this> */
+    public function paymentMethod(): BelongsTo
+    {
+        return $this->belongsTo(PaymentMethod::class);
     }
 
     /** @return BelongsTo<Supplier, $this> */
