@@ -16,6 +16,7 @@ use App\Http\Controllers\PartUnitController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PaymentMethodController;
 use App\Http\Controllers\PublicTripController;
+use App\Http\Controllers\ReportDatasetController;
 use App\Http\Controllers\StockBalanceController;
 use App\Http\Controllers\StockCountController;
 use App\Http\Controllers\StockMovementController;
@@ -33,6 +34,7 @@ use App\Http\Controllers\TicketNoteController;
 use App\Http\Controllers\TripController;
 use App\Http\Controllers\TripSessionController;
 use App\Http\Controllers\TroubleshootingController;
+use App\Reports\ReportDatasets;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -440,3 +442,15 @@ Route::middleware(['throttle:api', 'auth.token.store'])->group(function () {
         Route::post('assignments/{assignment}/attachments', [AttachmentController::class, 'assignment'])->middleware('throttle:api-upload')->name('tickets.assignments.attachments');
     });
 });
+
+/*
+|--------------------------------------------------------------------------
+| The report dataset contract, the same in every service: the catalog, and one
+| literal query route per dataset (never a {key} parameter), so each dataset
+| has its own pizzasys auth rule. The body's `stores` are store codes.
+|--------------------------------------------------------------------------
+*/
+Route::get('/report-datasets', [ReportDatasetController::class, 'catalog'])->middleware(['throttle:api', 'auth.token.store']);
+foreach (ReportDatasets::DATASETS as $dataset) {
+    Route::post('/report-datasets/'.$dataset::KEY.'/query', [ReportDatasetController::class, 'query'])->defaults('dataset', $dataset::KEY)->middleware(['throttle:api', 'throttle:api-heavy', 'auth.token.store']);
+}

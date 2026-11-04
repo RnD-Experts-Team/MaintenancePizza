@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Reports\ReportDatasets;
 use Illuminate\Cache\ArrayStore;
 use Illuminate\Cache\RateLimiter as CacheRateLimiter;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -240,7 +241,12 @@ class ThrottleTest extends TestCase
             && preg_match('#/(notes|attachments)$|attendance-entries$#', $r) === 1));
 
         $this->assertEqualsCanonicalizing(
-            ['GET|HEAD api/tickets/analytics', 'GET|HEAD api/stores/{store}/tickets/analytics'],
+            [
+                'GET|HEAD api/tickets/analytics',
+                'GET|HEAD api/stores/{store}/tickets/analytics',
+                // The report dataset queries: one literal route per dataset.
+                ...array_map(fn (string $dataset) => 'POST api/report-datasets/'.$dataset::KEY.'/query', ReportDatasets::DATASETS),
+            ],
             $routesWith('throttle:api-heavy')->all(),
         );
 

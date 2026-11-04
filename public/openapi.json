@@ -64,6 +64,10 @@
     {
       "name": "Troubleshooting",
       "description": "What a store should try before opening a ticket for a catalog issue. One versioned guide per issue; a library anyone can read."
+    },
+    {
+      "name": "Report datasets",
+      "description": "The shared report-builder contract (v1): a catalog of the datasets this service offers, and one grouped query per dataset. Store codes travel in the body, never numeric ids; an empty `stores` list is a global check only the head office passes."
     }
   ],
   "x-tagGroups": [
@@ -94,6 +98,12 @@
       "name": "Pay",
       "tags": [
         "Daily Pay"
+      ]
+    },
+    {
+      "name": "Reports",
+      "tags": [
+        "Report datasets"
       ]
     }
   ],
@@ -284,7 +294,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/AttachmentRequest"
+                "$ref": "#/components/schemas/AttachmentRequest",
+                "properties": {}
               }
             }
           }
@@ -331,7 +342,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/NoteRequest"
+                "$ref": "#/components/schemas/NoteRequest",
+                "properties": {}
               }
             }
           }
@@ -571,7 +583,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/AttachmentRequest"
+                "$ref": "#/components/schemas/AttachmentRequest",
+                "properties": {}
               }
             }
           }
@@ -618,7 +631,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/NoteRequest"
+                "$ref": "#/components/schemas/NoteRequest",
+                "properties": {}
               }
             }
           }
@@ -946,7 +960,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/AttachmentRequest"
+                "$ref": "#/components/schemas/AttachmentRequest",
+                "properties": {}
               }
             }
           }
@@ -993,7 +1008,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/NoteRequest"
+                "$ref": "#/components/schemas/NoteRequest",
+                "properties": {}
               }
             }
           }
@@ -1820,7 +1836,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/AttachmentRequest"
+                "$ref": "#/components/schemas/AttachmentRequest",
+                "properties": {}
               }
             }
           }
@@ -2062,7 +2079,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/NoteRequest"
+                "$ref": "#/components/schemas/NoteRequest",
+                "properties": {}
               }
             }
           }
@@ -2211,7 +2229,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/AttachmentRequest"
+                "$ref": "#/components/schemas/AttachmentRequest",
+                "properties": {}
               }
             }
           }
@@ -2253,7 +2272,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/NoteRequest"
+                "$ref": "#/components/schemas/NoteRequest",
+                "properties": {}
               }
             }
           }
@@ -2905,7 +2925,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/AttachmentRequest"
+                "$ref": "#/components/schemas/AttachmentRequest",
+                "properties": {}
               }
             }
           }
@@ -2947,7 +2968,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/NoteRequest"
+                "$ref": "#/components/schemas/NoteRequest",
+                "properties": {}
               }
             }
           }
@@ -3157,12 +3179,14 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateTicketRequest"
+                "$ref": "#/components/schemas/CreateTicketRequest",
+                "properties": {}
               }
             },
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/CreateTicketRequest"
+                "$ref": "#/components/schemas/CreateTicketRequest",
+                "properties": {}
               }
             }
           }
@@ -3325,7 +3349,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/AttachmentRequest"
+                "$ref": "#/components/schemas/AttachmentRequest",
+                "properties": {}
               }
             }
           }
@@ -3381,7 +3406,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/NoteRequest"
+                "$ref": "#/components/schemas/NoteRequest",
+                "properties": {}
               }
             }
           }
@@ -3429,7 +3455,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/AttachmentRequest"
+                "$ref": "#/components/schemas/AttachmentRequest",
+                "properties": {}
               }
             }
           }
@@ -3530,7 +3557,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/FinalNoteRequest"
+                "$ref": "#/components/schemas/FinalNoteRequest",
+                "properties": {}
               }
             }
           }
@@ -3771,7 +3799,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/AttachmentRequest"
+                "$ref": "#/components/schemas/AttachmentRequest",
+                "properties": {}
               }
             }
           }
@@ -3876,7 +3905,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/NoteRequest"
+                "$ref": "#/components/schemas/NoteRequest",
+                "properties": {}
               }
             }
           }
@@ -3922,7 +3952,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/NoteRequest"
+                "$ref": "#/components/schemas/NoteRequest",
+                "properties": {}
               }
             }
           }
@@ -4060,7 +4091,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/AttachmentRequest"
+                "$ref": "#/components/schemas/AttachmentRequest",
+                "properties": {}
               }
             }
           }
@@ -4116,7 +4148,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/NoteRequest"
+                "$ref": "#/components/schemas/NoteRequest",
+                "properties": {}
               }
             }
           }
@@ -4578,7 +4611,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/AttachmentRequest"
+                "$ref": "#/components/schemas/AttachmentRequest",
+                "properties": {}
               }
             }
           }
@@ -4625,7 +4659,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/NoteRequest"
+                "$ref": "#/components/schemas/NoteRequest",
+                "properties": {}
               }
             }
           }
@@ -4866,12 +4901,14 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateOtherTicketRequest"
+                "$ref": "#/components/schemas/CreateOtherTicketRequest",
+                "properties": {}
               }
             },
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/CreateOtherTicketRequest"
+                "$ref": "#/components/schemas/CreateOtherTicketRequest",
+                "properties": {}
               }
             }
           }
@@ -5916,7 +5953,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/AttachmentRequest"
+                "$ref": "#/components/schemas/AttachmentRequest",
+                "properties": {}
               }
             }
           }
@@ -6251,7 +6289,8 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/TroubleshootingGuideRequest"
+                "$ref": "#/components/schemas/TroubleshootingGuideRequest",
+                "properties": {}
               }
             }
           }
@@ -6306,7 +6345,8 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/TroubleshootingGuideRequest"
+                "$ref": "#/components/schemas/TroubleshootingGuideRequest",
+                "properties": {}
               }
             }
           }
@@ -6389,7 +6429,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/AttachmentRequest"
+                "$ref": "#/components/schemas/AttachmentRequest",
+                "properties": {}
               }
             }
           }
@@ -7833,7 +7874,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/NoteRequest"
+                "$ref": "#/components/schemas/NoteRequest",
+                "properties": {}
               }
             }
           }
@@ -7880,7 +7922,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/AttachmentRequest"
+                "$ref": "#/components/schemas/AttachmentRequest",
+                "properties": {}
               }
             }
           }
@@ -12393,7 +12436,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/NoteRequest"
+                "$ref": "#/components/schemas/NoteRequest",
+                "properties": {}
               }
             }
           }
@@ -12440,7 +12484,8 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/AttachmentRequest"
+                "$ref": "#/components/schemas/AttachmentRequest",
+                "properties": {}
               }
             }
           }
@@ -32646,6 +32691,2554 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/report-datasets": {
+      "get": {
+        "tags": [
+          "Report datasets"
+        ],
+        "summary": "Report dataset catalog",
+        "operationId": "reportDatasetCatalog",
+        "description": "What this service offers the report builder: its pizzasys service name, the contract version and hash, and every dataset with its grain and columns.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "example": "Maintenance"
+                    },
+                    "contract_version": {
+                      "type": "integer",
+                      "example": 1
+                    },
+                    "contract_sha1": {
+                      "type": "string"
+                    },
+                    "datasets": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "grain": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "store",
+                                "date",
+                                "employee"
+                              ]
+                            }
+                          },
+                          "heavy": {
+                            "type": "boolean"
+                          },
+                          "dated": {
+                            "type": "boolean",
+                            "description": "False for a snapshot dataset (current state): it ignores the period and its grain has no date."
+                          },
+                          "columns": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "key": {
+                                  "type": "string"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "string",
+                                    "integer",
+                                    "number",
+                                    "money",
+                                    "date",
+                                    "datetime",
+                                    "boolean",
+                                    "enum"
+                                  ]
+                                },
+                                "options": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "value": {
+                                        "type": "string"
+                                      },
+                                      "label": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
+                                },
+                                "filterable": {
+                                  "type": "boolean"
+                                },
+                                "sortable": {
+                                  "type": "boolean"
+                                },
+                                "groupable": {
+                                  "type": "boolean"
+                                },
+                                "measure": {
+                                  "type": "boolean"
+                                },
+                                "aggregations": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "derived": {
+                                  "type": "string",
+                                  "nullable": true
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "description": "pizzasys refused the caller for this dataset or one of the stores"
+          }
+        }
+      }
+    },
+    "/report-datasets/maintenance.ticket_issues/query": {
+      "post": {
+        "tags": [
+          "Report datasets"
+        ],
+        "summary": "Query ticket issues",
+        "operationId": "reportDatasetTicketIssues",
+        "description": "One row per ticket issue, dated by the New York day it was filed. Grain store + date. Columns: store, date, status, priority, issue, and the `issues` count measure.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "stores",
+                  "date_from",
+                  "date_to"
+                ],
+                "properties": {
+                  "stores": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "example": "03795-00044"
+                    },
+                    "description": "Store codes. Empty = no store filter (head office only)."
+                  },
+                  "date_from": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "date_to": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "group_by": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "filters": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column",
+                        "op"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "op": {
+                          "type": "string",
+                          "enum": [
+                            "eq",
+                            "neq",
+                            "in",
+                            "not_in",
+                            "gt",
+                            "gte",
+                            "lt",
+                            "lte",
+                            "between",
+                            "contains",
+                            "is_null",
+                            "not_null"
+                          ]
+                        },
+                        "value": {
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "aggregates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column",
+                        "fn"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "fn": {
+                          "type": "string",
+                          "enum": [
+                            "count",
+                            "count_distinct",
+                            "sum",
+                            "avg",
+                            "min",
+                            "max"
+                          ]
+                        },
+                        "alias": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "sort": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "dir": {
+                          "type": "string",
+                          "enum": [
+                            "asc",
+                            "desc"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "cursor": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Capped at 5000."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "columns": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "rows": {
+                      "type": "array",
+                      "description": "Positional, in the order of `columns`.",
+                      "items": {
+                        "type": "array",
+                        "items": {}
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "row_count": {
+                          "type": "integer"
+                        },
+                        "elapsed_ms": {
+                          "type": "integer"
+                        },
+                        "contract_version": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "description": "pizzasys refused the caller for this dataset or one of the stores"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "504": {
+            "description": "The dataset query ran out of time"
+          }
+        }
+      }
+    },
+    "/report-datasets/maintenance.assignments/query": {
+      "post": {
+        "tags": [
+          "Report datasets"
+        ],
+        "summary": "Query technician bookings",
+        "operationId": "reportDatasetAssignments",
+        "description": "Work visits and inspections by the day they are booked for. Grain store + date. Columns: store, date, kind, technician, status, and the `assignments` measure (count_distinct only: a booking is joined once per issue it covers).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "stores",
+                  "date_from",
+                  "date_to"
+                ],
+                "properties": {
+                  "stores": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "example": "03795-00044"
+                    },
+                    "description": "Store codes. Empty = no store filter (head office only)."
+                  },
+                  "date_from": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "date_to": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "group_by": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "filters": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column",
+                        "op"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "op": {
+                          "type": "string",
+                          "enum": [
+                            "eq",
+                            "neq",
+                            "in",
+                            "not_in",
+                            "gt",
+                            "gte",
+                            "lt",
+                            "lte",
+                            "between",
+                            "contains",
+                            "is_null",
+                            "not_null"
+                          ]
+                        },
+                        "value": {
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "aggregates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column",
+                        "fn"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "fn": {
+                          "type": "string",
+                          "enum": [
+                            "count",
+                            "count_distinct",
+                            "sum",
+                            "avg",
+                            "min",
+                            "max"
+                          ]
+                        },
+                        "alias": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "sort": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "dir": {
+                          "type": "string",
+                          "enum": [
+                            "asc",
+                            "desc"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "cursor": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Capped at 5000."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "columns": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "rows": {
+                      "type": "array",
+                      "description": "Positional, in the order of `columns`.",
+                      "items": {
+                        "type": "array",
+                        "items": {}
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "row_count": {
+                          "type": "integer"
+                        },
+                        "elapsed_ms": {
+                          "type": "integer"
+                        },
+                        "contract_version": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "description": "pizzasys refused the caller for this dataset or one of the stores"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "504": {
+            "description": "The dataset query ran out of time"
+          }
+        }
+      }
+    },
+    "/report-datasets/maintenance.tickets/query": {
+      "post": {
+        "tags": [
+          "Report datasets"
+        ],
+        "summary": "Query tickets",
+        "operationId": "reportDatasetTickets",
+        "description": "One row per ticket (deleted ones and tickets without a store left out), dated by the New York day it was filed. Heavy. Grain store + date. Columns: store, date, type, status (derived from the ticket's issues), priority (the highest of its issues), closed, and the measures `tickets` (count) and `issues` (sum).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "stores",
+                  "date_from",
+                  "date_to"
+                ],
+                "properties": {
+                  "stores": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "example": "03795-00044"
+                    },
+                    "description": "Store codes. Empty = no store filter (head office only)."
+                  },
+                  "date_from": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "date_to": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "group_by": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "filters": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column",
+                        "op"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "op": {
+                          "type": "string",
+                          "enum": [
+                            "eq",
+                            "neq",
+                            "in",
+                            "not_in",
+                            "gt",
+                            "gte",
+                            "lt",
+                            "lte",
+                            "between",
+                            "contains",
+                            "is_null",
+                            "not_null"
+                          ]
+                        },
+                        "value": {
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "aggregates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column",
+                        "fn"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "fn": {
+                          "type": "string",
+                          "enum": [
+                            "count",
+                            "count_distinct",
+                            "sum",
+                            "avg",
+                            "min",
+                            "max"
+                          ]
+                        },
+                        "alias": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "sort": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "dir": {
+                          "type": "string",
+                          "enum": [
+                            "asc",
+                            "desc"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "cursor": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Capped at 5000."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "columns": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "rows": {
+                      "type": "array",
+                      "description": "Positional, in the order of `columns`.",
+                      "items": {
+                        "type": "array",
+                        "items": {}
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "row_count": {
+                          "type": "integer"
+                        },
+                        "elapsed_ms": {
+                          "type": "integer"
+                        },
+                        "contract_version": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "description": "pizzasys refused the caller for this dataset or one of the stores"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "504": {
+            "description": "The dataset query ran out of time"
+          }
+        }
+      }
+    },
+    "/report-datasets/maintenance.payment_lines/query": {
+      "post": {
+        "tags": [
+          "Report datasets"
+        ],
+        "summary": "Query payment lines",
+        "operationId": "reportDatasetPaymentLines",
+        "description": "What was paid, one row per payment line, on the day of its payment; mistaken payments left out. Grain store + date (lines for a storage shelf or a store written in words have no store: see `spent_at`). Columns: store, date, technician, supplier, method, type, spent_at, and the measures lines (count), payments (count_distinct), hours, miles, amount. Head office only.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "stores",
+                  "date_from",
+                  "date_to"
+                ],
+                "properties": {
+                  "stores": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "example": "03795-00044"
+                    },
+                    "description": "Store codes. Empty = no store filter (head office only)."
+                  },
+                  "date_from": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "date_to": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "group_by": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "filters": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column",
+                        "op"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "op": {
+                          "type": "string",
+                          "enum": [
+                            "eq",
+                            "neq",
+                            "in",
+                            "not_in",
+                            "gt",
+                            "gte",
+                            "lt",
+                            "lte",
+                            "between",
+                            "contains",
+                            "is_null",
+                            "not_null"
+                          ]
+                        },
+                        "value": {
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "aggregates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column",
+                        "fn"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "fn": {
+                          "type": "string",
+                          "enum": [
+                            "count",
+                            "count_distinct",
+                            "sum",
+                            "avg",
+                            "min",
+                            "max"
+                          ]
+                        },
+                        "alias": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "sort": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "dir": {
+                          "type": "string",
+                          "enum": [
+                            "asc",
+                            "desc"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "cursor": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Capped at 5000."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "columns": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "rows": {
+                      "type": "array",
+                      "description": "Positional, in the order of `columns`.",
+                      "items": {
+                        "type": "array",
+                        "items": {}
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "row_count": {
+                          "type": "integer"
+                        },
+                        "elapsed_ms": {
+                          "type": "integer"
+                        },
+                        "contract_version": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "description": "pizzasys refused the caller for this dataset or one of the stores"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "504": {
+            "description": "The dataset query ran out of time"
+          }
+        }
+      }
+    },
+    "/report-datasets/maintenance.payments/query": {
+      "post": {
+        "tags": [
+          "Report datasets"
+        ],
+        "summary": "Query payments",
+        "operationId": "reportDatasetPayments",
+        "description": "One row per payment (an invoice paid to a technician or a supplier), on the day paid; mistaken payments left out. Global: grain date only. Columns: date, technician, supplier, payee, method, and the measures payments (count) and total.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "stores",
+                  "date_from",
+                  "date_to"
+                ],
+                "properties": {
+                  "stores": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "example": "03795-00044"
+                    },
+                    "description": "Store codes. This dataset is global (no store in its grain): the list is accepted and does not narrow it. Only the head office may query it."
+                  },
+                  "date_from": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "date_to": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "group_by": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "filters": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column",
+                        "op"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "op": {
+                          "type": "string",
+                          "enum": [
+                            "eq",
+                            "neq",
+                            "in",
+                            "not_in",
+                            "gt",
+                            "gte",
+                            "lt",
+                            "lte",
+                            "between",
+                            "contains",
+                            "is_null",
+                            "not_null"
+                          ]
+                        },
+                        "value": {
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "aggregates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column",
+                        "fn"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "fn": {
+                          "type": "string",
+                          "enum": [
+                            "count",
+                            "count_distinct",
+                            "sum",
+                            "avg",
+                            "min",
+                            "max"
+                          ]
+                        },
+                        "alias": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "sort": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "dir": {
+                          "type": "string",
+                          "enum": [
+                            "asc",
+                            "desc"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "cursor": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Capped at 5000."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "columns": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "rows": {
+                      "type": "array",
+                      "description": "Positional, in the order of `columns`.",
+                      "items": {
+                        "type": "array",
+                        "items": {}
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "row_count": {
+                          "type": "integer"
+                        },
+                        "elapsed_ms": {
+                          "type": "integer"
+                        },
+                        "contract_version": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "description": "pizzasys refused the caller for this dataset or one of the stores"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "504": {
+            "description": "The dataset query ran out of time"
+          }
+        }
+      }
+    },
+    "/report-datasets/maintenance.technician_purchases/query": {
+      "post": {
+        "tags": [
+          "Report datasets"
+        ],
+        "summary": "Query technician purchases",
+        "operationId": "reportDatasetTechnicianPurchases",
+        "description": "Parts a technician bought with his own money, one row per purchase, on the New York day bought; mistaken purchases left out. Grain store + date; the store comes from the ticket issue it was bought for, empty for shelf purchases. Columns: store, date, technician, part, supplier, payback, and the measures purchases (count), quantity, total_cost. Head office only.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "stores",
+                  "date_from",
+                  "date_to"
+                ],
+                "properties": {
+                  "stores": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "example": "03795-00044"
+                    },
+                    "description": "Store codes. Empty = no store filter (head office only)."
+                  },
+                  "date_from": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "date_to": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "group_by": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "filters": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column",
+                        "op"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "op": {
+                          "type": "string",
+                          "enum": [
+                            "eq",
+                            "neq",
+                            "in",
+                            "not_in",
+                            "gt",
+                            "gte",
+                            "lt",
+                            "lte",
+                            "between",
+                            "contains",
+                            "is_null",
+                            "not_null"
+                          ]
+                        },
+                        "value": {
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "aggregates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column",
+                        "fn"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "fn": {
+                          "type": "string",
+                          "enum": [
+                            "count",
+                            "count_distinct",
+                            "sum",
+                            "avg",
+                            "min",
+                            "max"
+                          ]
+                        },
+                        "alias": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "sort": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "dir": {
+                          "type": "string",
+                          "enum": [
+                            "asc",
+                            "desc"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "cursor": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Capped at 5000."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "columns": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "rows": {
+                      "type": "array",
+                      "description": "Positional, in the order of `columns`.",
+                      "items": {
+                        "type": "array",
+                        "items": {}
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "row_count": {
+                          "type": "integer"
+                        },
+                        "elapsed_ms": {
+                          "type": "integer"
+                        },
+                        "contract_version": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "description": "pizzasys refused the caller for this dataset or one of the stores"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "504": {
+            "description": "The dataset query ran out of time"
+          }
+        }
+      }
+    },
+    "/report-datasets/maintenance.stock_movements/query": {
+      "post": {
+        "tags": [
+          "Report datasets"
+        ],
+        "summary": "Query stock movements",
+        "operationId": "reportDatasetStockMovements",
+        "description": "Stock moving, one row per movement line, on the New York day of the movement. Heavy. Grain store + date; only a movement for a ticket issue has a store. Mistaken movements and the `undone` movements that reverse them are both left out, so net sums agree with the balances. Columns: store, date, type, direction, part, location, and the measures lines (count), movements (count_distinct), quantity, net_quantity, value, net_value. Head office only.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "stores",
+                  "date_from",
+                  "date_to"
+                ],
+                "properties": {
+                  "stores": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "example": "03795-00044"
+                    },
+                    "description": "Store codes. Empty = no store filter (head office only)."
+                  },
+                  "date_from": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "date_to": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "group_by": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "filters": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column",
+                        "op"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "op": {
+                          "type": "string",
+                          "enum": [
+                            "eq",
+                            "neq",
+                            "in",
+                            "not_in",
+                            "gt",
+                            "gte",
+                            "lt",
+                            "lte",
+                            "between",
+                            "contains",
+                            "is_null",
+                            "not_null"
+                          ]
+                        },
+                        "value": {
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "aggregates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column",
+                        "fn"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "fn": {
+                          "type": "string",
+                          "enum": [
+                            "count",
+                            "count_distinct",
+                            "sum",
+                            "avg",
+                            "min",
+                            "max"
+                          ]
+                        },
+                        "alias": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "sort": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "dir": {
+                          "type": "string",
+                          "enum": [
+                            "asc",
+                            "desc"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "cursor": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Capped at 5000."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "columns": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "rows": {
+                      "type": "array",
+                      "description": "Positional, in the order of `columns`.",
+                      "items": {
+                        "type": "array",
+                        "items": {}
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "row_count": {
+                          "type": "integer"
+                        },
+                        "elapsed_ms": {
+                          "type": "integer"
+                        },
+                        "contract_version": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "description": "pizzasys refused the caller for this dataset or one of the stores"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "504": {
+            "description": "The dataset query ran out of time"
+          }
+        }
+      }
+    },
+    "/report-datasets/maintenance.stock_balances/query": {
+      "post": {
+        "tags": [
+          "Report datasets"
+        ],
+        "summary": "Query stock on hand",
+        "operationId": "reportDatasetStockBalances",
+        "description": "What is on hand now, one row per part and storage location. A snapshot: it ignores the period, and date_from / date_to may be left out. Global: empty grain. Columns: part, part_number, brand, unit, location, state, and the measures balances (count), parts (count_distinct), on_hand. Head office only.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "stores"
+                ],
+                "properties": {
+                  "stores": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "example": "03795-00044"
+                    },
+                    "description": "Store codes. This dataset is global (no store in its grain): the list is accepted and does not narrow it. Only the head office may query it."
+                  },
+                  "date_from": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "Ignored: this is a snapshot of now."
+                  },
+                  "date_to": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "Ignored: this is a snapshot of now."
+                  },
+                  "columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "group_by": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "filters": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column",
+                        "op"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "op": {
+                          "type": "string",
+                          "enum": [
+                            "eq",
+                            "neq",
+                            "in",
+                            "not_in",
+                            "gt",
+                            "gte",
+                            "lt",
+                            "lte",
+                            "between",
+                            "contains",
+                            "is_null",
+                            "not_null"
+                          ]
+                        },
+                        "value": {
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "aggregates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column",
+                        "fn"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "fn": {
+                          "type": "string",
+                          "enum": [
+                            "count",
+                            "count_distinct",
+                            "sum",
+                            "avg",
+                            "min",
+                            "max"
+                          ]
+                        },
+                        "alias": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "sort": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "dir": {
+                          "type": "string",
+                          "enum": [
+                            "asc",
+                            "desc"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "cursor": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Capped at 5000."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "columns": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "rows": {
+                      "type": "array",
+                      "description": "Positional, in the order of `columns`.",
+                      "items": {
+                        "type": "array",
+                        "items": {}
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "row_count": {
+                          "type": "integer"
+                        },
+                        "elapsed_ms": {
+                          "type": "integer"
+                        },
+                        "contract_version": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "description": "pizzasys refused the caller for this dataset or one of the stores"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "504": {
+            "description": "The dataset query ran out of time"
+          }
+        }
+      }
+    },
+    "/report-datasets/maintenance.stock_counts/query": {
+      "post": {
+        "tags": [
+          "Report datasets"
+        ],
+        "summary": "Query stock counts",
+        "operationId": "reportDatasetStockCounts",
+        "description": "One row per stock count sheet, on the New York day it was started. Global: grain date only. Columns: date, location, status, and the measures counts (count), lines, counted_lines, variance (counted minus expected), missing_value, extra_value. Head office only.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "stores",
+                  "date_from",
+                  "date_to"
+                ],
+                "properties": {
+                  "stores": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "example": "03795-00044"
+                    },
+                    "description": "Store codes. This dataset is global (no store in its grain): the list is accepted and does not narrow it. Only the head office may query it."
+                  },
+                  "date_from": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "date_to": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "group_by": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "filters": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column",
+                        "op"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "op": {
+                          "type": "string",
+                          "enum": [
+                            "eq",
+                            "neq",
+                            "in",
+                            "not_in",
+                            "gt",
+                            "gte",
+                            "lt",
+                            "lte",
+                            "between",
+                            "contains",
+                            "is_null",
+                            "not_null"
+                          ]
+                        },
+                        "value": {
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "aggregates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column",
+                        "fn"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "fn": {
+                          "type": "string",
+                          "enum": [
+                            "count",
+                            "count_distinct",
+                            "sum",
+                            "avg",
+                            "min",
+                            "max"
+                          ]
+                        },
+                        "alias": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "sort": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "dir": {
+                          "type": "string",
+                          "enum": [
+                            "asc",
+                            "desc"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "cursor": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Capped at 5000."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "columns": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "rows": {
+                      "type": "array",
+                      "description": "Positional, in the order of `columns`.",
+                      "items": {
+                        "type": "array",
+                        "items": {}
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "row_count": {
+                          "type": "integer"
+                        },
+                        "elapsed_ms": {
+                          "type": "integer"
+                        },
+                        "contract_version": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "description": "pizzasys refused the caller for this dataset or one of the stores"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "504": {
+            "description": "The dataset query ran out of time"
+          }
+        }
+      }
+    },
+    "/report-datasets/maintenance.trips/query": {
+      "post": {
+        "tags": [
+          "Report datasets"
+        ],
+        "summary": "Query technician trips",
+        "operationId": "reportDatasetTrips",
+        "description": "A technician's clock, one row per trip session (clock-in to clock-out), on the New York day of the clock-in; mistaken sessions and trips left out. Global: grain date only (the stores visited are maintenance.trip_stops). Columns: date, technician, trip_status, source, using_car, payment, and the measures sessions (count), trips (count_distinct), clocked_minutes (breaks included), paid_minutes. Head office only.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "stores",
+                  "date_from",
+                  "date_to"
+                ],
+                "properties": {
+                  "stores": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "example": "03795-00044"
+                    },
+                    "description": "Store codes. This dataset is global (no store in its grain): the list is accepted and does not narrow it. Only the head office may query it."
+                  },
+                  "date_from": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "date_to": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "group_by": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "filters": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column",
+                        "op"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "op": {
+                          "type": "string",
+                          "enum": [
+                            "eq",
+                            "neq",
+                            "in",
+                            "not_in",
+                            "gt",
+                            "gte",
+                            "lt",
+                            "lte",
+                            "between",
+                            "contains",
+                            "is_null",
+                            "not_null"
+                          ]
+                        },
+                        "value": {
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "aggregates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column",
+                        "fn"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "fn": {
+                          "type": "string",
+                          "enum": [
+                            "count",
+                            "count_distinct",
+                            "sum",
+                            "avg",
+                            "min",
+                            "max"
+                          ]
+                        },
+                        "alias": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "sort": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "dir": {
+                          "type": "string",
+                          "enum": [
+                            "asc",
+                            "desc"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "cursor": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Capped at 5000."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "columns": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "rows": {
+                      "type": "array",
+                      "description": "Positional, in the order of `columns`.",
+                      "items": {
+                        "type": "array",
+                        "items": {}
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "row_count": {
+                          "type": "integer"
+                        },
+                        "elapsed_ms": {
+                          "type": "integer"
+                        },
+                        "contract_version": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "description": "pizzasys refused the caller for this dataset or one of the stores"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "504": {
+            "description": "The dataset query ran out of time"
+          }
+        }
+      }
+    },
+    "/report-datasets/maintenance.trip_stops/query": {
+      "post": {
+        "tags": [
+          "Report datasets"
+        ],
+        "summary": "Query trip stops",
+        "operationId": "reportDatasetTripStops",
+        "description": "The stores a technician went to or was planned to, one row per trip stop, on the day he arrived, else the day the trip was planned for; mistaken stops and stops at a store written in words left out. Grain store + date. Columns: store, date, technician, status, and the measures stops (count), trips (count_distinct), minutes_on_site. Head office only.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "stores",
+                  "date_from",
+                  "date_to"
+                ],
+                "properties": {
+                  "stores": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "example": "03795-00044"
+                    },
+                    "description": "Store codes. Empty = no store filter (head office only)."
+                  },
+                  "date_from": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "date_to": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "group_by": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "filters": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column",
+                        "op"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "op": {
+                          "type": "string",
+                          "enum": [
+                            "eq",
+                            "neq",
+                            "in",
+                            "not_in",
+                            "gt",
+                            "gte",
+                            "lt",
+                            "lte",
+                            "between",
+                            "contains",
+                            "is_null",
+                            "not_null"
+                          ]
+                        },
+                        "value": {
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "aggregates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column",
+                        "fn"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "fn": {
+                          "type": "string",
+                          "enum": [
+                            "count",
+                            "count_distinct",
+                            "sum",
+                            "avg",
+                            "min",
+                            "max"
+                          ]
+                        },
+                        "alias": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "sort": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "column"
+                      ],
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "dir": {
+                          "type": "string",
+                          "enum": [
+                            "asc",
+                            "desc"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "cursor": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Capped at 5000."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "columns": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "rows": {
+                      "type": "array",
+                      "description": "Positional, in the order of `columns`.",
+                      "items": {
+                        "type": "array",
+                        "items": {}
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "row_count": {
+                          "type": "integer"
+                        },
+                        "elapsed_ms": {
+                          "type": "integer"
+                        },
+                        "contract_version": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "description": "pizzasys refused the caller for this dataset or one of the stores"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "504": {
+            "description": "The dataset query ran out of time"
           }
         }
       }
