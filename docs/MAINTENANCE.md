@@ -472,7 +472,7 @@ Existing storage-locations, place-levels, stock-balances keep their routes.
 
 `GET maintenance-analytics/{section}` adds sections `finances` and `coverage`.
 
-finances (`from`, `to` required, ≤ 400 days; `stores[]`, `category_id`,
+finances (`from`, `to` required, any range; `stores[]`, `category_id`,
 `technician_id`, `supplier_id` optional; mistaken excluded):
 `{ totals {spent, previous_spent, change_pct, payments, lines},
 by_type [{type, label, amount}], trend [{period (YYYY-MM or ISO week start), amount, by_type {…}}],
