@@ -6,7 +6,6 @@ use App\Services\TechnicianAnalyticsService;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Carbon;
-use Illuminate\Validation\Validator;
 
 /**
  * GET /api/technician-analytics
@@ -36,29 +35,15 @@ class TechnicianAnalyticsRequest extends FormRequest
             'to' => ['required', 'date', 'after:from'],
             'date_from' => ['required', 'date_format:Y-m-d'],
             'date_to' => ['required', 'date_format:Y-m-d', 'after_or_equal:date_from'],
-            'stores' => ['nullable', 'array', 'max:500'],
+            'stores' => ['nullable', 'array'],
             'stores.*' => ['string', 'distinct', 'exists:stores,store_number'],
-            'issue_ids' => ['nullable', 'array', 'max:200'],
+            'issue_ids' => ['nullable', 'array'],
             'issue_ids.*' => ['integer', 'distinct'],
-            'category_ids' => ['nullable', 'array', 'max:100'],
+            'category_ids' => ['nullable', 'array'],
             'category_ids.*' => ['integer', 'distinct'],
-            'technician_ids' => ['nullable', 'array', 'max:500'],
+            'technician_ids' => ['nullable', 'array'],
             'technician_ids.*' => ['integer', 'distinct'],
         ];
-    }
-
-    public function withValidator(Validator $validator): void
-    {
-        $validator->after(function (Validator $v) {
-            if ($v->errors()->isNotEmpty()) {
-                return;
-            }
-
-            $max = TechnicianAnalyticsService::MAX_RANGE_DAYS;
-            if (Carbon::parse($this->input('from'))->diffInDays(Carbon::parse($this->input('to'))) > $max) {
-                $v->errors()->add('to', "The range can be at most {$max} days.");
-            }
-        });
     }
 
     /**

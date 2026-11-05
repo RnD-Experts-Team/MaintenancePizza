@@ -229,7 +229,8 @@ class TechnicianAnalyticsTest extends TestCase
         $this->getJson('/api/technician-analytics?'.http_build_query(['from' => self::RANGE['from'], 'to' => self::RANGE['to']]), $this->headers())
             ->assertUnprocessable()->assertJsonValidationErrors(['date_from', 'date_to']);
 
+        // No cap on the range: almost two years is answered like any other.
         $this->getJson($this->url('technician-analytics', ['from' => '2025-01-01T00:00:00Z']), $this->headers())
-            ->assertUnprocessable()->assertJsonValidationErrors('to');
+            ->assertOk();
     }
 }

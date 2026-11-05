@@ -60,7 +60,7 @@ class MaintenanceAnalyticsController extends Controller
             'activity' => $this->analytics->activity(
                 $stores, $request->from(), $request->to(),
                 max(1, $request->integer('page', 1)),
-                min(100, max(1, $request->integer('per_page', 25))),
+                max(1, $request->integer('per_page', 25)),
             ),
             'watchlist' => ['data' => $this->analytics->watchlist(
                 $stores, $request->to(), $recurringMin, $recurringDays, $untouchedDays,

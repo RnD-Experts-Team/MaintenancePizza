@@ -41,8 +41,6 @@ class MaintenanceAnalyticsService
     /** ... within this many days is "recurring". */
     public const RECURRING_DAYS = 90;
 
-    public const MAX_RANGE_DAYS = 92;
-
     /** @var array<int, string> */
     private array $open;
 

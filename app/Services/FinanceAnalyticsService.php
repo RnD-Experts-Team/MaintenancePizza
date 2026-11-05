@@ -36,8 +36,6 @@ use Illuminate\Support\Facades\DB;
  */
 class FinanceAnalyticsService
 {
-    public const MAX_RANGE_DAYS = 400;
-
     /** Up to this many days the trend is by ISO week; longer, by month. */
     public const WEEKLY_UP_TO_DAYS = 92;
 
@@ -162,7 +160,7 @@ class FinanceAnalyticsService
             $periods[$key($d)] = array_fill_keys(PaymentLineType::values(), 0.0);
         }
 
-        // One row per (day, type): at most 400 × 6, summed by the database.
+        // One row per (day, type), summed by the database.
         $rows = $this->lines($from, $to, $f)
             ->groupBy(DB::raw('DATE(p.paid_at)'), 'pl.type')
             ->selectRaw('DATE(p.paid_at) as day, pl.type, SUM(pl.amount) as amount')

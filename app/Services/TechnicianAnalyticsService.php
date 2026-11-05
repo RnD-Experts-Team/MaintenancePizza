@@ -37,8 +37,6 @@ use Illuminate\Support\Facades\DB;
  */
 class TechnicianAnalyticsService
 {
-    public const MAX_RANGE_DAYS = 400;
-
     public function __construct(private TripService $trips)
     {
     }

@@ -75,13 +75,14 @@ class MaintenanceAnalyticsTest extends TestCase
         $this->travelTo($now);
     }
 
-    public function test_stores_are_required_and_ranges_are_bounded(): void
+    public function test_stores_are_required_and_any_range_is_answered(): void
     {
         $this->getJson('/api/maintenance-analytics/summary?' . http_build_query(self::YESTERDAY), $this->headers())
             ->assertUnprocessable()->assertJsonValidationErrors('stores');
 
+        // No cap on the range: nine months is answered like a day.
         $this->getJson($this->url('summary', ['from' => '2026-01-01T00:00:00Z', 'to' => '2026-10-01T00:00:00Z']), $this->headers())
-            ->assertUnprocessable()->assertJsonValidationErrors('to');
+            ->assertOk();
 
         $this->getJson('/api/maintenance-analytics/everything?' . http_build_query(['stores' => ['03795-00001']] + self::YESTERDAY), $this->headers())
             ->assertNotFound();

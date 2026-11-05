@@ -318,8 +318,9 @@ class FinanceAnalyticsTest extends TestCase
         $this->getJson('/api/maintenance-analytics/finances', $this->headers())
             ->assertUnprocessable()->assertJsonValidationErrors(['from', 'to']);
 
+        // No cap on the range: over a year is answered like any other.
         $this->getJson($this->url(['from' => '2025-01-01', 'to' => '2026-02-10']), $this->headers())
-            ->assertUnprocessable()->assertJsonValidationErrors(['to']);
+            ->assertOk();
 
         $this->getJson($this->url(['category_id' => 99999]), $this->headers())
             ->assertUnprocessable()->assertJsonValidationErrors(['category_id']);
