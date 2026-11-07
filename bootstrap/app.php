@@ -23,6 +23,12 @@ return Application::configure(basePath: dirname(__DIR__))
             'trip.token' => TripTokenMiddleware::class,
             'throttle' => ObservableThrottleRequests::class,
         ]);
+
+        // The proxies themselves come from config/trustedproxy.php (TRUSTED_PROXIES).
+        $middleware->trustProxies(headers: Request::HEADER_X_FORWARDED_FOR
+            | Request::HEADER_X_FORWARDED_PROTO
+            | Request::HEADER_X_FORWARDED_HOST
+            | Request::HEADER_X_FORWARDED_PORT);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
