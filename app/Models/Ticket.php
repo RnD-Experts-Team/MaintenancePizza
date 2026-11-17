@@ -16,7 +16,7 @@ class Ticket extends Model
     /** @use HasFactory<TicketFactory> */
     use HasFactory, HasNotesAndAttachments, SoftDeletes;
 
-    protected $fillable = ['store_id', 'other_store', 'type'];
+    protected $fillable = ['store_id', 'other_store', 'storage_location_id', 'type'];
 
     protected $casts = [
         'type' => TicketType::class,
@@ -29,6 +29,26 @@ class Ticket extends Model
     public function store(): BelongsTo
     {
         return $this->belongsTo(Store::class);
+    }
+
+    /**
+     * The storage location it is at, when not at a store. Soft-deleted
+     * locations still name their old tickets.
+     *
+     * @return BelongsTo<StorageLocation, $this>
+     */
+    public function storageLocation(): BelongsTo
+    {
+        return $this->belongsTo(StorageLocation::class)->withTrashed();
+    }
+
+    /**
+     * Where it is, as people read it: the store number, the storage
+     * location's name, or the place written in words.
+     */
+    public function placeLabel(): ?string
+    {
+        return $this->store?->store_number ?? $this->storageLocation?->name ?? $this->other_store;
     }
 
     /** @return HasMany<TicketIssue, $this> */

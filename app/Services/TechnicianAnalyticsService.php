@@ -307,6 +307,7 @@ class TechnicianAnalyticsService
                 'paymentLines',
                 'trip.stops' => fn ($q) => $q->where('mistaken', false),
                 'trip.stops.store',
+                'trip.stops.storageLocation',
                 'trip.stops.ticketIssues.issue',
                 'trip.stops.ticketIssues.ticket.store',
             ])
@@ -330,7 +331,7 @@ class TechnicianAnalyticsService
                     continue;
                 }
 
-                $label = $stop->store?->store_number ?? ($stop->other_store ?: 'Other location');
+                $label = $stop->placeLabel() ?: 'Other location';
                 $jobStores[$label] = array_merge($jobStores[$label] ?? [], $matching->pluck('id')->all());
                 $issues = $issues->merge($matching);
             }

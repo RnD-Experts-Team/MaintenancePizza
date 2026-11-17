@@ -26,7 +26,9 @@ class CreateOtherTicketRequest extends FormRequest
     public function rules(): array
     {
         return $this->troubleshootingRules() + [
-            'other_store' => ['required', 'string', 'max:255'],
+            // At no store: one of our storage locations, or a place written in words.
+            'storage_location_id' => ['nullable', 'integer', Rule::exists('storage_locations', 'id')->whereNull('deleted_at'), 'prohibits:other_store'],
+            'other_store' => ['nullable', 'string', 'max:255', 'required_without:storage_location_id'],
             'type'        => ['nullable', Rule::enum(TicketType::class)],
             'issues'      => ['required', 'array', 'min:1'],
             'issues.*.issue_id'    => ['nullable', 'integer', 'exists:issues,id'],

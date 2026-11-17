@@ -152,7 +152,7 @@ class InspectionService
             ->where('mistaken', false)
             ->whereHas('ticketIssue.ticket')
             ->withExists(['paymentLines as paid' => $paying])
-            ->with(['technician', 'ticketIssue.issue', 'ticketIssue.ticket.store']);
+            ->with(['technician', 'ticketIssue.issue', 'ticketIssue.ticket.store', 'ticketIssue.ticket.storageLocation']);
 
         if (! empty($filters['technician_id'])) {
             $query->where('technician_id', (int) $filters['technician_id']);
@@ -187,6 +187,7 @@ class InspectionService
                         'ticket_id' => $issue->ticket_id,
                         'title' => $issue->displayTitle(),
                         'store' => $store ? ['id' => $store->id, 'store_number' => $store->store_number] : null,
+                        'storage_location' => $issue->ticket?->storageLocation ? ['id' => $issue->ticket->storageLocation->id, 'name' => $issue->ticket->storageLocation->name] : null,
                         'other_store' => $issue->ticket?->other_store,
                     ],
                     'technician' => $inspection->technician

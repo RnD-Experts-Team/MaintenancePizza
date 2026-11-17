@@ -153,18 +153,24 @@ class TicketUpdateNotificationsTest extends TestCase
         $this->assertSame('1 new note', $this->updates()[0]->payload['data']['payload']['body']);
     }
 
-    public function test_an_open_question_from_the_office_goes_first(): void
+    public function test_a_question_for_the_store_reaches_its_store_managers_at_once(): void
     {
         $this->postJson("/api/stores/{$this->store->store_number}/tickets/{$this->ticket->id}/issues/{$this->oven->id}/info-requests", [
             'question' => 'Is the pilot light on?',
         ], $this->headers())->assertOk();
-        $this->travel(1)->minutes();
 
+        $asked = MaintenanceOutboxEvent::query()->get()
+            ->filter(fn (MaintenanceOutboxEvent $row) => ($row->payload['data']['payload']['type'] ?? null) === 'maintenance_question_for_store')
+            ->values();
+        $this->assertCount(1, $asked);
+        $this->assertSame(['Store Manager'], $asked[0]->payload['data']['roles']);
+        $this->assertSame([$this->store->store_number], $asked[0]->payload['data']['stores']);
+        $this->assertSame('Oven: "Is the pilot light on?"', $asked[0]->payload['data']['payload']['body']);
+
+        // The digest does not say it again: only the status move.
+        $this->travel(1)->minutes();
         $this->artisan('tickets:send-update-notifications')->assertSuccessful();
 
-        $this->assertSame(
-            'Oven: the office asks "Is the pilot light on?" · Oven: New → Waiting on store',
-            $this->updates()[0]->payload['data']['payload']['body'],
-        );
+        $this->assertSame('Oven: New → Waiting on store', $this->updates()[0]->payload['data']['payload']['body']);
     }
 }

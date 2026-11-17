@@ -483,7 +483,7 @@ class CatalogService
         return $this->presentPartUnit($unit->load(self::PART_UNIT_LOADS));
     }
 
-    public const PART_UNIT_LOADS = ['storageLocation', 'ticketIssue.ticket.store', 'ticketIssue.issue'];
+    public const PART_UNIT_LOADS = ['storageLocation', 'ticketIssue.ticket.store', 'ticketIssue.ticket.storageLocation', 'ticketIssue.issue'];
 
     // ------------------------------------------------------------- Presenters
 
@@ -505,7 +505,7 @@ class CatalogService
             'ticket_issue' => $issue === null ? null : [
                 'id' => $issue->id,
                 'ticket_id' => $issue->ticket_id,
-                'store_number' => $issue->ticket?->store?->store_number ?? $issue->ticket?->other_store,
+                'store_number' => $issue->ticket?->placeLabel(),
                 'title' => $issue->displayTitle(),
             ],
             'payment_line_id' => $unit->payment_line_id,

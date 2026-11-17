@@ -53,6 +53,7 @@ class InfoRequestService
             }
 
             $this->events->infoRequested($issue, $request);
+            $this->events->questionForStore($issue, $request);
 
             return $request;
         });

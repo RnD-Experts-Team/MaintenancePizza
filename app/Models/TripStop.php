@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * One store on a trip (or an `other_store` written in words): when he got
+ * One store on a trip (or a storage location, or an `other_store` written in words): when he got
  * there and left, the odometer on arrival, and the ticket issues he is there
  * for (`trip_stop_issues`). Status: planned | arrived | done | not_done.
  */
@@ -21,6 +21,7 @@ class TripStop extends Model
         'trip_id',
         'store_id',
         'other_store',
+        'storage_location_id',
         'status',
         'arrived_at',
         'left_at',
@@ -54,6 +55,26 @@ class TripStop extends Model
     public function store(): BelongsTo
     {
         return $this->belongsTo(Store::class);
+    }
+
+    /**
+     * The storage location it is at, when not at a store. Soft-deleted
+     * locations still name their old tickets.
+     *
+     * @return BelongsTo<StorageLocation, $this>
+     */
+    public function storageLocation(): BelongsTo
+    {
+        return $this->belongsTo(StorageLocation::class)->withTrashed();
+    }
+
+    /**
+     * Where it is, as people read it: the store number, the storage
+     * location's name, or the place written in words.
+     */
+    public function placeLabel(): ?string
+    {
+        return $this->store?->store_number ?? $this->storageLocation?->name ?? $this->other_store;
     }
 
     /** @return HasMany<TripStopIssue, $this> */

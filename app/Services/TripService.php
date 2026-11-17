@@ -226,29 +226,52 @@ class TripService
     }
 
     /**
-     * The trip's stop for the store the issue's ticket is at, added (last)
-     * when the trip does not go there yet. A ticket for an "other" store
-     * matches a stop with the same other_store text.
+     * The trip's stop for the place the issue's ticket is at, added (last)
+     * when the trip does not go there yet: the same store, the same storage
+     * location, or -- for a place written in words -- the same other_store
+     * text.
      */
     public function stopFor(Trip $trip, TicketIssue $issue): TripStop
     {
         $ticket = $issue->ticket()->withTrashed()->firstOrFail();
+        $place = [$ticket->store_id, $ticket->storage_location_id, $ticket->other_store];
 
         $query = TripStop::query()->where('trip_id', $trip->id)->where('mistaken', false);
-
-        if ($ticket->store_id !== null) {
-            $query->where('store_id', $ticket->store_id);
-        } else {
-            $query->whereNull('store_id')->where('other_store', $ticket->other_store);
-        }
+        $this->wherePlace($query, ...$place);
 
         return $query->orderBy('id')->first() ?? TripStop::query()->create([
             'trip_id' => $trip->id,
-            'store_id' => $ticket->store_id,
-            'other_store' => $ticket->store_id === null ? $ticket->other_store : null,
+            ...$this->placeColumns(...$place),
             'status' => 'planned',
             'sort_order' => (int) TripStop::query()->where('trip_id', $trip->id)->max('sort_order') + 1,
         ]);
+    }
+
+    /**
+     * Stops at one place: a store, else a storage location, else a place
+     * written in words.
+     */
+    private function wherePlace(Builder $query, ?int $storeId, ?int $storageId, ?string $other): void
+    {
+        match (true) {
+            $storeId !== null => $query->where('store_id', $storeId),
+            $storageId !== null => $query->whereNull('store_id')->where('storage_location_id', $storageId),
+            default => $query->whereNull('store_id')->whereNull('storage_location_id')->where('other_store', $other),
+        };
+    }
+
+    /**
+     * The place columns of a new stop: exactly one of the three is set.
+     *
+     * @return array{store_id: int|null, storage_location_id: int|null, other_store: string|null}
+     */
+    private function placeColumns(?int $storeId, ?int $storageId, ?string $other): array
+    {
+        return [
+            'store_id' => $storeId,
+            'storage_location_id' => $storeId === null ? $storageId : null,
+            'other_store' => $storeId === null && $storageId === null ? $other : null,
+        ];
     }
 
     /**
@@ -704,12 +727,12 @@ class TripService
     // ------------------------------------------------- Dashboard: the stops
 
     /**
-     * Add a store visit to the trip with the ticket issues to do there. The
-     * store comes from store_id / other_store, or from the issues' ticket
-     * when neither is given; every issue must be at that store. A stop for
-     * the same store already on the trip is reused.
+     * Add a visit to the trip with the ticket issues to do there. The place
+     * comes from store_id / storage_location_id / other_store, or from the
+     * issues' ticket when none is given; every issue must be at that place.
+     * A stop for the same place already on the trip is reused.
      *
-     * @param  array{store_id?: int|null, other_store?: string|null, ticket_issue_ids?: array<int, int>, purpose?: string|null}  $data
+     * @param  array{store_id?: int|null, storage_location_id?: int|null, other_store?: string|null, ticket_issue_ids?: array<int, int>, purpose?: string|null}  $data
      * @param  string  $field  the input key errors are reported under
      */
     public function addStop(Trip $trip, array $data, ?User $by, string $field = ''): TripStop
@@ -721,42 +744,45 @@ class TripService
             ->get();
 
         $storeId = isset($data['store_id']) ? (int) $data['store_id'] : null;
+        $storageId = isset($data['storage_location_id']) ? (int) $data['storage_location_id'] : null;
         $other = $this->text($data['other_store'] ?? null);
 
-        if ($storeId === null && $other === null) {
+        if ($storeId === null && $storageId === null && $other === null) {
             $first = $issues->first();
             if ($first === null) {
-                $this->refuse("{$prefix}store_id", 'Pick a store (or type where it is) for this visit.');
+                $this->refuse("{$prefix}store_id", 'Pick a store or a storage location (or type where it is) for this visit.');
             }
             $storeId = $first->ticket->store_id;
-            $other = $storeId === null ? $first->ticket->other_store : null;
+            $storageId = $storeId === null ? $first->ticket->storage_location_id : null;
+            $other = $storeId === null && $storageId === null ? $first->ticket->other_store : null;
         }
 
         foreach ($issues as $issue) {
-            $matches = $storeId !== null
-                ? $issue->ticket->store_id === $storeId
-                : ($issue->ticket->store_id === null && NameKey::of($issue->ticket->other_store) === NameKey::of($other));
+            $ticket = $issue->ticket;
+            $matches = match (true) {
+                $storeId !== null => $ticket->store_id === $storeId,
+                $storageId !== null => $ticket->store_id === null && $ticket->storage_location_id === $storageId,
+                default => $ticket->store_id === null && $ticket->storage_location_id === null
+                    && NameKey::of($ticket->other_store) === NameKey::of($other),
+            };
 
             if (! $matches) {
-                $this->refuse("{$prefix}ticket_issue_ids", "\"{$issue->displayTitle()}\" is on a ticket for another store.");
+                $this->refuse("{$prefix}ticket_issue_ids", "\"{$issue->displayTitle()}\" is on a ticket for another place.");
             }
         }
 
         $purpose = $data['purpose'] ?? 'work';
 
-        return DB::transaction(function () use ($trip, $storeId, $other, $issues, $purpose, $by) {
+        return DB::transaction(function () use ($trip, $storeId, $storageId, $other, $issues, $purpose, $by) {
             $query = TripStop::query()->where('trip_id', $trip->id)->where('mistaken', false);
-            $storeId !== null
-                ? $query->where('store_id', $storeId)
-                : $query->whereNull('store_id')->where('other_store', $other);
+            $this->wherePlace($query, $storeId, $storageId, $other);
 
             $stop = $query->orderBy('id')->first();
             $created = $stop === null;
 
             $stop ??= TripStop::query()->create([
                 'trip_id' => $trip->id,
-                'store_id' => $storeId,
-                'other_store' => $storeId === null ? $other : null,
+                ...$this->placeColumns($storeId, $storageId, $other),
                 'status' => 'planned',
                 'sort_order' => (int) TripStop::query()->where('trip_id', $trip->id)->max('sort_order') + 1,
             ]);
@@ -768,6 +794,7 @@ class TripService
             if ($by !== null) {
                 $this->audit($trip, 'stop', $stop->id, $created ? 'created' : 'updated', null, [
                     'store_id' => $stop->store_id,
+                    'storage_location_id' => $stop->storage_location_id,
                     'other_store' => $stop->other_store,
                     'ticket_issue_ids' => $issues->pluck('id')->all(),
                     'purpose' => $purpose,
@@ -1462,7 +1489,7 @@ class TripService
 
     private function publishWorkDone(TripStop $stop, TicketIssue $issue, ?Request $request): void
     {
-        $ticket = $issue->ticket()->withTrashed()->with('store')->first();
+        $ticket = $issue->ticket()->withTrashed()->with('store', 'storageLocation')->first();
         $trip = $stop->trip;
 
         // The same `issue` block as the workflow's events (IssueEventPublisher),
@@ -1473,6 +1500,7 @@ class TripService
                 'ticket_id' => $issue->ticket_id,
                 'store_number' => $ticket?->store?->store_number,
                 'other_store' => $ticket?->other_store,
+                'storage_location' => $ticket?->storageLocation?->name,
                 'title' => $issue->displayTitle(),
                 'status' => $issue->status?->value,
                 'priority' => $issue->priority?->value,
@@ -1514,6 +1542,7 @@ class TripService
     {
         return [
             'store_id' => $stop->store_id,
+            'storage_location_id' => $stop->storage_location_id,
             'other_store' => $stop->other_store,
             'status' => $stop->status,
             'mistaken' => (bool) $stop->mistaken,

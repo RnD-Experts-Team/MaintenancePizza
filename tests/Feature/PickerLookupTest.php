@@ -103,6 +103,7 @@ class PickerLookupTest extends TestCase
             'status_label' => 'New',
             'priority' => ['value' => 'high', 'label' => 'High'],
             'store' => ['id' => $this->store->id, 'store_number' => '03795-00001'],
+            'storage_location' => null,
             'other_store' => null,
         ], $rows[2]);
         $this->assertNull($rows[0]['store']);
@@ -176,6 +177,7 @@ class PickerLookupTest extends TestCase
                 'ticket_id' => $issue->ticket_id,
                 'title' => 'Oven not heating',
                 'store' => ['id' => $this->store->id, 'store_number' => '03795-00001'],
+                'storage_location' => null,
                 'other_store' => null,
             ],
             'technician' => ['id' => $tom->id, 'name' => 'Tom'],
