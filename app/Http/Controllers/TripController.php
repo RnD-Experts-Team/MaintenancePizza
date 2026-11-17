@@ -61,7 +61,8 @@ class TripController extends Controller
                     ->orWhereHas('technician', fn (Builder $t) => $t->where('name', 'like', $like))
                     ->orWhereHas('stops', fn (Builder $s) => $s
                         ->where('other_store', 'like', $like)
-                        ->orWhereHas('store', fn (Builder $st) => $st->where('store_number', 'like', $like)))
+                        ->orWhereHas('store', fn (Builder $st) => $st->where('store_number', 'like', $like))
+                        ->orWhereHas('storageLocation', fn (Builder $sl) => $sl->where('name', 'like', $like)))
                     ->orWhereHas('stopIssues.ticketIssue', fn (Builder $i) => $i
                         ->where('other_title', 'like', $like)
                         ->orWhereHas('issue', fn (Builder $c) => $c->where('title', 'like', $like))));

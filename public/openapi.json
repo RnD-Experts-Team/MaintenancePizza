@@ -3378,6 +3378,61 @@
         }
       }
     },
+    "/tickets/{ticket}/assignments/{assignment}/attachments": {
+      "post": {
+        "tags": [
+          "Notes & Attachments"
+        ],
+        "summary": "Add attachments to an assignment",
+        "operationId": "addAssignmentAttachmentsStoreless",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "name": "assignment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachmentRequest",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Attachments created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentListResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
+          }
+        },
+        "description": "Storeless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS)."
+      }
+    },
     "/stores/{store}/tickets/{ticket}/assignments/{assignment}/notes": {
       "post": {
         "tags": [
@@ -3435,6 +3490,61 @@
         }
       }
     },
+    "/tickets/{ticket}/assignments/{assignment}/notes": {
+      "post": {
+        "tags": [
+          "Notes & Attachments"
+        ],
+        "summary": "Add a note to an assignment",
+        "operationId": "addAssignmentNoteStoreless",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "name": "assignment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteRequest",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Note created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
+          }
+        },
+        "description": "Storeless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS)."
+      }
+    },
     "/stores/{store}/tickets/{ticket}/attachments": {
       "post": {
         "tags": [
@@ -3479,6 +3589,50 @@
             "$ref": "#/components/responses/ValidationError"
           }
         }
+      }
+    },
+    "/tickets/{ticket}/attachments": {
+      "post": {
+        "tags": [
+          "Notes & Attachments"
+        ],
+        "summary": "Add attachments directly to a ticket",
+        "operationId": "addTicketAttachmentsStoreless",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Ticket"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachmentRequest",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Attachments created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentListResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "description": "Storeless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS)."
       }
     },
     "/stores/{store}/tickets/{ticket}/cancel": {
@@ -3536,6 +3690,58 @@
         }
       }
     },
+    "/tickets/{ticket}/cancel": {
+      "post": {
+        "tags": [
+          "Tickets"
+        ],
+        "summary": "Cancel a ticket by cancelling all of its issues",
+        "operationId": "cancelTicketStoreless",
+        "description": "Cancels every issue on the ticket that is not already cancelled, recording the provided reason on each status-change entry. Once all issues are cancelled the ticket's derived status becomes `cancelled`. Finishing it releases what was still planned (docs/MAINTENANCE.md §2 \"Finished issues\"): pending tasks on open trips are taken off (or, on a trip with clocked time, marked not_done \"No longer needed\"), an unused trip left empty is removed, bookings from today on get ended_at/ended_reason, scheduled inspections become cancelled.\n\nStoreless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Ticket"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "description": "Reason for cancelling the ticket."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ticket with all issues cancelled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
     "/stores/{store}/tickets/{ticket}/final-note": {
       "post": {
         "tags": [
@@ -3548,6 +3754,50 @@
           {
             "$ref": "#/components/parameters/Store"
           },
+          {
+            "$ref": "#/components/parameters/Ticket"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/FinalNoteRequest",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The refreshed ticket including all notes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/tickets/{ticket}/final-note": {
+      "post": {
+        "tags": [
+          "Tickets"
+        ],
+        "summary": "Append a typed closing note to a ticket (multipart, optional files)",
+        "operationId": "addFinalNoteStoreless",
+        "description": "Adds one typed closing note to the ticket. A ticket can have as many as needed — post once per note. The note type must be one of the FinalNoteType values. Closing notes appear in the ticket's `notes[]` array filtered by `type`.\n\nStoreless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS).",
+        "parameters": [
           {
             "$ref": "#/components/parameters/Ticket"
           }
@@ -3715,6 +3965,92 @@
         }
       }
     },
+    "/tickets/{ticket}/issues/{ticketIssue}": {
+      "patch": {
+        "tags": [
+          "Issue Workflow"
+        ],
+        "summary": "Re-point an issue at a different catalog issue",
+        "operationId": "updateTicketIssueStoreless",
+        "description": "Corrects which catalog issue this ticket line refers to. The only update endpoint in the service.\n\nStoreless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "$ref": "#/components/parameters/TicketIssue"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "issue_id"
+                ],
+                "properties": {
+                  "issue_id": {
+                    "type": "integer",
+                    "description": "Id of the catalog issue to point at"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated ticket issue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketIssueResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Issue Workflow"
+        ],
+        "summary": "Show one ticket issue with full workflow history",
+        "operationId": "showTicketIssueStoreless",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "$ref": "#/components/parameters/TicketIssue"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Issue with full history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketIssueResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        },
+        "description": "Storeless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS)."
+      }
+    },
     "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/assigned-priority": {
       "post": {
         "tags": [
@@ -3727,6 +4063,64 @@
           {
             "$ref": "#/components/parameters/Store"
           },
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "$ref": "#/components/parameters/TicketIssue"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "priority": {
+                    "type": "string",
+                    "nullable": true,
+                    "enum": [
+                      "urgent",
+                      "high",
+                      "medium",
+                      "low"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated ticket issue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketIssueResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/tickets/{ticket}/issues/{ticketIssue}/assigned-priority": {
+      "post": {
+        "tags": [
+          "Issue Workflow"
+        ],
+        "summary": "Set (or clear) the dispatcher-assigned priority",
+        "operationId": "assignIssuePriorityStoreless",
+        "description": "The dispatcher’s own priority for the issue, kept separate from the priority it was filed at. Send null to clear it. Filterable via assigned_priorities[].\n\nStoreless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS).",
+        "parameters": [
           {
             "$ref": "#/components/parameters/Ticket"
           },
@@ -3825,6 +4219,53 @@
         }
       }
     },
+    "/tickets/{ticket}/issues/{ticketIssue}/attachments": {
+      "post": {
+        "tags": [
+          "Notes & Attachments"
+        ],
+        "summary": "Add attachments to a ticket issue",
+        "operationId": "addTicketIssueAttachmentsStoreless",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "$ref": "#/components/parameters/TicketIssue"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachmentRequest",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Attachments created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentListResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "description": "Storeless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS)."
+      }
+    },
     "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/cancel": {
       "post": {
         "tags": [
@@ -3837,6 +4278,60 @@
           {
             "$ref": "#/components/parameters/Store"
           },
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "$ref": "#/components/parameters/TicketIssue"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The cancelled issue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketIssueResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/tickets/{ticket}/issues/{ticketIssue}/cancel": {
+      "post": {
+        "tags": [
+          "Issue Workflow"
+        ],
+        "summary": "Cancel an issue — records reason, no child spawned",
+        "operationId": "cancelIssueStoreless",
+        "description": "Marks the issue `cancelled` (a terminal/finished status) and records the reason in `status_changes`. Unlike deferral it spawns no child. If every issue on the ticket ends up cancelled, the ticket derives to `cancelled`. Finishing it releases what was still planned (docs/MAINTENANCE.md §2 \"Finished issues\"): pending tasks on open trips are taken off (or, on a trip with clocked time, marked not_done \"No longer needed\"), an unused trip left empty is removed, bookings from today on get ended_at/ended_reason, scheduled inspections become cancelled.\n\nStoreless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS).",
+        "parameters": [
           {
             "$ref": "#/components/parameters/Ticket"
           },
@@ -3929,6 +4424,53 @@
             "$ref": "#/components/responses/ValidationError"
           }
         }
+      }
+    },
+    "/tickets/{ticket}/issues/{ticketIssue}/notes": {
+      "post": {
+        "tags": [
+          "Notes & Attachments"
+        ],
+        "summary": "Add a note to a ticket issue",
+        "operationId": "addTicketIssueNoteStoreless",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "$ref": "#/components/parameters/TicketIssue"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteRequest",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Note created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "description": "Storeless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS)."
       }
     },
     "/stores/{store}/tickets/{ticket}/notes": {
@@ -4031,6 +4573,103 @@
         }
       }
     },
+    "/tickets/{ticket}/notes": {
+      "post": {
+        "tags": [
+          "Notes & Attachments"
+        ],
+        "summary": "Add a generic note to a ticket",
+        "operationId": "addTicketNoteStoreless",
+        "description": "Generic (non-typed) note on the ticket. For typed closing notes use `/final-note` instead.\n\nStoreless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Ticket"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteRequest",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Note created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Notes & Attachments"
+        ],
+        "summary": "A ticket's notes, without the locked ones",
+        "description": "The normal notes. Callers the auth rules allow to see locked notes use /notes/all instead.\n\nStoreless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS).",
+        "operationId": "listTicketNotesStoreless",
+        "parameters": [
+          {
+            "name": "store",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Store number"
+          },
+          {
+            "name": "ticket",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Every note on the ticket, its issues and their records, oldest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TicketNote"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Unknown ticket at this store"
+          }
+        }
+      }
+    },
     "/stores/{store}/tickets/{ticket}/restore": {
       "post": {
         "tags": [
@@ -4061,6 +4700,36 @@
             "$ref": "#/components/responses/Unauthenticated"
           }
         }
+      }
+    },
+    "/tickets/{ticket}/restore": {
+      "post": {
+        "tags": [
+          "Tickets"
+        ],
+        "summary": "Restore soft-deleted ticket",
+        "operationId": "restoreTicketStoreless",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Ticket"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Restored ticket",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        },
+        "description": "Storeless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS)."
       }
     },
     "/stores/{store}/tickets/{ticket}/warranties/{warranty}/attachments": {
@@ -4120,6 +4789,61 @@
         }
       }
     },
+    "/tickets/{ticket}/warranties/{warranty}/attachments": {
+      "post": {
+        "tags": [
+          "Notes & Attachments"
+        ],
+        "summary": "Add attachments to a warranty",
+        "operationId": "addWarrantyAttachmentsStoreless",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "name": "warranty",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachmentRequest",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Attachments created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentListResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
+          }
+        },
+        "description": "Storeless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS)."
+      }
+    },
     "/stores/{store}/tickets/{ticket}/warranties/{warranty}/notes": {
       "post": {
         "tags": [
@@ -4175,6 +4899,61 @@
             "description": "The record is not on this ticket, or the ticket is not this store's"
           }
         }
+      }
+    },
+    "/tickets/{ticket}/warranties/{warranty}/notes": {
+      "post": {
+        "tags": [
+          "Notes & Attachments"
+        ],
+        "summary": "Add a note to a warranty",
+        "operationId": "addWarrantyNoteStoreless",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "name": "warranty",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteRequest",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Note created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "description": "The record is not on this ticket, or the ticket is not this store's"
+          }
+        },
+        "description": "Storeless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS)."
       }
     },
     "/technicians": {
@@ -4893,9 +5672,9 @@
         "tags": [
           "Tickets"
         ],
-        "summary": "File a ticket for an unlisted store (Others)",
+        "summary": "File a ticket for a storage location or an unlisted place",
         "operationId": "createOtherTicket",
-        "description": "Creates a ticket not tied to any known store. Supply other_store with a free-text description of the location. Use multipart/form-data when attaching files.",
+        "description": "Creates a ticket at no store: at one of our storage locations (storage_location_id) or at a place written in words (other_store) -- one of the two. Use multipart/form-data when attaching files. Its workflow runs on the storeless twin routes (/tickets/{ticket}/issues/{ticketIssue}/...).",
         "requestBody": {
           "required": true,
           "content": {
@@ -4915,7 +5694,7 @@
         },
         "responses": {
           "201": {
-            "description": "Created ticket (store_id will be null; other_store contains the description)",
+            "description": "Created ticket (store_id is null; storage_location or other_store says where it is)",
             "content": {
               "application/json": {
                 "schema": {
@@ -5185,6 +5964,86 @@
         "summary": "Lock or unlock a note on this ticket",
         "description": "Any note on the ticket or on anything on it. Who may is the auth rule's decision. Records who locked or unlocked it, and when (locked_by / locked_at).",
         "operationId": "setNotePrivacy",
+        "parameters": [
+          {
+            "name": "store",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ticket",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "note",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "is_private"
+                ],
+                "properties": {
+                  "is_private": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Note"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "The note is not on this ticket, or the ticket is not this store's"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/tickets/{ticket}/notes/{note}/privacy": {
+      "patch": {
+        "tags": [
+          "Tickets"
+        ],
+        "summary": "Lock or unlock a note on this ticket",
+        "description": "Any note on the ticket or on anything on it. Who may is the auth rule's decision. Records who locked or unlocked it, and when (locked_by / locked_at).\n\nStoreless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS).",
+        "operationId": "setNotePrivacyStoreless",
         "parameters": [
           {
             "name": "store",
@@ -6220,6 +7079,61 @@
         "summary": "A ticket's notes, locked ones included",
         "description": "Same as /notes plus the locked (MOS only) notes and their files. Who may call it is the auth rule's decision.",
         "operationId": "listAllTicketNotes",
+        "parameters": [
+          {
+            "name": "store",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Store number"
+          },
+          {
+            "name": "ticket",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Every note on the ticket, its issues and their records, oldest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TicketNote"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "description": "Unknown ticket at this store"
+          }
+        }
+      }
+    },
+    "/tickets/{ticket}/notes/all": {
+      "get": {
+        "tags": [
+          "Notes & Attachments"
+        ],
+        "summary": "A ticket's notes, locked ones included",
+        "description": "Same as /notes plus the locked (MOS only) notes and their files. Who may call it is the auth rule's decision.\n\nStoreless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS).",
+        "operationId": "listAllTicketNotesStoreless",
         "parameters": [
           {
             "name": "store",
@@ -30987,6 +31901,80 @@
         }
       }
     },
+    "/tickets/{ticket}/issues/{ticketIssue}/review": {
+      "post": {
+        "tags": [
+          "Issue Workflow"
+        ],
+        "summary": "Review an issue / update its plan",
+        "operationId": "reviewIssueStoreless",
+        "description": "new -> in_review, setting the plan. In any other open status (in_review, waiting_on_store, inspection, waiting_approval, scheduled, work_done) it only updates these fields and the status stays. Keys left out are kept; null clears. Refused (422 errors.status) once closed or cancelled.\n\nStoreless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "$ref": "#/components/parameters/TicketIssue"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The issue, after the step",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "target_completion_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  },
+                  "next_action": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "nullable": true
+                  },
+                  "assigned_priority": {
+                    "$ref": "#/components/schemas/Priority"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/info-requests": {
       "post": {
         "tags": [
@@ -30999,6 +31987,102 @@
           {
             "$ref": "#/components/parameters/Store"
           },
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "$ref": "#/components/parameters/TicketIssue"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The issue, after the step",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "question": {
+                    "type": "string"
+                  },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "Multipart only."
+                  }
+                },
+                "required": [
+                  "question"
+                ]
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "question": {
+                    "type": "string"
+                  },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "Multipart only."
+                  }
+                },
+                "required": [
+                  "question"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tickets/{ticket}/issues/{ticketIssue}/info-requests": {
+      "post": {
+        "tags": [
+          "Issue Workflow"
+        ],
+        "summary": "Ask the store a question (→ waiting_on_store)",
+        "operationId": "askStoreStoreless",
+        "description": "Allowed in new, in_review, waiting_on_store. Files go on the info request. Writes outbox maintenance.issue.info_requested.\n\nStoreless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS).",
+        "parameters": [
           {
             "$ref": "#/components/parameters/Ticket"
           },
@@ -31206,6 +32290,123 @@
         }
       }
     },
+    "/tickets/{ticket}/issues/{ticketIssue}/info-requests/{infoRequest}/answer": {
+      "post": {
+        "tags": [
+          "Issue Workflow"
+        ],
+        "summary": "Record the store's answer (→ in_review)",
+        "operationId": "answerStoreStoreless",
+        "description": "Answered by the store (via=store, the default) or by the specialist after a phone call (via=specialist). The issue goes back to in_review once no other question is open. Refused on a closed/cancelled issue, a mistaken or already answered question (errors.answer). Writes outbox maintenance.issue.info_answered.\n\nStoreless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "$ref": "#/components/parameters/TicketIssue"
+          },
+          {
+            "name": "infoRequest",
+            "in": "path",
+            "required": true,
+            "description": "An info request of this issue (scoped).",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The issue, after the step",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "answer": {
+                    "type": "string"
+                  },
+                  "answered_by_name": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "nullable": true,
+                    "description": "Who answered, as typed. Optional."
+                  },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "Multipart only."
+                  }
+                },
+                "required": [
+                  "answer"
+                ]
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "answer": {
+                    "type": "string"
+                  },
+                  "answered_by_name": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "nullable": true,
+                    "description": "Who answered, as typed. Optional."
+                  },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "Multipart only."
+                  }
+                },
+                "required": [
+                  "answer"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
     "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/inspections": {
       "post": {
         "tags": [
@@ -31218,6 +32419,121 @@
           {
             "$ref": "#/components/parameters/Store"
           },
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "$ref": "#/components/parameters/TicketIssue"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The issue, after the step",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "additionalProperties": true
+                    },
+                    "trip_link": {
+                      "type": "object",
+                      "description": "Only when this call CREATED a trip: its link's plain token, shown this once (only its hash is stored). Pass it on to the technician.",
+                      "properties": {
+                        "url_token": {
+                          "type": "string",
+                          "minLength": 40,
+                          "maxLength": 40
+                        },
+                        "expires_after_hours": {
+                          "type": "integer",
+                          "description": "The trip's link_idle_hours: the link dies after this long without use."
+                        },
+                        "trip_id": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "url_token",
+                        "expires_after_hours",
+                        "trip_id"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "technician_id": {
+                    "type": "integer"
+                  },
+                  "scheduled_date": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "scheduled_time": {
+                    "type": "string",
+                    "pattern": "^\\d{2}:\\d{2}$",
+                    "example": "09:30"
+                  },
+                  "instructions": {
+                    "type": "string"
+                  },
+                  "scheduled_time_to": {
+                    "type": "string",
+                    "pattern": "^\\d{2}:\\d{2}$",
+                    "nullable": true,
+                    "description": "End of the window."
+                  },
+                  "inspection_fee": {
+                    "type": "number",
+                    "minimum": 0,
+                    "nullable": true,
+                    "description": "What the inspection costs, when known. Counts as its cost until a payment's inspection line covers it."
+                  }
+                },
+                "required": [
+                  "technician_id",
+                  "scheduled_date"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tickets/{ticket}/issues/{ticketIssue}/inspections": {
+      "post": {
+        "tags": [
+          "Issue Workflow"
+        ],
+        "summary": "Book an inspection (→ inspection)",
+        "operationId": "bookInspectionStoreless",
+        "description": "Allowed in new, in_review, inspection (a second opinion). Creates an inspection (scheduled), a kind=inspection schedule, puts the technician on the issue and the issue on the technician's OPEN trip for that date (TripService::scheduleIssue: the same trip for the same technician and day). trip_link only when a new trip was created.\n\nStoreless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS).",
+        "parameters": [
           {
             "$ref": "#/components/parameters/Ticket"
           },
@@ -31452,6 +32768,131 @@
         }
       }
     },
+    "/tickets/{ticket}/issues/{ticketIssue}/inspections/{inspection}/result": {
+      "post": {
+        "tags": [
+          "Issue Workflow"
+        ],
+        "summary": "Record what the inspection found",
+        "operationId": "recordInspectionResultStoreless",
+        "description": "Marks the inspection done (and its pending trip task done); the issue's status does not change. Refused for an inspection already done/cancelled/mistaken, or a closed/cancelled issue. Files go on the inspection.\n\nStoreless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "$ref": "#/components/parameters/TicketIssue"
+          },
+          {
+            "name": "inspection",
+            "in": "path",
+            "required": true,
+            "description": "An inspection of this issue (scoped).",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The issue, after the step",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "findings": {
+                    "type": "string"
+                  },
+                  "recommended_repair": {
+                    "type": "string"
+                  },
+                  "parts_needed": {
+                    "type": "string"
+                  },
+                  "estimated_cost": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "Multipart only."
+                  }
+                },
+                "required": [
+                  "findings"
+                ]
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "findings": {
+                    "type": "string"
+                  },
+                  "recommended_repair": {
+                    "type": "string"
+                  },
+                  "parts_needed": {
+                    "type": "string"
+                  },
+                  "estimated_cost": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "Multipart only."
+                  }
+                },
+                "required": [
+                  "findings"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
     "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/approval-request": {
       "post": {
         "tags": [
@@ -31527,6 +32968,78 @@
         }
       }
     },
+    "/tickets/{ticket}/issues/{ticketIssue}/approval-request": {
+      "post": {
+        "tags": [
+          "Issue Workflow"
+        ],
+        "summary": "Ask for approval (→ waiting_approval)",
+        "operationId": "askApprovalStoreless",
+        "description": "Allowed in new, in_review, inspection, waiting_approval. The level is the first of maintenance_settings.approval_levels whose (exclusive) max is above the amount. next_action says who must approve. Writes outbox maintenance.issue.approval_needed {amount, level, level_label, inspection_id}.\n\nStoreless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "$ref": "#/components/parameters/TicketIssue"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The issue, after the step",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "inspection_id": {
+                    "type": "integer",
+                    "description": "An inspection of this issue."
+                  }
+                },
+                "required": [
+                  "amount"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
     "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/approvals": {
       "post": {
         "tags": [
@@ -31539,6 +33052,140 @@
           {
             "$ref": "#/components/parameters/Store"
           },
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "$ref": "#/components/parameters/TicketIssue"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The issue, after the step",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "approved",
+                      "rejected"
+                    ]
+                  },
+                  "approver_name": {
+                    "type": "string"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "inspection_id": {
+                    "type": "integer"
+                  },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "Multipart only."
+                  }
+                },
+                "required": [
+                  "amount",
+                  "decision",
+                  "approver_name"
+                ]
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "approved",
+                      "rejected"
+                    ]
+                  },
+                  "approver_name": {
+                    "type": "string"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "inspection_id": {
+                    "type": "integer"
+                  },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "Multipart only."
+                  }
+                },
+                "required": [
+                  "amount",
+                  "decision",
+                  "approver_name"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tickets/{ticket}/issues/{ticketIssue}/approvals": {
+      "post": {
+        "tags": [
+          "Issue Workflow"
+        ],
+        "summary": "Record the approval decision (→ in_review)",
+        "operationId": "recordApprovalStoreless",
+        "description": "Allowed in in_review, inspection, waiting_approval. Records amount, level (from the amount), decision, approver_name, note; files (the approval screenshot) go on the approval. next_action becomes \"Schedule the work\" (approved) or \"Find another option\" (rejected).\n\nStoreless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS).",
+        "parameters": [
           {
             "$ref": "#/components/parameters/Ticket"
           },
@@ -31780,6 +33427,119 @@
         }
       }
     },
+    "/tickets/{ticket}/issues/{ticketIssue}/schedule": {
+      "post": {
+        "tags": [
+          "Issue Workflow"
+        ],
+        "summary": "Schedule the work (→ scheduled)",
+        "operationId": "scheduleWorkStoreless",
+        "description": "Allowed in new, in_review, inspection, scheduled (more work). Creates a kind=work schedule (time on the schedule), puts the technician on the issue and the issue on his trip for that date. trip_link only when a new trip was created.\n\nStoreless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "$ref": "#/components/parameters/TicketIssue"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The issue, after the step",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "additionalProperties": true
+                    },
+                    "trip_link": {
+                      "type": "object",
+                      "description": "Only when this call CREATED a trip: its link's plain token, shown this once (only its hash is stored). Pass it on to the technician.",
+                      "properties": {
+                        "url_token": {
+                          "type": "string",
+                          "minLength": 40,
+                          "maxLength": 40
+                        },
+                        "expires_after_hours": {
+                          "type": "integer",
+                          "description": "The trip's link_idle_hours: the link dies after this long without use."
+                        },
+                        "trip_id": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "url_token",
+                        "expires_after_hours",
+                        "trip_id"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "technician_id": {
+                    "type": "integer"
+                  },
+                  "date": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "time": {
+                    "type": "string",
+                    "pattern": "^\\d{2}:\\d{2}$",
+                    "example": "09:30"
+                  },
+                  "expected_completion_date": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "instructions": {
+                    "type": "string"
+                  },
+                  "time_to": {
+                    "type": "string",
+                    "pattern": "^\\d{2}:\\d{2}$",
+                    "nullable": true,
+                    "description": "End of the window (after `time`; needs `time`)."
+                  }
+                },
+                "required": [
+                  "technician_id",
+                  "date"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
     "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/schedules/{assignment}/move": {
       "post": {
         "tags": [
@@ -31792,6 +33552,121 @@
           {
             "$ref": "#/components/parameters/Store"
           },
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "$ref": "#/components/parameters/TicketIssue"
+          },
+          {
+            "name": "assignment",
+            "in": "path",
+            "required": true,
+            "description": "A schedule of this issue (scoped).",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The issue, after the step",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "additionalProperties": true
+                    },
+                    "trip_link": {
+                      "type": "object",
+                      "description": "Only when this call CREATED a trip: its link's plain token, shown this once (only its hash is stored). Pass it on to the technician.",
+                      "properties": {
+                        "url_token": {
+                          "type": "string",
+                          "minLength": 40,
+                          "maxLength": 40
+                        },
+                        "expires_after_hours": {
+                          "type": "integer",
+                          "description": "The trip's link_idle_hours: the link dies after this long without use."
+                        },
+                        "trip_id": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "url_token",
+                        "expires_after_hours",
+                        "trip_id"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "date": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "time": {
+                    "type": "string",
+                    "pattern": "^\\d{2}:\\d{2}$",
+                    "example": "09:30"
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "time_to": {
+                    "type": "string",
+                    "pattern": "^\\d{2}:\\d{2}$",
+                    "nullable": true,
+                    "description": "End of the window (after `time`; needs `time`)."
+                  }
+                },
+                "required": [
+                  "date",
+                  "reason"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tickets/{ticket}/issues/{ticketIssue}/schedules/{assignment}/move": {
+      "post": {
+        "tags": [
+          "Issue Workflow"
+        ],
+        "summary": "Move a booking",
+        "operationId": "moveScheduleStoreless",
+        "description": "Writes an assignment delay (old date/time, new, reason). When the DAY changes, the issue leaves the old trip (pending tasks only; an empty untouched stop is removed) and goes on the technician's trip for the new day; an inspection booking moves its inspection too. The old day's trip is removed when that leaves it with no stops and it was never used (no session, link never opened, no purchases/notes/files). Status unchanged. Refused for a mistaken or ended booking, a closed/cancelled issue, or no change (errors.date).\n\nStoreless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS).",
+        "parameters": [
           {
             "$ref": "#/components/parameters/Ticket"
           },
@@ -32021,6 +33896,126 @@
         }
       }
     },
+    "/tickets/{ticket}/issues/{ticketIssue}/work-done": {
+      "post": {
+        "tags": [
+          "Issue Workflow"
+        ],
+        "summary": "Record the work done (scheduled → work_done)",
+        "operationId": "recordWorkDoneStoreless",
+        "description": "Allowed in scheduled, inspection. work_performed, before/after photos (files, on the issue), optional warranty {body, expiry_date}. Pending work tasks on trips are marked done.\n\nStoreless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "$ref": "#/components/parameters/TicketIssue"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The issue, after the step",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "work_performed": {
+                    "type": "string"
+                  },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "Multipart only."
+                  },
+                  "warranty": {
+                    "type": "object",
+                    "properties": {
+                      "body": {
+                        "type": "string"
+                      },
+                      "expiry_date": {
+                        "type": "string",
+                        "format": "date"
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "work_performed"
+                ]
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "work_performed": {
+                    "type": "string"
+                  },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "Multipart only."
+                  },
+                  "warranty": {
+                    "type": "object",
+                    "properties": {
+                      "body": {
+                        "type": "string"
+                      },
+                      "expiry_date": {
+                        "type": "string",
+                        "format": "date"
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "work_performed"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
     "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/confirmation": {
       "post": {
         "tags": [
@@ -32033,6 +34028,82 @@
           {
             "$ref": "#/components/parameters/Store"
           },
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "$ref": "#/components/parameters/TicketIssue"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The issue, after the step",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "working": {
+                    "type": "boolean"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "confirmed_by_name": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "nullable": true,
+                    "description": "Who answered, as typed. Optional."
+                  }
+                },
+                "required": [
+                  "working"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tickets/{ticket}/issues/{ticketIssue}/confirmation": {
+      "post": {
+        "tags": [
+          "Issue Workflow"
+        ],
+        "summary": "Record whether it works now",
+        "operationId": "recordConfirmationStoreless",
+        "description": "Allowed in work_done. Records store_confirmed_* (via store, the default, or specialist). working=false → in_review with next_action \"Schedule more work\". The note is added to the issue.\n\nStoreless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS).",
+        "parameters": [
           {
             "$ref": "#/components/parameters/Ticket"
           },
@@ -32188,6 +34259,91 @@
         }
       }
     },
+    "/tickets/{ticket}/issues/{ticketIssue}/close": {
+      "post": {
+        "tags": [
+          "Issue Workflow"
+        ],
+        "summary": "Close the issue (→ closed)",
+        "operationId": "closeIssueStoreless",
+        "description": "Allowed in any open status. Checklist: resolved (store confirmed working), cost_recorded (a live payment line on the issue), invoice_attached (a linked live payment has a file), notes_completed (work_performed) -- all exempt for fixed_by_troubleshooting / not_needed. Anything missing → 422 errors.status (what is missing) + errors.checklist (the keys), unless override_reason is given (kept in the status change reason). final_note / what_we_learned become typed notes (final_notes / what_we_learned) on the issue. Finishing it releases what was still planned (docs/MAINTENANCE.md §2 \"Finished issues\"): pending tasks on open trips are taken off (or, on a trip with clocked time, marked not_done \"No longer needed\"), an unused trip left empty is removed, bookings from today on get ended_at/ended_reason, scheduled inspections become cancelled.\n\nStoreless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "$ref": "#/components/parameters/TicketIssue"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The issue, after the step",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "resolution": {
+                    "type": "string",
+                    "enum": [
+                      "repaired",
+                      "fixed_by_troubleshooting",
+                      "not_needed",
+                      "replaced"
+                    ]
+                  },
+                  "final_note": {
+                    "type": "string",
+                    "minLength": 10,
+                    "description": "Required: what was wrong and how it was fixed."
+                  },
+                  "what_we_learned": {
+                    "type": "string"
+                  },
+                  "override_reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "final_note",
+                  "resolution"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
     "/stores/{store}/tickets/{ticket}/issues/{ticketIssue}/jump": {
       "post": {
         "tags": [
@@ -32200,6 +34356,77 @@
           {
             "$ref": "#/components/parameters/Store"
           },
+          {
+            "$ref": "#/components/parameters/Ticket"
+          },
+          {
+            "$ref": "#/components/parameters/TicketIssue"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The issue, after the step",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "description": "The issue's full read (docs/MAINTENANCE.md §2 \"Read\"): core fields (status is the value, status_label its label, step the progress-strip number), technicians, info_requests, inspections, approvals, schedules (+delays), visits, costs, payments (each with invoices [{id, original_name, url}], the files on that payment), purchases, stock_used, warranties, workflow {step, status, next[{action,label,primary}], checklist[{key,label,done}], approval_level_for}, status_changes, notes (never private ones), attachments, timeline [{at, kind, text, actor}] newest first.",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "$ref": "#/components/schemas/IssueStatus"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status",
+                  "reason"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tickets/{ticket}/issues/{ticketIssue}/jump": {
+      "post": {
+        "tags": [
+          "Issue Workflow"
+        ],
+        "summary": "Change the status by hand",
+        "operationId": "jumpIssueStatusStoreless",
+        "description": "The escape hatch: any status → any status, reason required, logged as \"Changed by hand: <reason>\". Jumping to the status it already has → 422. A jump from an open status to closed/cancelled releases planned work the same way as close/cancel.\n\nStoreless twin of the /stores/{store}/... route, for a ticket at no store (a storage location, or a place written in words). Same body and answer; the auth rule is unscoped (the MOS).",
+        "parameters": [
           {
             "$ref": "#/components/parameters/Ticket"
           },
@@ -38836,15 +41063,20 @@
       "CreateOtherTicketRequest": {
         "type": "object",
         "required": [
-          "other_store",
           "issues"
         ],
         "description": "Request body for POST /tickets (the 'Others' flow). Supply other_store instead of a store in the URL.",
         "properties": {
+          "storage_location_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "One of our storage locations (not deleted). Prohibits other_store."
+          },
           "other_store": {
             "type": "string",
             "maxLength": 255,
-            "description": "Free-text description of the location or store not present in the system."
+            "description": "A place written in words. Required without storage_location_id.",
+            "nullable": true
           },
           "type": {
             "type": "string",

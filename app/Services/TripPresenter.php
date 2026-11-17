@@ -35,6 +35,7 @@ class TripPresenter
     public const WITH = [
         'technician',
         'stops.store',
+        'stops.storageLocation',
         'stops.attachments.creator',
         'stops.notes.creator',
         'stops.notes.attachments.creator',
@@ -153,6 +154,7 @@ class TripPresenter
         return [
             'id' => $stop->id,
             'store' => $stop->store ? ['id' => $stop->store->id, 'store_number' => $stop->store->store_number] : null,
+            'storage_location' => $stop->storageLocation ? ['id' => $stop->storageLocation->id, 'name' => $stop->storageLocation->name] : null,
             'other_store' => $stop->other_store,
             'status' => $stop->status,
             'arrived_at' => $stop->arrived_at,
@@ -246,6 +248,7 @@ class TripPresenter
                 'ticket_id' => $row->ticketIssue?->ticket_id,
                 'title' => $row->ticketIssue?->displayTitle(),
                 'store_number' => $stop->store?->store_number,
+                'storage_location' => $stop->storageLocation?->name,
                 'other_store' => $stop->other_store,
                 'purpose' => $row->purpose,
             ]))
@@ -277,6 +280,7 @@ class TripPresenter
         'events',
         'trip.technician',
         'trip.stops.store',
+        'trip.stops.storageLocation',
         'trip.stops.stopIssues.ticketIssue.issue',
     ];
 

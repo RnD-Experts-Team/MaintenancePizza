@@ -44,6 +44,7 @@ class StockService
         'lines.storageLocation',
         'lines.units',
         'ticketIssue.ticket.store',
+        'ticketIssue.ticket.storageLocation',
         'ticketIssue.issue',
         'paymentLine.payment.technician',
         'paymentLine.payment.supplier',
@@ -1193,7 +1194,7 @@ class StockService
                 'id' => $movement->ticketIssue->id,
                 'ticket_id' => $movement->ticketIssue->ticket_id,
                 'title' => $movement->ticketIssue->displayTitle(),
-                'store_number' => $movement->ticketIssue->ticket?->store?->store_number ?? $movement->ticketIssue->ticket?->other_store,
+                'store_number' => $movement->ticketIssue->ticket?->placeLabel(),
             ] : null,
             // The payment that bought them (bought, and its undo).
             'payment' => $movement->relationLoaded('paymentLine') && $movement->paymentLine?->payment ? [

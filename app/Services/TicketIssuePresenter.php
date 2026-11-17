@@ -24,7 +24,6 @@ use App\Models\User;
 use App\Models\Warranty;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Str;
 
 /**
  * The full read of one ticket issue (docs/MAINTENANCE.md §2 "Read"): the
@@ -88,6 +87,7 @@ class TicketIssuePresenter
             'assignments.creator',
             'assignments.delays.creator',
             'tripStopIssues.stop.store',
+            'tripStopIssues.stop.storageLocation',
             'tripStopIssues.stop.trip.technician',
             'paymentLines.payment.technician',
             'paymentLines.payment.supplier',
@@ -325,6 +325,7 @@ class TicketIssuePresenter
                     'planned_date' => $trip->planned_date?->toDateString(),
                     'trip_status' => $trip->status?->value,
                     'store_number' => $stop->store?->store_number,
+                    'storage_location' => $stop->storageLocation?->name,
                     'other_store' => $stop->other_store,
                     'stop_status' => $stop->status,
                     'arrived_at' => $stop->arrived_at,
@@ -653,16 +654,22 @@ class TicketIssuePresenter
 
     /**
      * Everything that happened to the issue, newest first: {at, kind, text,
-     * actor}. Private notes never appear (as in every embedded read).
+     * actor, attachments}. The text is whole (the screen shortens it and
+     * offers the rest); the files are the ones that came with that step.
+     * Private notes never appear (as in every embedded read).
      *
-     * @return array<int, array{at: mixed, kind: string, text: string, actor: string|null}>
+     * @return array<int, array{at: mixed, kind: string, text: string, actor: string|null, attachments: array<int, array<string, mixed>>}>
      */
     private function timeline(TicketIssue $issue): array
     {
         $events = [];
-        $add = function ($at, string $kind, string $text, ?string $actor) use (&$events) {
+        $add = function ($at, string $kind, string $text, ?string $actor, iterable $files = []) use (&$events) {
             if ($at !== null) {
-                $events[] = ['at' => Carbon::parse($at), 'kind' => $kind, 'text' => $text, 'actor' => $actor];
+                $attachments = [];
+                foreach ($files as $file) {
+                    $attachments[] = $this->attachments->present($file);
+                }
+                $events[] = ['at' => Carbon::parse($at), 'kind' => $kind, 'text' => $text, 'actor' => $actor, 'attachments' => $attachments];
             }
         };
 
@@ -670,10 +677,15 @@ class TicketIssuePresenter
             if ($r->mistaken) {
                 continue;
             }
-            $add($r->created_at, 'info_requested', 'Asked the store: '.$r->question, $r->asker?->name);
+            // The question's files and the answer's share the request: the
+            // answer's were added once it was answered.
+            [$answerFiles, $questionFiles] = $r->attachments->partition(
+                fn ($a) => $r->answered_at !== null && $a->created_at !== null && $a->created_at->greaterThanOrEqualTo($r->answered_at)
+            );
+            $add($r->created_at, 'info_requested', 'Asked the store: '.$r->question, $r->asker?->name, $questionFiles);
             if ($r->answered_at !== null) {
                 $who = 'The store answered'.($r->answered_by_name ? " ({$r->answered_by_name})" : '');
-                $add($r->answered_at, 'info_answered', "{$who}: {$r->answer}", $r->answerer?->name);
+                $add($r->answered_at, 'info_answered', "{$who}: {$r->answer}", $r->answerer?->name, $answerFiles);
             }
         }
 
@@ -683,10 +695,11 @@ class TicketIssuePresenter
             }
             $tech = $i->technician?->name ?? 'a technician';
             $when = $this->day($i->scheduled_date).AssignmentService::window($i->scheduled_time, $i->scheduled_time_to);
-            $add($i->created_at, 'inspection_booked', "Inspection booked with {$tech} for {$when}", $i->creator?->name);
+            // Its files are the findings' photos: on the result once there is one.
+            $add($i->created_at, 'inspection_booked', "Inspection booked with {$tech} for {$when}", $i->creator?->name, $i->done_at === null ? $i->attachments : []);
             if ($i->done_at !== null) {
                 $estimate = $i->estimated_cost !== null ? ' (quote '.$this->cash($i->estimated_cost).')' : '';
-                $add($i->done_at, 'inspection_done', 'Inspection done: '.Str::limit((string) $i->findings, 200).$estimate, $tech);
+                $add($i->done_at, 'inspection_done', 'Inspection done: '.$i->findings.$estimate, $tech, $i->attachments);
             }
         }
 
@@ -695,7 +708,7 @@ class TicketIssuePresenter
                 continue;
             }
             $label = $this->settings->labelOf((string) $a->level);
-            $add($a->decided_at, 'approval', "{$a->decision->label()} by {$a->approver_name} ({$label}) for ".$this->cash($a->amount), $a->creator?->name);
+            $add($a->decided_at, 'approval', "{$a->decision->label()} by {$a->approver_name} ({$label}) for ".$this->cash($a->amount), $a->creator?->name, $a->attachments);
         }
 
         foreach ($issue->assignments as $s) {
@@ -718,7 +731,7 @@ class TicketIssuePresenter
         foreach ($this->liveVisits($issue) as $row) {
             $stop = $row->stop;
             $tech = $stop->trip->technician?->name;
-            $where = $stop->store?->store_number ?? $stop->other_store ?? 'the store';
+            $where = $stop->placeLabel() ?? 'the store';
             $add($stop->arrived_at, 'visit_arrived', "Arrived at {$where}", $tech);
             $add($stop->left_at, 'visit_left', "Left {$where}", $tech);
             if ($row->task_status === 'done') {
@@ -737,7 +750,7 @@ class TicketIssuePresenter
             if ($p->mistaken) {
                 continue;
             }
-            $add($p->bought_at, 'purchase', "Bought {$p->description} for ".$this->cash($p->total_cost), $p->technician?->name);
+            $add($p->bought_at, 'purchase', "Bought {$p->description} for ".$this->cash($p->total_cost), $p->technician?->name, $p->attachments);
         }
 
         foreach ($this->usedLines($issue) as [$m, $line]) {
@@ -749,7 +762,18 @@ class TicketIssuePresenter
             if ($n->is_private) {
                 continue;
             }
-            $add($n->created_at, 'note', 'Note: '.Str::limit((string) $n->body, 200), $n->creator?->name);
+            $add($n->created_at, 'note', 'Note: '.$n->body, $n->creator?->name, $n->attachments);
+        }
+
+        // Files put straight on the issue (the store's photos when it opened
+        // the ticket, a job's before/after photos): one entry per person and
+        // minute, so a batch of photos reads as one step.
+        $batches = $issue->attachments
+            ->filter(fn ($a) => $a->created_at !== null)
+            ->groupBy(fn ($a) => $a->created_by.'@'.$a->created_at->format('Y-m-d H:i'));
+        foreach ($batches as $batch) {
+            $first = $batch->first();
+            $add($first->created_at, 'files_added', $batch->count() === 1 ? 'Added a file' : "Added {$batch->count()} files", $first->creator?->name, $batch);
         }
 
         if ($issue->store_confirmed_at !== null) {

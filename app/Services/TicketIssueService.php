@@ -232,11 +232,16 @@ class TicketIssueService
      */
     public function assertRecordOnTicket(mixed $store, mixed $ticket, ?Model $record = null): void
     {
-        if (!$store instanceof Store || !$ticket instanceof Ticket) {
+        if (!$ticket instanceof Ticket) {
             return;
         }
 
-        abort_unless((int) $ticket->store_id === (int) $store->id, 404);
+        // Under /stores/{store}/... the ticket must be that store's; the
+        // storeless twin of those routes (tickets at a storage location or a
+        // place written in words) has no store to compare.
+        if ($store instanceof Store) {
+            abort_unless((int) $ticket->store_id === (int) $store->id, 404);
+        }
 
         if ($record !== null) {
             abort_unless($record->ticketIssues()->where('ticket_issues.ticket_id', $ticket->id)->exists(), 404);
@@ -311,7 +316,7 @@ class TicketIssueService
     {
         $query = TicketIssue::query()
             ->whereHas('ticket')
-            ->with(['issue', 'ticket.store']);
+            ->with(['issue', 'ticket.store', 'ticket.storageLocation']);
 
         $store = trim((string) ($filters['store'] ?? ''));
         if ($store !== '') {
@@ -345,6 +350,7 @@ class TicketIssueService
                 'status_label' => $i->status->label(),
                 'priority' => $i->priority === null ? null : ['value' => $i->priority->value, 'label' => $i->priority->label()],
                 'store' => $i->ticket?->store ? ['id' => $i->ticket->store->id, 'store_number' => $i->ticket->store->store_number] : null,
+                'storage_location' => $i->ticket?->storageLocation ? ['id' => $i->ticket->storageLocation->id, 'name' => $i->ticket->storageLocation->name] : null,
                 'other_store' => $i->ticket?->other_store,
             ])
             ->all();

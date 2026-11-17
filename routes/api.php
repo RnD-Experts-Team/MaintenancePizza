@@ -334,10 +334,12 @@ Route::middleware(['throttle:api', 'auth.token.store'])->group(function () {
     | {ticketIssue} within their parent.
     |--------------------------------------------------------------------------
     */
-    Route::prefix('stores/{store}')->scopeBindings()->group(function () {
-        Route::get('tickets', [TicketController::class, 'index'])->name('stores.tickets.index');
-        Route::get('tickets/analytics', [TicketController::class, 'analytics'])->middleware('throttle:api-heavy')->name('stores.tickets.analytics');
-        Route::post('tickets', [TicketController::class, 'store'])->name('stores.tickets.store');
+    // Everything done to one ticket. Registered twice: under stores/{store}
+    // and, for tickets at no store (a storage location, a place written in
+    // words), without the store segment -- names prefixed `storeless.`,
+    // rules unscoped (the MOS). Both keep scopeBindings(), so {ticketIssue}
+    // and the records under it stay within their ticket.
+    $ticketRoutes = function () {
         Route::post('tickets/{ticket}/restore', [TicketController::class, 'restore'])->withTrashed()->name('stores.tickets.restore');
         Route::post('tickets/{ticket}/cancel', TicketCancellationController::class)->name('stores.tickets.cancel');
         // Append a typed closing note (Final Notes / What we learned) — many allowed.
@@ -351,12 +353,9 @@ Route::middleware(['throttle:api', 'auth.token.store'])->group(function () {
         Route::get('tickets/{ticket}/notes', [TicketNoteController::class, 'index'])->name('stores.tickets.notes.index');
         Route::get('tickets/{ticket}/notes/all', [TicketNoteController::class, 'all'])->name('stores.tickets.notes.all');
         Route::post('tickets/{ticket}/attachments', [AttachmentController::class, 'ticket'])->middleware('throttle:api-upload')->name('stores.tickets.attachments');
-        Route::post('notes', [NoteController::class, 'store'])->middleware('throttle:api-upload')->name('stores.notes');
-        Route::post('attachments', [AttachmentController::class, 'store'])->middleware('throttle:api-upload')->name('stores.attachments');
 
         Route::prefix('tickets/{ticket}')->group(function () {
             // The "one look" lifecycle views.
-            Route::get('issues', [TicketIssueController::class, 'index'])->name('tickets.issues.index');
             Route::get('issues/{ticketIssue}', [TicketIssueController::class, 'show'])->name('tickets.issues.show');
             Route::patch('issues/{ticketIssue}', [TicketIssueController::class, 'update'])->name('tickets.issues.update');
 
@@ -402,7 +401,21 @@ Route::middleware(['throttle:api', 'auth.token.store'])->group(function () {
             Route::post('issues/{ticketIssue}/close', [IssueWorkflowController::class, 'close'])->name('tickets.issues.close');
             Route::post('issues/{ticketIssue}/jump', [IssueWorkflowController::class, 'jump'])->name('tickets.issues.jump');
         });
+    };
+
+    Route::prefix('stores/{store}')->scopeBindings()->group(function () use ($ticketRoutes) {
+        Route::get('tickets', [TicketController::class, 'index'])->name('stores.tickets.index');
+        Route::get('tickets/analytics', [TicketController::class, 'analytics'])->middleware('throttle:api-heavy')->name('stores.tickets.analytics');
+        Route::post('tickets', [TicketController::class, 'store'])->name('stores.tickets.store');
+        Route::post('notes', [NoteController::class, 'store'])->middleware('throttle:api-upload')->name('stores.notes');
+        Route::post('attachments', [AttachmentController::class, 'store'])->middleware('throttle:api-upload')->name('stores.attachments');
+        // The storeless read of a ticket's issues is tickets.issues.global above.
+        Route::get('tickets/{ticket}/issues', [TicketIssueController::class, 'index'])->name('tickets.issues.index');
+
+        $ticketRoutes();
     });
+
+    Route::name('storeless.')->scopeBindings()->group($ticketRoutes);
 
     /*
     |--------------------------------------------------------------------------
@@ -431,7 +444,7 @@ Route::middleware(['throttle:api', 'auth.token.store'])->group(function () {
     | (Requests\Concerns\ChecksTicketRecord).
     |--------------------------------------------------------------------------
     */
-    Route::prefix('stores/{store}/tickets/{ticket}')->group(function () {
+    $ticketRecordRoutes = function () {
         // Lock / unlock any note on this ticket (private = MOS only).
         Route::patch('notes/{note}/privacy', [TicketNoteController::class, 'privacy'])->name('stores.tickets.notes.privacy');
 
@@ -440,7 +453,10 @@ Route::middleware(['throttle:api', 'auth.token.store'])->group(function () {
         Route::post('warranties/{warranty}/attachments', [AttachmentController::class, 'warranty'])->middleware('throttle:api-upload')->name('tickets.warranties.attachments');
         Route::post('assignments/{assignment}/notes', [NoteController::class, 'assignment'])->middleware('throttle:api-upload')->name('tickets.assignments.notes');
         Route::post('assignments/{assignment}/attachments', [AttachmentController::class, 'assignment'])->middleware('throttle:api-upload')->name('tickets.assignments.attachments');
-    });
+    };
+
+    Route::prefix('stores/{store}/tickets/{ticket}')->group($ticketRecordRoutes);
+    Route::prefix('tickets/{ticket}')->name('storeless.')->group($ticketRecordRoutes);
 });
 
 /*

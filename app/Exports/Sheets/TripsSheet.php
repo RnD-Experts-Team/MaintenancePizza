@@ -20,7 +20,7 @@ class TripsSheet implements FromCollection, WithHeadings, WithMapping, WithTitle
 
     public function collection(): Collection
     {
-        return Trip::with(['technician' => fn ($q) => $q->withTrashed(), 'stops.store', 'stops.ticketIssues'])
+        return Trip::with(['technician' => fn ($q) => $q->withTrashed(), 'stops.store', 'stops.storageLocation', 'stops.ticketIssues'])
             ->withCount('sessions')
             ->orderBy('id')
             ->get();
@@ -53,7 +53,7 @@ class TripsSheet implements FromCollection, WithHeadings, WithMapping, WithTitle
             (string) $trip->closed_at,
             $trip->instructions,
             $trip->stops
-                ->map(fn (TripStop $s) => ($s->store?->store_number ?? $s->other_store) . " ({$s->status}" . ($s->mistaken ? ', mistaken' : '') . ')')
+                ->map(fn (TripStop $s) => $s->placeLabel() . " ({$s->status}" . ($s->mistaken ? ', mistaken' : '') . ')')
                 ->implode('; '),
             $trip->stops->flatMap(fn (TripStop $s) => $s->ticketIssues->pluck('id'))->unique()->implode(', '),
             $trip->sessions_count,

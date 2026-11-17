@@ -21,8 +21,10 @@ use App\Models\TicketIssue;
 use App\Models\Trip;
 use App\Models\TripStop;
 use App\Models\TripStopIssue;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * The full read of an issue (docs/MAINTENANCE.md §2 "Read"): money from
@@ -203,6 +205,41 @@ class TicketIssueReadTest extends IssueWorkflowTestCase
         // second: the status change (the result) comes first.
         $sameSecond = array_values(array_filter($timeline, fn (array $e) => Carbon::parse($e['at'])->equalTo('2026-10-21 08:00:00')));
         $this->assertSame(['status_changed', 'scheduled'], array_column($sameSecond, 'kind'));
+    }
+
+    public function test_the_timeline_keeps_whole_texts_and_the_files_of_each_step(): void
+    {
+        Storage::fake('public');
+        $long = str_repeat('The walk-in door seal is torn along the bottom. ', 12);
+
+        Carbon::setTestNow('2026-10-20 09:00:00');
+        $this->post($this->url('/info-requests'), [
+            'question' => 'Which door?',
+            'files' => [UploadedFile::fake()->image('question.jpg')],
+        ], $this->headers())->assertOk();
+
+        Carbon::setTestNow('2026-10-20 10:00:00');
+        $request = IssueInfoRequest::query()->sole();
+        $this->post($this->url("/info-requests/{$request->id}/answer"), [
+            'answer' => 'Back door',
+            'files' => [UploadedFile::fake()->image('answer.jpg')],
+        ], $this->headers())->assertOk();
+
+        Carbon::setTestNow('2026-10-21 09:00:00');
+        $this->post($this->url('/notes'), ['body' => $long, 'files' => [UploadedFile::fake()->image('seal.jpg')]], $this->headers())->assertSuccessful();
+
+        Carbon::setTestNow('2026-10-21 10:00:00');
+        $this->post($this->url('/attachments'), ['files' => [UploadedFile::fake()->image('a.jpg'), UploadedFile::fake()->image('b.jpg')]], $this->headers())->assertSuccessful();
+
+        $timeline = collect($this->read()->json('data.timeline'))->keyBy('kind');
+
+        $this->assertSame('Note: '.trim($long), $timeline['note']['text']);
+        $this->assertSame(['seal.jpg'], array_column($timeline['note']['attachments'], 'original_name'));
+        $this->assertSame(['question.jpg'], array_column($timeline['info_requested']['attachments'], 'original_name'));
+        $this->assertSame(['answer.jpg'], array_column($timeline['info_answered']['attachments'], 'original_name'));
+        $this->assertSame('Added 2 files', $timeline['files_added']['text']);
+        $this->assertSame(['a.jpg', 'b.jpg'], array_column($timeline['files_added']['attachments'], 'original_name'));
+        $this->assertSame([], $timeline['status_changed']['attachments']);
     }
 
     public function test_the_core_fields_include_impact_and_contact_from_the_ticket_form(): void

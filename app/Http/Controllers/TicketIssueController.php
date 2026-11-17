@@ -38,10 +38,10 @@ class TicketIssueController extends Controller
     /**
      * The same listing, reached without a {store} segment.
      *
-     * Not a convenience: a ticket created through POST /tickets carries
-     * other_store and a null store_id, so it can never bind inside the
-     * /stores/{store}/... group. Without this route those tickets can be
-     * created and then never read back.
+     * Not a convenience: a ticket created through POST /tickets is at a
+     * storage location or a place written in words, with a null store_id, so
+     * it can never bind inside the /stores/{store}/... group. Without this
+     * route those tickets can be created and then never read back.
      */
     public function globalIndex(Ticket $ticket)
     {
@@ -61,7 +61,7 @@ class TicketIssueController extends Controller
         // caller reading a ticket standalone still has to know where it is and
         // -- for every write that follows -- its store_number, since that is
         // the route key the rest of the API binds on.
-        $ticket->loadMissing('store', 'creator');
+        $ticket->loadMissing('store', 'storageLocation', 'creator');
 
         return [
             'data' => $this->issues->index($ticket),

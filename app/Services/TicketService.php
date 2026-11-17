@@ -37,6 +37,7 @@ class TicketService
      */
     private array $listWith = [
         'store',
+        'storageLocation',
         'ticketIssues.issue.creator',
         'ticketIssues.creator',
         'ticketIssues',
@@ -146,7 +147,8 @@ class TicketService
     }
 
     /**
-     * Create a ticket that is not tied to any store in the system.
+     * Create a ticket that is not at a store: at one of our storage
+     * locations, or at a place written in words.
      *
      * @param  array<string, mixed>  $data
      * @param  array<int, UploadedFile>  $ticketFiles
@@ -157,7 +159,8 @@ class TicketService
     {
         $ticket = DB::transaction(function () use ($data, $ticketFiles, $issueFiles) {
             $ticket = new Ticket([
-                'other_store' => $data['other_store'],
+                'storage_location_id' => $data['storage_location_id'] ?? null,
+                'other_store' => empty($data['storage_location_id']) ? $data['other_store'] : null,
                 'type'        => $data['type'] ?? TicketType::Normal->value,
             ]);
             $ticket->created_by = Auth::id();
@@ -321,6 +324,10 @@ class TicketService
             'id'          => $ticket->id,
             'store_id'    => $ticket->store_id,
             'other_store' => $ticket->other_store,
+            'storage_location_id' => $ticket->storage_location_id,
+            'storage_location' => $ticket->relationLoaded('storageLocation') && $ticket->storageLocation
+                ? ['id' => $ticket->storageLocation->id, 'name' => $ticket->storageLocation->name, 'code' => $ticket->storageLocation->code]
+                : null,
             'type'        => ['value' => $type->value, 'label' => $type->label()],
             'store'       => $ticket->relationLoaded('store') && $ticket->store
                 ? $this->presentStore($ticket->store)
@@ -425,6 +432,7 @@ class TicketService
                 // relation, so searching a store name would silently miss every
                 // "other store" ticket without this line.
                 $outer->orWhere('tickets.other_store', 'like', $like);
+                $outer->orWhereHas('storageLocation', fn(Builder $l) => $l->where('name', 'like', $like)->orWhere('code', 'like', $like));
 
                 $outer->orWhereHas('ticketIssues', fn(Builder $i) => $i->where(fn(Builder $w) => $w
                     ->where('ticket_issues.other_title', 'like', $like)

@@ -355,8 +355,9 @@ class FinanceAnalyticsService
 
         $top = $this->issueShares($from, $to, $f)
             ->leftJoin('stores as s', 's.id', '=', 'tk.store_id')
-            ->groupBy('tk.id', 's.store_number', 'tk.other_store')
-            ->selectRaw("tk.id, s.store_number, tk.other_store, SUM({$share}) as amount")
+            ->leftJoin('storage_locations as sl', 'sl.id', '=', 'tk.storage_location_id')
+            ->groupBy('tk.id', 's.store_number', 'sl.name', 'tk.other_store')
+            ->selectRaw("tk.id, s.store_number, sl.name as storage_name, tk.other_store, SUM({$share}) as amount")
             ->orderByDesc('amount')
             ->orderBy('tk.id')
             ->limit(self::TOP)
@@ -403,7 +404,7 @@ class FinanceAnalyticsService
             'cost_per_ticket_avg' => (int) $overall->tickets === 0 ? null : $this->money((float) $overall->amount / (int) $overall->tickets),
             'top_tickets' => $top->map(fn ($r) => [
                 'ticket_id' => (int) $r->id,
-                'store_number' => $r->store_number ?? $r->other_store,
+                'store_number' => $r->store_number ?? $r->storage_name ?? $r->other_store,
                 'title' => $titles[(int) $r->id] ?? null,
                 'amount' => $this->money($r->amount),
             ])->all(),

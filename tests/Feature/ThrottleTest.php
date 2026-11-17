@@ -235,8 +235,10 @@ class ThrottleTest extends TestCase
         $uploads = $routesWith('throttle:api-upload');
         // 34 before the per-ticket attendance, part-usage, pay-entry and diagnosis
         // records were replaced (10 upload routes gone); suppliers, payments and
-        // trips add 6 notes/attachments routes of their own.
-        $this->assertCount(30, $uploads);
+        // trips add 6 notes/attachments routes of their own; the storeless twins
+        // of the ticket routes (tickets at a storage location or a place
+        // written in words) add 8.
+        $this->assertCount(38, $uploads);
         $this->assertTrue($uploads->every(fn ($r) => str_starts_with($r, 'POST ')
             && preg_match('#/(notes|attachments)$|attendance-entries$#', $r) === 1));
 
