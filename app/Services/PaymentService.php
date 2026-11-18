@@ -289,7 +289,141 @@ class PaymentService
         });
     }
 
+    /**
+     * A small correction that leaves the lines in place: unlike edit(), it does
+     * not undo and rewrite them, so the sessions, purchases and stock they hold
+     * stay exactly as they are. A revision snapshot is taken first, as for an
+     * edit. What it can change:
+     *
+     *   payment_method_id               how it was paid
+     *   technician_id / supplier_id     who was paid (both keys, one of them set);
+     *                                   refused while a line is hourly or claims
+     *                                   sessions, which belong to the technician
+     *   lines[line id].store_id / .other_store   where the line was spent (not
+     *                                   for parts that went into storage)
+     *   lines[line id].amount           for fixed, inspection, other and typed gas lines
+     *   lines[line id].add_ticket_issue_ids      more issues the line paid for
+     *
+     * The total is worked out again from the lines. Used by the payment history
+     * import; there is no endpoint for it.
+     *
+     * @param  array<string, mixed>  $changes
+     */
+    public function amend(Payment $payment, array $changes, ?string $note = null): Payment
+    {
+        return DB::transaction(function () use ($payment, $changes, $note) {
+            $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
+            $fail = fn (string $field, string $message) => throw ValidationException::withMessages([$field => $message]);
+
+            if ($payment->mistaken) {
+                $fail('status', 'This payment is marked mistaken and can no longer be changed.');
+            }
+
+            $this->snapshot($payment);
+
+            if (array_key_exists('payment_method_id', $changes)) {
+                $payment->payment_method_id = $changes['payment_method_id'];
+            }
+
+            if (array_key_exists('technician_id', $changes) || array_key_exists('supplier_id', $changes)) {
+                $technicianId = $changes['technician_id'] ?? null;
+                $supplierId = $changes['supplier_id'] ?? null;
+
+                if (($technicianId === null) === ($supplierId === null)) {
+                    $fail('technician_id', 'A payment is paid to one technician or one supplier, not both.');
+                }
+
+                $samePayee = (int) $technicianId === (int) $payment->technician_id && (int) $supplierId === (int) $payment->supplier_id;
+                $holdsSessions = $payment->lines()->where('type', PaymentLineType::Hourly)->exists()
+                    || DB::table('payment_line_trip_session')
+                        ->whereIn('payment_line_id', $payment->lines()->select('id'))
+                        ->exists();
+
+                if (! $samePayee && $holdsSessions) {
+                    $fail('technician_id', 'This payment pays a technician by the hour; who was paid cannot change.');
+                }
+
+                $payment->technician_id = $technicianId;
+                $payment->supplier_id = $supplierId;
+            }
+
+            foreach ((array) ($changes['lines'] ?? []) as $lineId => $in) {
+                $key = "lines.{$lineId}";
+                /** @var PaymentLine|null $line */
+                $line = $payment->lines()->whereKey((int) $lineId)->first();
+                if ($line === null) {
+                    $fail($key, "Line #{$lineId} is not on payment #{$payment->id}.");
+                }
+
+                if (array_key_exists('store_id', $in) || array_key_exists('other_store', $in)) {
+                    $storeId = $in['store_id'] ?? null;
+                    $otherStore = trim((string) ($in['other_store'] ?? '')) ?: null;
+
+                    if (($storeId === null) === ($otherStore === null)) {
+                        $fail("{$key}.store_id", 'Say where this line was spent: one store or an other store.');
+                    }
+                    if ($line->storage_location_id !== null) {
+                        $fail("{$key}.store_id", 'Parts that went into storage stay at their storage location.');
+                    }
+
+                    $line->store_id = $storeId;
+                    $line->other_store = $otherStore;
+                }
+
+                if (array_key_exists('amount', $in)) {
+                    $typed = [PaymentLineType::Fixed, PaymentLineType::Inspection, PaymentLineType::Other, PaymentLineType::Gas];
+                    if (! in_array($line->type, $typed, true) || ($line->type === PaymentLineType::Gas && $line->rate !== null)) {
+                        $fail("{$key}.amount", 'Only a typed amount can be changed here (fixed, inspection, other, or gas paid as an amount).');
+                    }
+                    if (bccomp($this->money($in['amount']), '0', self::SCALE) < 0) {
+                        $fail("{$key}.amount", 'The amount cannot be negative.');
+                    }
+                    $line->amount = $this->money($in['amount']);
+                }
+
+                $issueIds = array_values(array_unique(array_merge(
+                    $line->ticketIssues()->pluck('ticket_issues.id')->map(fn ($id) => (int) $id)->all(),
+                    array_map('intval', (array) ($in['add_ticket_issue_ids'] ?? [])),
+                )));
+                $this->checkIssuesAtPlace($line, $issueIds, "{$key}.ticket_issue_ids");
+
+                $line->save();
+                $line->ticketIssues()->sync($issueIds);
+            }
+
+            $this->afterWrite($payment, ['note' => $note], []);
+            $payment->touch();
+
+            return $payment;
+        });
+    }
+
     // ---------------------------------------------------------------- Helpers
+
+    /**
+     * The issues a line paid for must exist and be at the line's store (or,
+     * for an other-store line, not at one of our stores).
+     *
+     * @param  array<int, int>  $issueIds
+     */
+    private function checkIssuesAtPlace(PaymentLine $line, array $issueIds, string $field): void
+    {
+        $fail = fn (string $message) => throw ValidationException::withMessages([$field => $message]);
+        $issues = TicketIssue::query()->with(['ticket.store', 'issue'])->whereIn('id', $issueIds)->get()->keyBy('id');
+
+        foreach ($issueIds as $id) {
+            $issue = $issues->get($id);
+            if ($issue === null) {
+                $fail("Ticket issue #{$id} does not exist.");
+            }
+            if ($line->store_id !== null && (int) $issue->ticket?->store_id !== (int) $line->store_id) {
+                $fail("\"{$issue->displayTitle()}\" (ticket #{$issue->ticket_id}) is not at this line's store.");
+            }
+            if ($line->other_store !== null && $issue->ticket?->store_id !== null) {
+                $fail("\"{$issue->displayTitle()}\" (ticket #{$issue->ticket_id}) is at store {$issue->ticket->store?->store_number}, not an other store.");
+            }
+        }
+    }
 
     /**
      * @param  array<string, mixed>  $data
@@ -674,19 +808,7 @@ class PaymentService
         }
 
         // --- the issues it paid for must be at the line's store.
-        $issues = TicketIssue::query()->with(['ticket.store', 'issue'])->whereIn('id', $issueIds)->get()->keyBy('id');
-        foreach ($issueIds as $id) {
-            $issue = $issues->get($id);
-            if ($issue === null) {
-                $fail('ticket_issue_ids', "Ticket issue #{$id} does not exist.");
-            }
-            if ($line->store_id !== null && (int) $issue->ticket?->store_id !== (int) $line->store_id) {
-                $fail('ticket_issue_ids', "\"{$issue->displayTitle()}\" (ticket #{$issue->ticket_id}) is not at this line's store.");
-            }
-            if ($line->other_store !== null && $issue->ticket?->store_id !== null) {
-                $fail('ticket_issue_ids', "\"{$issue->displayTitle()}\" (ticket #{$issue->ticket_id}) is at store {$issue->ticket->store?->store_number}, not an other store.");
-            }
-        }
+        $this->checkIssuesAtPlace($line, $issueIds, $key('ticket_issue_ids'));
 
         $line->save();
 
