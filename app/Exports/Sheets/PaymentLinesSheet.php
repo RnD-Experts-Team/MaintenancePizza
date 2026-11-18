@@ -29,7 +29,7 @@ class PaymentLinesSheet implements FromCollection, WithHeadings, WithMapping, Wi
     public function headings(): array
     {
         return [
-            'ID', 'Payment ID', 'Type', 'Store', 'Other Store', 'Storage Location', 'Description', 'Amount',
+            'ID', 'Payment ID', 'Refund Of Line', 'Type', 'Store', 'Other Store', 'Storage Location', 'Description', 'Amount',
             'Hours', 'Rate', 'Hours Overridden', 'Part', 'Quantity', 'Unit Cost', 'Bought From', 'Miles',
             'Inspection ID', 'Ticket Issue IDs', 'Trip Session IDs', 'Created At',
         ];
@@ -44,6 +44,7 @@ class PaymentLinesSheet implements FromCollection, WithHeadings, WithMapping, Wi
         return [
             $line->id,
             $line->payment_id,
+            $line->refund_of_line_id,
             $line->type?->label(),
             $line->store?->store_number,
             $line->other_store,

@@ -24,7 +24,8 @@ Settled while building (2026-10-30):
   expires_after_hours, trip_id}}` — `trip_link` sits next to `data`, only when a
   new link was issued.
 - `costs.total_actual` = non-mistaken payment lines linked to the issue (each
-  line counts in full on every issue it names) + stock used at cost;
+  line counts in full on every issue it names; refund lines, negative, net
+  it) + stock used at cost;
   `paid_total` is the lines alone; unpaid purchases are shown, not added.
 - `store_id` in request bodies is the numeric `stores.id`, never the store
   number (paths use the number).
@@ -405,6 +406,42 @@ Payment total = sum of its lines.
   `remove_*` and `keep_*` are refused on create.
 - `POST payments/{payment}/mistaken` `{reason}` — mistaken=true, same undo
   as edit, lines kept for history (with their notes and files).
+- `POST payments/{payment}/refunds` `{refunded_at, payment_method_id?, reference?,
+  reason, lines [{line_id, amount}]}` → 201, the payment (refunds included).
+  See Refunds below.
+
+### Refunds
+
+Money that came back for a payment (a return, a cancelled order, an
+overcharge) is a **refund**: a payment row of its own with `kind = refund`,
+`refund_of_payment_id` = the payment, `paid_at` = when the money came back,
+the same technician or supplier, and one **negative** line per line refunded.
+Each refund line has `refund_of_line_id` and copies that line's type, place
+(store / other store / storage location), description, part and ticket issues.
+
+- So everything that adds up payments or lines nets the refund, in the month
+  it came back, at the store and type of the line: the list's `meta.totals`,
+  supplier `total_paid`, technician `paid_this_month` / analytics, finances,
+  ticket `costs`, the report datasets and the export. Finances' `payments` and
+  `lines` counts leave refunds out.
+- A line cannot get back more than it cost, across all live refunds (422 on
+  `lines.N.amount`: "At most X of this line can still be refunded.").
+  `refunded_at` is not before the payment and not in the future; `amount` > 0.
+- The reason is the refund's note of type `refund`.
+- **Undo** a refund by marking it mistaken (`POST payments/{refund}/mistaken`).
+  A refund cannot be edited or refunded. While a payment has live refunds it
+  cannot be edited or marked mistaken (422 `status`): undo the refunds first.
+- A refund moves nothing else: sessions stay paid, technician purchases stay
+  paid back, parts that went into storage stay there (record a stock movement
+  if they went back).
+- The list shows refunds as rows (filter `kind=payment|refund`). Every row has
+  `kind`, `refund_of {id, paid_at, total}|null`, `refund_reason`,
+  `refunded_total` (payments: what live refunds gave back; null on refunds)
+  and `net_total`. The payment page adds `refunds [{id, refunded_at, amount,
+  payment_method, reference, reason, mistaken, mistaken_reason, lines [{id,
+  refund_of_line_id, amount}], created_by, created_at}]` and, per line,
+  `refunded` / `refundable` (null on refund lines, which carry
+  `refund_of_line_id`).
 - `POST payments/{payment}/notes`, `POST payments/{payment}/attachments`
 - `GET unpaid-work?technician_id=` → per technician {technician, sessions
   [unpaid sessions as in trip-sessions/unpaid], purchases [unpaid technician
@@ -473,7 +510,9 @@ Existing storage-locations, place-levels, stock-balances keep their routes.
 `GET maintenance-analytics/{section}` adds sections `finances` and `coverage`.
 
 finances (`from`, `to` required, any range; `stores[]`, `category_id`,
-`technician_id`, `supplier_id` optional; mistaken excluded):
+`technician_id`, `supplier_id` optional; mistaken excluded; refunds net
+`spent` and every breakdown on the date the money came back, and are not
+counted in `payments` / `lines`):
 `{ totals {spent, previous_spent, change_pct, payments, lines},
 by_type [{type, label, amount}], trend [{period (YYYY-MM or ISO week start), amount, by_type {…}}],
 by_store [{store_number|other, amount}], by_technician [{id, name, category, amount}],

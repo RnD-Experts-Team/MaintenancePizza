@@ -9,7 +9,10 @@ use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\WithTitle;
 
-/** One row per payment, mistaken ones included (flagged). Lines: the next sheet. */
+/**
+ * One row per payment, mistaken ones included (flagged), refunds included
+ * (Kind = refund, negative Total, Refund Of = the payment). Lines: the next sheet.
+ */
 class PaymentsSheet implements FromCollection, WithHeadings, WithMapping, WithTitle
 {
     public function title(): string
@@ -28,7 +31,7 @@ class PaymentsSheet implements FromCollection, WithHeadings, WithMapping, WithTi
     public function headings(): array
     {
         return [
-            'ID', 'Paid At', 'Paid To Type', 'Paid To ID', 'Paid To', 'Method', 'Reference', 'Invoice Number',
+            'ID', 'Kind', 'Refund Of', 'Paid At', 'Paid To Type', 'Paid To ID', 'Paid To', 'Method', 'Reference', 'Invoice Number',
             'Total', 'Line Count', 'Mistaken', 'Created By', 'Created At', 'Updated At',
         ];
     }
@@ -43,6 +46,8 @@ class PaymentsSheet implements FromCollection, WithHeadings, WithMapping, WithTi
 
         return [
             $payment->id,
+            $payment->kind->value,
+            $payment->refund_of_payment_id,
             $payment->paid_at?->toDateString(),
             $to['type'] ?? null,
             $to['id'] ?? null,
