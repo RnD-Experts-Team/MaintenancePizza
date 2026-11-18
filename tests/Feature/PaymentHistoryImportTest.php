@@ -323,6 +323,48 @@ class PaymentHistoryImportTest extends TestCase
         $this->runImport($this->plan([['op' => 'mistaken', 'payment_id' => $this->old->id]]));
     }
 
+    public function test_a_refund_row_becomes_a_refund_of_the_payment_its_purchase_became(): void
+    {
+        $refund = ['op' => 'refund', 'sheet_rows' => [2], 'of_sheet_row' => 1, 'refunded_at' => '2026-03-02',
+            'payment_method' => 'Card', 'amount' => '1231.43', 'reason' => 'Order cancelled (R&M sheet row 2).'];
+        $plan = $this->plan([$this->createOp(1, '1269.52'), $refund], ['expected' => ['create_total' => '1269.52', 'refund_total' => '1231.43', 'sheet_rows' => 2]]);
+
+        $result = $this->runImport($plan);
+
+        $this->assertTrue($result['committed'], json_encode($result));
+        $this->assertSame(1, $result['counts']['refunded']);
+        $original = Payment::query()->findOrFail($result['operations'][0]['payment_ids'][0]);
+        $back = Payment::query()->findOrFail($result['operations'][1]['payment_ids'][0]);
+        $this->assertSame('refund', $back->kind->value);
+        $this->assertSame($original->id, $back->refund_of_payment_id);
+        $this->assertSame('-1231.43', (string) $back->total);
+        $this->assertSame('38.09', number_format((float) Payment::query()->where('mistaken', false)->whereIn('id', [$original->id, $back->id])->sum('total'), 2, '.', ''));
+        $this->assertSame('Order cancelled (R&M sheet row 2).', $back->refundNote?->body);
+
+        // Again: nothing new.
+        $again = $this->runImport($plan);
+        $this->assertTrue($again['committed']);
+        $this->assertSame(2, $again['counts']['already_done']);
+        $this->assertSame(1, Payment::query()->where('kind', 'refund')->count());
+    }
+
+    public function test_a_refund_must_follow_the_purchase_it_refunds_and_fit_in_it(): void
+    {
+        $refund = ['op' => 'refund', 'sheet_rows' => [2], 'of_sheet_row' => 1, 'refunded_at' => '2026-03-02', 'amount' => '50.00', 'reason' => 'x'];
+
+        try {
+            $this->runImport($this->plan([$refund, $this->createOp(1, '40.00')]));
+            $this->fail('A refund before its purchase is refused.');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('which no earlier create operation adds', $e->getMessage());
+        }
+
+        $result = $this->runImport($this->plan([$this->createOp(1, '40.00'), $refund]));
+        $this->assertFalse($result['committed']);
+        $this->assertStringContainsString('more than payment', $result['operations'][1]['message']);
+        $this->assertSame(1, Payment::query()->count());
+    }
+
     // ---------------------------------------------------- PaymentService::amend
 
     public function test_amend_changes_a_typed_amount_and_the_total_but_not_an_hourly_payee(): void

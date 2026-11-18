@@ -22,6 +22,9 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  *
  * A line carries its own notes and attachments, as many as needed. An edit
  * replaces the lines; the notes and files a new line keeps move over to it.
+ *
+ * A line of a refund has a negative amount and `refund_of_line_id`: the line
+ * of the original payment it gives money back for (same type and place).
  */
 class PaymentLine extends Model
 {
@@ -29,6 +32,7 @@ class PaymentLine extends Model
 
     protected $fillable = [
         'payment_id',
+        'refund_of_line_id',
         'type',
         'store_id',
         'other_store',
@@ -69,6 +73,20 @@ class PaymentLine extends Model
     public function payment(): BelongsTo
     {
         return $this->belongsTo(Payment::class);
+    }
+
+    /** On a refund: the line it gives money back for. */
+    /** @return BelongsTo<PaymentLine, $this> */
+    public function refundOf(): BelongsTo
+    {
+        return $this->belongsTo(PaymentLine::class, 'refund_of_line_id');
+    }
+
+    /** The refund lines that gave money back for this line, mistaken refunds included. */
+    /** @return HasMany<PaymentLine, $this> */
+    public function refundLines(): HasMany
+    {
+        return $this->hasMany(PaymentLine::class, 'refund_of_line_id');
     }
 
     /** @return BelongsTo<Store, $this> */

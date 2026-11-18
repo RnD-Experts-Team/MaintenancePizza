@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\PaymentKind;
 use App\Enums\PaymentLineType;
 use App\Enums\StockMovementType;
 use App\Models\Attachment;
@@ -62,6 +63,13 @@ use Illuminate\Validation\ValidationException;
  * notes and files stay unless `remove_note_ids` / `remove_attachment_ids`
  * name them. Marking mistaken is the same undo, but the lines stay for the
  * record, with their notes and files.
+ *
+ * Refunds: money that came back for a payment is a refund (refund()), a
+ * payment row of its own dated when the money came back, whose negative lines
+ * copy the type, place and tickets of the lines they refund. So everything
+ * that adds up payments nets it. A refund is undone by marking it mistaken; a
+ * payment with live refunds cannot be edited or marked mistaken until they
+ * are undone, and a refund itself cannot be edited.
  */
 class PaymentService
 {
@@ -234,6 +242,16 @@ class PaymentService
                     'status' => 'This payment is marked mistaken and can no longer be edited. Record a new payment instead.',
                 ]);
             }
+            if ($payment->isRefund()) {
+                throw ValidationException::withMessages([
+                    'status' => 'A refund cannot be edited: mark it as a mistake and record it again.',
+                ]);
+            }
+            if ($this->hasLiveRefunds($payment)) {
+                throw ValidationException::withMessages([
+                    'status' => 'This payment has refunds: mark them as mistakes before editing it, then record them again.',
+                ]);
+            }
 
             if (Carbon::parse($data['expected_updated_at'])->getTimestamp() !== $payment->updated_at?->getTimestamp()) {
                 abort(409, 'Someone else changed this payment after you opened it. Reload it and make your change again.');
@@ -272,6 +290,11 @@ class PaymentService
             if ($payment->mistaken) {
                 throw ValidationException::withMessages([
                     'status' => 'This payment is already marked mistaken.',
+                ]);
+            }
+            if ($this->hasLiveRefunds($payment)) {
+                throw ValidationException::withMessages([
+                    'status' => 'This payment has refunds: mark them as mistakes first.',
                 ]);
             }
 
@@ -318,6 +341,10 @@ class PaymentService
             if ($payment->mistaken) {
                 $fail('status', 'This payment is marked mistaken and can no longer be changed.');
             }
+            if ($payment->isRefund()) {
+                $fail('status', 'A refund cannot be changed: mark it as a mistake and record it again.');
+            }
+            $refunded = $this->refundedByLine($payment);
 
             $this->snapshot($payment);
 
@@ -355,6 +382,10 @@ class PaymentService
                     $fail($key, "Line #{$lineId} is not on payment #{$payment->id}.");
                 }
 
+                if (isset($refunded[$line->id]) && (array_key_exists('store_id', $in) || array_key_exists('other_store', $in))) {
+                    $fail("{$key}.store_id", 'This line has been refunded: its place cannot change.');
+                }
+
                 if (array_key_exists('store_id', $in) || array_key_exists('other_store', $in)) {
                     $storeId = $in['store_id'] ?? null;
                     $otherStore = trim((string) ($in['other_store'] ?? '')) ?: null;
@@ -378,6 +409,9 @@ class PaymentService
                     if (bccomp($this->money($in['amount']), '0', self::SCALE) < 0) {
                         $fail("{$key}.amount", 'The amount cannot be negative.');
                     }
+                    if (bccomp($this->money($in['amount']), $refunded[$line->id] ?? '0.00', self::SCALE) < 0) {
+                        $fail("{$key}.amount", "{$refunded[$line->id]} of this line has been refunded: it cannot cost less than that.");
+                    }
                     $line->amount = $this->money($in['amount']);
                 }
 
@@ -396,6 +430,122 @@ class PaymentService
 
             return $payment;
         });
+    }
+
+    /**
+     * Money that came back for a payment: a refund row dated `refunded_at`,
+     * paid by the same technician or supplier, with one negative line per
+     * line refunded (at most what that line still has unrefunded). Each
+     * refund line copies the type, place, description, part and tickets of
+     * its line, so totals, analytics and ticket costs net it. The reason is
+     * kept as the refund's `refund` note. Nothing else is undone: sessions
+     * stay paid, purchases stay paid back, parts that went into storage stay
+     * there (record a stock movement if they went back).
+     *
+     * @param  array<string, mixed>  $data  refunded_at, payment_method_id?, reference?, reason, lines [{line_id, amount}]
+     */
+    public function refund(Payment $payment, array $data): Payment
+    {
+        return DB::transaction(function () use ($payment, $data) {
+            $payment = Payment::query()->lockForUpdate()->findOrFail($payment->id);
+            $fail = fn (string $field, string $message) => throw ValidationException::withMessages([$field => $message]);
+
+            if ($payment->isRefund()) {
+                $fail('status', 'A refund cannot itself be refunded.');
+            }
+            if ($payment->mistaken) {
+                $fail('status', 'This payment is marked mistaken: there is nothing to refund.');
+            }
+            if (Carbon::parse($data['refunded_at'])->lt($payment->paid_at)) {
+                $fail('refunded_at', "The money cannot come back before it was paid ({$payment->paid_at->toDateString()}).");
+            }
+
+            $lines = $payment->lines()->with('ticketIssues')->get()->keyBy('id');
+            $refunded = $this->refundedByLine($payment);
+            $picked = [];
+
+            foreach (array_values((array) $data['lines']) as $i => $in) {
+                $id = (int) $in['line_id'];
+                $line = $lines->get($id);
+                if ($line === null) {
+                    $fail("lines.{$i}.line_id", "Line #{$id} is not on payment #{$payment->id}.");
+                }
+                if (isset($picked[$id])) {
+                    $fail("lines.{$i}.line_id", 'The same line is refunded twice in this refund.');
+                }
+
+                $amount = $this->money($in['amount']);
+                if (bccomp($amount, '0', self::SCALE) <= 0) {
+                    $fail("lines.{$i}.amount", 'The amount that came back must be more than zero.');
+                }
+                $left = bcsub($this->money($line->amount), $refunded[$id] ?? '0.00', self::SCALE);
+                if (bccomp($amount, $left, self::SCALE) > 0) {
+                    $fail("lines.{$i}.amount", "At most {$left} of this line can still be refunded.");
+                }
+
+                $picked[$id] = [$line, $amount];
+            }
+
+            $refund = new Payment([
+                'kind' => PaymentKind::Refund,
+                'refund_of_payment_id' => $payment->id,
+                'paid_at' => $data['refunded_at'],
+                'technician_id' => $payment->technician_id,
+                'supplier_id' => $payment->supplier_id,
+                'payment_method_id' => $data['payment_method_id'] ?? null,
+                'reference' => $data['reference'] ?? null,
+            ]);
+            $refund->created_by = Auth::id();
+            $refund->total = '0.00';
+            $refund->save();
+
+            foreach (array_values($picked) as $i => [$line, $amount]) {
+                $copy = new PaymentLine([
+                    'payment_id' => $refund->id,
+                    'refund_of_line_id' => $line->id,
+                    'type' => $line->type,
+                    'store_id' => $line->store_id,
+                    'other_store' => $line->other_store,
+                    'storage_location_id' => $line->storage_location_id,
+                    'description' => $line->description,
+                    'part_id' => $line->part_id,
+                    'amount' => bcmul($amount, '-1', self::SCALE),
+                    'sort_order' => $i,
+                ]);
+                $copy->save();
+                $copy->ticketIssues()->sync($line->ticketIssues->pluck('id')->all());
+            }
+
+            $this->afterWrite($refund, [], []);
+            $this->notes->store($refund, trim((string) $data['reason']), 'refund', []);
+
+            return $refund;
+        });
+    }
+
+    /**
+     * How much of each line of the payment live (not mistaken) refunds have
+     * given back, as [line id => "12.34"].
+     *
+     * @return array<int, string>
+     */
+    public function refundedByLine(Payment $payment): array
+    {
+        return DB::table('payment_lines as rl')
+            ->join('payments as r', 'r.id', '=', 'rl.payment_id')
+            ->where('r.refund_of_payment_id', $payment->id)
+            ->where('r.mistaken', false)
+            ->whereNotNull('rl.refund_of_line_id')
+            ->groupBy('rl.refund_of_line_id')
+            ->selectRaw('rl.refund_of_line_id as line_id, SUM(rl.amount) as amount')
+            ->get()
+            ->mapWithKeys(fn ($r) => [(int) $r->line_id => $this->money(bcmul((string) $r->amount, '-1', self::SCALE))])
+            ->all();
+    }
+
+    private function hasLiveRefunds(Payment $payment): bool
+    {
+        return Payment::query()->where('refund_of_payment_id', $payment->id)->where('mistaken', false)->exists();
     }
 
     // ---------------------------------------------------------------- Helpers
@@ -981,6 +1131,9 @@ class PaymentService
         }
         if (! empty($filters['to'])) {
             $query->whereDate('paid_at', '<=', $filters['to']);
+        }
+        if (! empty($filters['kind'])) {
+            $query->where('kind', (string) $filters['kind']);
         }
         if (! empty($filters['technician_id'])) {
             $query->where('technician_id', (int) $filters['technician_id']);

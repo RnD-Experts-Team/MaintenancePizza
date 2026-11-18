@@ -10399,6 +10399,19 @@
           },
           {
             "$ref": "#/components/parameters/PerPage"
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Only payments or only refunds. Both by default (the totals net refunds).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "payment",
+                "refund"
+              ]
+            }
           }
         ],
         "responses": {
@@ -10516,6 +10529,45 @@
                             "type": "string",
                             "nullable": true,
                             "description": "The reason given when it was marked mistaken (its `mistaken` note); null otherwise."
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "payment",
+                              "refund"
+                            ],
+                            "description": "payment: money we paid. refund: money that came back for the payment `refund_of`, dated `paid_at`, with a negative total."
+                          },
+                          "refund_of": {
+                            "type": "object",
+                            "nullable": true,
+                            "description": "On a refund: the payment it refunds.",
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "paid_at": {
+                                "type": "string",
+                                "format": "date"
+                              },
+                              "total": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "refund_reason": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "On a refund: why the money came back."
+                          },
+                          "refunded_total": {
+                            "type": "string",
+                            "description": "On a payment: what live (not mistaken) refunds gave back; 0.00 when none. Null on a refund.",
+                            "nullable": true
+                          },
+                          "net_total": {
+                            "type": "string",
+                            "description": "What it cost in the end: total minus refunded_total (on a refund: its own negative total)."
                           }
                         }
                       }
@@ -10743,6 +10795,21 @@
                             "format": "binary"
                           },
                           "description": "The line's files, multipart bracket notation only: lines[0][files][]"
+                        },
+                        "refund_of_line_id": {
+                          "type": "integer",
+                          "nullable": true,
+                          "description": "On a refund line: the line of the payment it gives money back for."
+                        },
+                        "refunded": {
+                          "type": "string",
+                          "description": "On a payment line: what live refunds gave back for it. Null on a refund line.",
+                          "nullable": true
+                        },
+                        "refundable": {
+                          "type": "string",
+                          "description": "On a payment line: what can still be refunded. Null on a refund line.",
+                          "nullable": true
                         }
                       },
                       "required": [
@@ -11286,6 +11353,21 @@
                                   "$ref": "#/components/schemas/Attachment"
                                 },
                                 "description": "The line's own files"
+                              },
+                              "refund_of_line_id": {
+                                "type": "integer",
+                                "nullable": true,
+                                "description": "On a refund line: the line of the payment it gives money back for."
+                              },
+                              "refunded": {
+                                "type": "string",
+                                "description": "On a payment line: what live refunds gave back for it. Null on a refund line.",
+                                "nullable": true
+                              },
+                              "refundable": {
+                                "type": "string",
+                                "description": "On a payment line: what can still be refunded. Null on a refund line.",
+                                "nullable": true
                               }
                             }
                           }
@@ -11339,6 +11421,119 @@
                           "type": "string",
                           "nullable": true,
                           "description": "The reason given when it was marked mistaken (its `mistaken` note); null otherwise."
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "payment",
+                            "refund"
+                          ],
+                          "description": "payment: money we paid. refund: money that came back for the payment `refund_of`, dated `paid_at`, with a negative total."
+                        },
+                        "refund_of": {
+                          "type": "object",
+                          "nullable": true,
+                          "description": "On a refund: the payment it refunds.",
+                          "properties": {
+                            "id": {
+                              "type": "integer"
+                            },
+                            "paid_at": {
+                              "type": "string",
+                              "format": "date"
+                            },
+                            "total": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "refund_reason": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "On a refund: why the money came back."
+                        },
+                        "refunded_total": {
+                          "type": "string",
+                          "description": "On a payment: what live (not mistaken) refunds gave back; 0.00 when none. Null on a refund.",
+                          "nullable": true
+                        },
+                        "net_total": {
+                          "type": "string",
+                          "description": "What it cost in the end: total minus refunded_total (on a refund: its own negative total)."
+                        },
+                        "refunds": {
+                          "type": "array",
+                          "description": "The refunds of a payment, mistaken ones included; [] on a refund.",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer",
+                                "description": "The refund (a payment of kind refund)."
+                              },
+                              "refunded_at": {
+                                "type": "string",
+                                "format": "date"
+                              },
+                              "amount": {
+                                "type": "string",
+                                "description": "What came back, positive."
+                              },
+                              "payment_method": {
+                                "type": "object",
+                                "nullable": true,
+                                "properties": {
+                                  "id": {
+                                    "type": "integer"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "reference": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "reason": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "mistaken": {
+                                "type": "boolean"
+                              },
+                              "mistaken_reason": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "lines": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "integer"
+                                    },
+                                    "refund_of_line_id": {
+                                      "type": "integer"
+                                    },
+                                    "amount": {
+                                      "type": "string",
+                                      "description": "What came back for that line, positive."
+                                    }
+                                  }
+                                }
+                              },
+                              "created_by": {
+                                "type": "object",
+                                "nullable": true
+                              },
+                              "created_at": {
+                                "type": "string",
+                                "format": "date-time"
+                              }
+                            }
+                          }
                         }
                       }
                     }
@@ -11826,6 +12021,21 @@
                                   "$ref": "#/components/schemas/Attachment"
                                 },
                                 "description": "The line's own files"
+                              },
+                              "refund_of_line_id": {
+                                "type": "integer",
+                                "nullable": true,
+                                "description": "On a refund line: the line of the payment it gives money back for."
+                              },
+                              "refunded": {
+                                "type": "string",
+                                "description": "On a payment line: what live refunds gave back for it. Null on a refund line.",
+                                "nullable": true
+                              },
+                              "refundable": {
+                                "type": "string",
+                                "description": "On a payment line: what can still be refunded. Null on a refund line.",
+                                "nullable": true
                               }
                             }
                           }
@@ -11879,6 +12089,119 @@
                           "type": "string",
                           "nullable": true,
                           "description": "The reason given when it was marked mistaken (its `mistaken` note); null otherwise."
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "payment",
+                            "refund"
+                          ],
+                          "description": "payment: money we paid. refund: money that came back for the payment `refund_of`, dated `paid_at`, with a negative total."
+                        },
+                        "refund_of": {
+                          "type": "object",
+                          "nullable": true,
+                          "description": "On a refund: the payment it refunds.",
+                          "properties": {
+                            "id": {
+                              "type": "integer"
+                            },
+                            "paid_at": {
+                              "type": "string",
+                              "format": "date"
+                            },
+                            "total": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "refund_reason": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "On a refund: why the money came back."
+                        },
+                        "refunded_total": {
+                          "type": "string",
+                          "description": "On a payment: what live (not mistaken) refunds gave back; 0.00 when none. Null on a refund.",
+                          "nullable": true
+                        },
+                        "net_total": {
+                          "type": "string",
+                          "description": "What it cost in the end: total minus refunded_total (on a refund: its own negative total)."
+                        },
+                        "refunds": {
+                          "type": "array",
+                          "description": "The refunds of a payment, mistaken ones included; [] on a refund.",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer",
+                                "description": "The refund (a payment of kind refund)."
+                              },
+                              "refunded_at": {
+                                "type": "string",
+                                "format": "date"
+                              },
+                              "amount": {
+                                "type": "string",
+                                "description": "What came back, positive."
+                              },
+                              "payment_method": {
+                                "type": "object",
+                                "nullable": true,
+                                "properties": {
+                                  "id": {
+                                    "type": "integer"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "reference": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "reason": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "mistaken": {
+                                "type": "boolean"
+                              },
+                              "mistaken_reason": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "lines": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "integer"
+                                    },
+                                    "refund_of_line_id": {
+                                      "type": "integer"
+                                    },
+                                    "amount": {
+                                      "type": "string",
+                                      "description": "What came back for that line, positive."
+                                    }
+                                  }
+                                }
+                              },
+                              "created_by": {
+                                "type": "object",
+                                "nullable": true
+                              },
+                              "created_at": {
+                                "type": "string",
+                                "format": "date-time"
+                              }
+                            }
+                          }
                         }
                       }
                     }
@@ -12101,6 +12424,21 @@
                             "type": "integer"
                           },
                           "description": "Saved files of the lines being replaced that this line keeps (they move to it). A line file no line keeps is removed"
+                        },
+                        "refund_of_line_id": {
+                          "type": "integer",
+                          "nullable": true,
+                          "description": "On a refund line: the line of the payment it gives money back for."
+                        },
+                        "refunded": {
+                          "type": "string",
+                          "description": "On a payment line: what live refunds gave back for it. Null on a refund line.",
+                          "nullable": true
+                        },
+                        "refundable": {
+                          "type": "string",
+                          "description": "On a payment line: what can still be refunded. Null on a refund line.",
+                          "nullable": true
                         }
                       },
                       "required": [
@@ -12684,6 +13022,21 @@
                                   "$ref": "#/components/schemas/Attachment"
                                 },
                                 "description": "The line's own files"
+                              },
+                              "refund_of_line_id": {
+                                "type": "integer",
+                                "nullable": true,
+                                "description": "On a refund line: the line of the payment it gives money back for."
+                              },
+                              "refunded": {
+                                "type": "string",
+                                "description": "On a payment line: what live refunds gave back for it. Null on a refund line.",
+                                "nullable": true
+                              },
+                              "refundable": {
+                                "type": "string",
+                                "description": "On a payment line: what can still be refunded. Null on a refund line.",
+                                "nullable": true
                               }
                             }
                           }
@@ -12737,6 +13090,119 @@
                           "type": "string",
                           "nullable": true,
                           "description": "The reason given when it was marked mistaken (its `mistaken` note); null otherwise."
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "payment",
+                            "refund"
+                          ],
+                          "description": "payment: money we paid. refund: money that came back for the payment `refund_of`, dated `paid_at`, with a negative total."
+                        },
+                        "refund_of": {
+                          "type": "object",
+                          "nullable": true,
+                          "description": "On a refund: the payment it refunds.",
+                          "properties": {
+                            "id": {
+                              "type": "integer"
+                            },
+                            "paid_at": {
+                              "type": "string",
+                              "format": "date"
+                            },
+                            "total": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "refund_reason": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "On a refund: why the money came back."
+                        },
+                        "refunded_total": {
+                          "type": "string",
+                          "description": "On a payment: what live (not mistaken) refunds gave back; 0.00 when none. Null on a refund.",
+                          "nullable": true
+                        },
+                        "net_total": {
+                          "type": "string",
+                          "description": "What it cost in the end: total minus refunded_total (on a refund: its own negative total)."
+                        },
+                        "refunds": {
+                          "type": "array",
+                          "description": "The refunds of a payment, mistaken ones included; [] on a refund.",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer",
+                                "description": "The refund (a payment of kind refund)."
+                              },
+                              "refunded_at": {
+                                "type": "string",
+                                "format": "date"
+                              },
+                              "amount": {
+                                "type": "string",
+                                "description": "What came back, positive."
+                              },
+                              "payment_method": {
+                                "type": "object",
+                                "nullable": true,
+                                "properties": {
+                                  "id": {
+                                    "type": "integer"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "reference": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "reason": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "mistaken": {
+                                "type": "boolean"
+                              },
+                              "mistaken_reason": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "lines": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "integer"
+                                    },
+                                    "refund_of_line_id": {
+                                      "type": "integer"
+                                    },
+                                    "amount": {
+                                      "type": "string",
+                                      "description": "What came back for that line, positive."
+                                    }
+                                  }
+                                }
+                              },
+                              "created_by": {
+                                "type": "object",
+                                "nullable": true
+                              },
+                              "created_at": {
+                                "type": "string",
+                                "format": "date-time"
+                              }
+                            }
+                          }
                         }
                       }
                     }
@@ -13258,6 +13724,21 @@
                                   "$ref": "#/components/schemas/Attachment"
                                 },
                                 "description": "The line's own files"
+                              },
+                              "refund_of_line_id": {
+                                "type": "integer",
+                                "nullable": true,
+                                "description": "On a refund line: the line of the payment it gives money back for."
+                              },
+                              "refunded": {
+                                "type": "string",
+                                "description": "On a payment line: what live refunds gave back for it. Null on a refund line.",
+                                "nullable": true
+                              },
+                              "refundable": {
+                                "type": "string",
+                                "description": "On a payment line: what can still be refunded. Null on a refund line.",
+                                "nullable": true
                               }
                             }
                           }
@@ -13311,6 +13792,847 @@
                           "type": "string",
                           "nullable": true,
                           "description": "The reason given when it was marked mistaken (its `mistaken` note); null otherwise."
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "payment",
+                            "refund"
+                          ],
+                          "description": "payment: money we paid. refund: money that came back for the payment `refund_of`, dated `paid_at`, with a negative total."
+                        },
+                        "refund_of": {
+                          "type": "object",
+                          "nullable": true,
+                          "description": "On a refund: the payment it refunds.",
+                          "properties": {
+                            "id": {
+                              "type": "integer"
+                            },
+                            "paid_at": {
+                              "type": "string",
+                              "format": "date"
+                            },
+                            "total": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "refund_reason": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "On a refund: why the money came back."
+                        },
+                        "refunded_total": {
+                          "type": "string",
+                          "description": "On a payment: what live (not mistaken) refunds gave back; 0.00 when none. Null on a refund.",
+                          "nullable": true
+                        },
+                        "net_total": {
+                          "type": "string",
+                          "description": "What it cost in the end: total minus refunded_total (on a refund: its own negative total)."
+                        },
+                        "refunds": {
+                          "type": "array",
+                          "description": "The refunds of a payment, mistaken ones included; [] on a refund.",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer",
+                                "description": "The refund (a payment of kind refund)."
+                              },
+                              "refunded_at": {
+                                "type": "string",
+                                "format": "date"
+                              },
+                              "amount": {
+                                "type": "string",
+                                "description": "What came back, positive."
+                              },
+                              "payment_method": {
+                                "type": "object",
+                                "nullable": true,
+                                "properties": {
+                                  "id": {
+                                    "type": "integer"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "reference": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "reason": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "mistaken": {
+                                "type": "boolean"
+                              },
+                              "mistaken_reason": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "lines": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "integer"
+                                    },
+                                    "refund_of_line_id": {
+                                      "type": "integer"
+                                    },
+                                    "amount": {
+                                      "type": "string",
+                                      "description": "What came back for that line, positive."
+                                    }
+                                  }
+                                }
+                              },
+                              "created_by": {
+                                "type": "object",
+                                "nullable": true
+                              },
+                              "created_at": {
+                                "type": "string",
+                                "format": "date-time"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/payments/{payment}/refunds": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Record a refund",
+        "description": "Money that came back for a payment. Recorded as a payment of kind `refund`, dated `refunded_at`, paid by the same technician or supplier, with one negative line per line refunded. Each refund line copies the type, place, description, part and tickets of the line it refunds, so every total, analytics figure and ticket cost nets it in the month the money came back. A line cannot get back more than it cost, across all live refunds. The reason is kept as the refund's `refund` note. Undo a refund by marking it mistaken (POST /payments/{refund}/mistaken). While a payment has live refunds it cannot be edited or marked mistaken; a refund cannot be edited or refunded. Sessions stay paid, purchases stay paid back and stock is not moved.",
+        "operationId": "refundPayment",
+        "parameters": [
+          {
+            "name": "payment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "refunded_at": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "When the money came back: not before the payment, not in the future."
+                  },
+                  "payment_method_id": {
+                    "type": "integer",
+                    "nullable": true,
+                    "description": "How it came back (GET /payment-methods)."
+                  },
+                  "reference": {
+                    "type": "string",
+                    "nullable": true,
+                    "maxLength": 255
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 5000,
+                    "description": "Why: returned, order cancelled, overcharged..."
+                  },
+                  "lines": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "line_id": {
+                          "type": "integer",
+                          "description": "A line of this payment."
+                        },
+                        "amount": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "description": "What came back for it, positive; at most what the line still has unrefunded."
+                        }
+                      },
+                      "required": [
+                        "line_id",
+                        "amount"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "refunded_at",
+                  "reason",
+                  "lines"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The payment, its new refund included.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer"
+                        },
+                        "paid_at": {
+                          "type": "string",
+                          "format": "date"
+                        },
+                        "paid_to": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "technician",
+                                "supplier"
+                              ]
+                            },
+                            "id": {
+                              "type": "integer"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "category": {
+                              "type": "object",
+                              "nullable": true,
+                              "properties": {
+                                "id": {
+                                  "type": "integer"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "method": {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            "cash",
+                            "check",
+                            "card",
+                            "bank_transfer",
+                            "zelle",
+                            "other"
+                          ]
+                        },
+                        "method_label": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "reference": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "invoice_number": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "total": {
+                          "type": "string",
+                          "example": "70.00",
+                          "description": "Money, 2 decimals"
+                        },
+                        "line_count": {
+                          "type": "integer"
+                        },
+                        "stores": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Store numbers (and other-store names) of the lines"
+                        },
+                        "types": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "has_invoice": {
+                          "type": "boolean",
+                          "description": "The payment has an attachment"
+                        },
+                        "mistaken": {
+                          "type": "boolean"
+                        },
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updated_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "Send back as expected_updated_at when editing"
+                        },
+                        "technician_id": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "supplier_id": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "hourly",
+                                  "fixed",
+                                  "inspection",
+                                  "parts",
+                                  "gas",
+                                  "other"
+                                ]
+                              },
+                              "type_label": {
+                                "type": "string"
+                              },
+                              "store_id": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "store": {
+                                "type": "object",
+                                "nullable": true,
+                                "properties": {
+                                  "id": {
+                                    "type": "integer"
+                                  },
+                                  "store_number": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "other_store": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "storage_location_id": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "storage_location": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "integer"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "nullable": true
+                              },
+                              "description": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "amount": {
+                                "type": "string",
+                                "example": "70.00",
+                                "description": "Money, 2 decimals"
+                              },
+                              "hours": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "rate": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "hours_overridden": {
+                                "type": "boolean"
+                              },
+                              "part_id": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "part": {
+                                "type": "object",
+                                "nullable": true,
+                                "properties": {
+                                  "id": {
+                                    "type": "integer"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "unit": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "quantity": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "unit_cost": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "bought_from_supplier_id": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "bought_from": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "integer"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "nullable": true
+                              },
+                              "destination": {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  "storage",
+                                  "ticket"
+                                ],
+                                "description": "Parts lines only"
+                              },
+                              "miles": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "issue_inspection_id": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "ticket_issues": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "integer"
+                                    },
+                                    "ticket_id": {
+                                      "type": "integer"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "store_number": {
+                                      "type": "string",
+                                      "nullable": true,
+                                      "description": "Store number, or the other-store name"
+                                    }
+                                  }
+                                }
+                              },
+                              "trip_sessions": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "integer"
+                                    },
+                                    "trip_id": {
+                                      "type": "integer"
+                                    },
+                                    "clock_in": {
+                                      "type": "string",
+                                      "format": "date-time"
+                                    },
+                                    "clock_out": {
+                                      "type": "string",
+                                      "format": "date-time"
+                                    },
+                                    "paid_minutes": {
+                                      "type": "integer"
+                                    }
+                                  }
+                                }
+                              },
+                              "stock_movement_id": {
+                                "type": "integer",
+                                "nullable": true,
+                                "description": "The Bought movement (parts into storage)"
+                              },
+                              "serials": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "technician_purchases": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "integer"
+                                    },
+                                    "technician": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "integer"
+                                        },
+                                        "name": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "trip_id": {
+                                      "type": "integer",
+                                      "nullable": true
+                                    },
+                                    "ticket_issue": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "integer"
+                                        },
+                                        "ticket_id": {
+                                          "type": "integer"
+                                        },
+                                        "title": {
+                                          "type": "string"
+                                        },
+                                        "store_number": {
+                                          "type": "string",
+                                          "nullable": true,
+                                          "description": "Store number, or the other-store name"
+                                        }
+                                      },
+                                      "nullable": true
+                                    },
+                                    "part": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "integer"
+                                        },
+                                        "name": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "nullable": true
+                                    },
+                                    "description": {
+                                      "type": "string"
+                                    },
+                                    "quantity": {
+                                      "type": "string"
+                                    },
+                                    "total_cost": {
+                                      "type": "string",
+                                      "example": "70.00",
+                                      "description": "Money, 2 decimals"
+                                    },
+                                    "supplier": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "integer"
+                                        },
+                                        "name": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "nullable": true
+                                    },
+                                    "serial_number": {
+                                      "type": "string",
+                                      "nullable": true
+                                    },
+                                    "bought_at": {
+                                      "type": "string",
+                                      "format": "date-time"
+                                    },
+                                    "paid": {
+                                      "type": "boolean"
+                                    },
+                                    "payment_id": {
+                                      "type": "integer",
+                                      "nullable": true
+                                    },
+                                    "receipts": {
+                                      "type": "array",
+                                      "items": {
+                                        "$ref": "#/components/schemas/Attachment"
+                                      }
+                                    },
+                                    "mistaken": {
+                                      "type": "boolean"
+                                    }
+                                  }
+                                }
+                              },
+                              "place": {
+                                "type": "array",
+                                "nullable": true,
+                                "description": "Parts into storage only: where the part sits in the location NOW (its stock balance address, ordered by level; [] when nobody has said). null on every other line.",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "level_id": {
+                                      "type": "integer"
+                                    },
+                                    "level": {
+                                      "type": "string"
+                                    },
+                                    "value_id": {
+                                      "type": "integer"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              },
+                              "notes": {
+                                "type": "array",
+                                "items": {
+                                  "$ref": "#/components/schemas/Note"
+                                },
+                                "description": "The line's own notes"
+                              },
+                              "attachments": {
+                                "type": "array",
+                                "items": {
+                                  "$ref": "#/components/schemas/Attachment"
+                                },
+                                "description": "The line's own files"
+                              },
+                              "refund_of_line_id": {
+                                "type": "integer",
+                                "nullable": true,
+                                "description": "On a refund line: the line of the payment it gives money back for."
+                              },
+                              "refunded": {
+                                "type": "string",
+                                "description": "On a payment line: what live refunds gave back for it. Null on a refund line.",
+                                "nullable": true
+                              },
+                              "refundable": {
+                                "type": "string",
+                                "description": "On a payment line: what can still be refunded. Null on a refund line.",
+                                "nullable": true
+                              }
+                            }
+                          }
+                        },
+                        "notes": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Note"
+                          },
+                          "nullable": true
+                        },
+                        "attachments": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Attachment"
+                          },
+                          "nullable": true
+                        },
+                        "revisions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "edited_by": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "integer"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "nullable": true
+                              },
+                              "created_at": {
+                                "type": "string",
+                                "format": "date-time"
+                              }
+                            }
+                          }
+                        },
+                        "created_by": {
+                          "type": "object",
+                          "nullable": true
+                        },
+                        "mistaken_reason": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "The reason given when it was marked mistaken (its `mistaken` note); null otherwise."
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "payment",
+                            "refund"
+                          ],
+                          "description": "payment: money we paid. refund: money that came back for the payment `refund_of`, dated `paid_at`, with a negative total."
+                        },
+                        "refund_of": {
+                          "type": "object",
+                          "nullable": true,
+                          "description": "On a refund: the payment it refunds.",
+                          "properties": {
+                            "id": {
+                              "type": "integer"
+                            },
+                            "paid_at": {
+                              "type": "string",
+                              "format": "date"
+                            },
+                            "total": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "refund_reason": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "On a refund: why the money came back."
+                        },
+                        "refunded_total": {
+                          "type": "string",
+                          "description": "On a payment: what live (not mistaken) refunds gave back; 0.00 when none. Null on a refund.",
+                          "nullable": true
+                        },
+                        "net_total": {
+                          "type": "string",
+                          "description": "What it cost in the end: total minus refunded_total (on a refund: its own negative total)."
+                        },
+                        "refunds": {
+                          "type": "array",
+                          "description": "The refunds of a payment, mistaken ones included; [] on a refund.",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer",
+                                "description": "The refund (a payment of kind refund)."
+                              },
+                              "refunded_at": {
+                                "type": "string",
+                                "format": "date"
+                              },
+                              "amount": {
+                                "type": "string",
+                                "description": "What came back, positive."
+                              },
+                              "payment_method": {
+                                "type": "object",
+                                "nullable": true,
+                                "properties": {
+                                  "id": {
+                                    "type": "integer"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "reference": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "reason": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "mistaken": {
+                                "type": "boolean"
+                              },
+                              "mistaken_reason": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "lines": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "integer"
+                                    },
+                                    "refund_of_line_id": {
+                                      "type": "integer"
+                                    },
+                                    "amount": {
+                                      "type": "string",
+                                      "description": "What came back for that line, positive."
+                                    }
+                                  }
+                                }
+                              },
+                              "created_by": {
+                                "type": "object",
+                                "nullable": true
+                              },
+                              "created_at": {
+                                "type": "string",
+                                "format": "date-time"
+                              }
+                            }
+                          }
                         }
                       }
                     }

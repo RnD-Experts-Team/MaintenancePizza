@@ -69,7 +69,8 @@ class FinanceAnalyticsService
         $prevFrom = $prevTo->copy()->subDays($days - 1);
 
         $totals = $this->lines($from, $to, $filters)
-            ->selectRaw('COALESCE(SUM(pl.amount), 0) as spent, COUNT(DISTINCT pl.payment_id) as payments, COUNT(*) as line_count')
+            // Refunds (negative lines) net `spent` but are not payments or lines of their own.
+            ->selectRaw("COALESCE(SUM(pl.amount), 0) as spent, COUNT(DISTINCT CASE WHEN p.kind = 'payment' THEN pl.payment_id END) as payments, SUM(CASE WHEN p.kind = 'payment' THEN 1 ELSE 0 END) as line_count")
             ->first();
         $previous = (float) $this->lines($prevFrom, $prevTo, $filters)->sum('pl.amount');
         $spent = (float) $totals->spent;
