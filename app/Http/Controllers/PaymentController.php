@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\PaymentMistakenRequest;
+use App\Http\Requests\PaymentRefundRequest;
 use App\Http\Requests\PaymentRequest;
 use App\Http\Requests\StoreAttachmentRequest;
 use App\Http\Requests\StoreNoteRequest;
@@ -33,10 +34,11 @@ class PaymentController extends Controller
             'technician_id' => ['nullable', 'integer'],
             'supplier_id' => ['nullable', 'integer'],
             'category_id' => ['nullable', 'integer'],
+            'kind' => ['nullable', 'in:payment,refund'],
         ]);
 
         $result = $this->payments->list(
-            $request->only(['from', 'to', 'technician_id', 'supplier_id', 'category_id', 'store', 'type', 'search', 'include_mistaken']),
+            $request->only(['from', 'to', 'technician_id', 'supplier_id', 'category_id', 'store', 'type', 'search', 'include_mistaken', 'kind']),
             max(1, min(200, $request->integer('per_page', 25))),
         );
         $page = $result['page'];
@@ -77,6 +79,17 @@ class PaymentController extends Controller
         $payment = $this->payments->markMistaken($payment, $request->validated()['reason']);
 
         return response()->json(['data' => $this->payments->show($payment)]);
+    }
+
+    /**
+     * Record money that came back for this payment. Answers with the payment
+     * (its refunds included), as the page showing it needs.
+     */
+    public function refund(PaymentRefundRequest $request, Payment $payment): JsonResponse
+    {
+        $this->payments->refund($payment, $request->validated());
+
+        return response()->json(['data' => $this->payments->show($payment->fresh())], 201);
     }
 
     public function notesStore(StoreNoteRequest $request, Payment $payment): JsonResponse

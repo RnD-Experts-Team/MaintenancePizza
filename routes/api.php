@@ -282,6 +282,8 @@ Route::middleware(['throttle:api', 'auth.token.store'])->group(function () {
     Route::get('payments/{payment}', [PaymentController::class, 'show'])->name('payments.show');
     Route::post('payments/{payment}/edit', [PaymentController::class, 'edit'])->name('payments.edit');
     Route::post('payments/{payment}/mistaken', [PaymentController::class, 'mistaken'])->name('payments.mistaken');
+    // Money that came back for a payment; undone by marking the refund mistaken (the route above).
+    Route::post('payments/{payment}/refunds', [PaymentController::class, 'refund'])->name('payments.refunds.store');
     Route::post('payments/{payment}/notes', [PaymentController::class, 'notesStore'])->middleware('throttle:api-upload')->name('payments.notes');
     Route::post('payments/{payment}/attachments', [PaymentController::class, 'attachmentsStore'])->middleware('throttle:api-upload')->name('payments.attachments');
 

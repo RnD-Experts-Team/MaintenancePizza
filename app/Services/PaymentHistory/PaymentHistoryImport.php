@@ -29,6 +29,10 @@ use Throwable;
  *   amend     correct a payment already in the system, in place (PaymentService::amend)
  *   mistaken  mark a payment already in the system as a mistake
  *   keep      the sheet row is already in the system as these payments
+ *   refund    money that came back (a negative sheet row): a refund of the
+ *             payment another sheet row became (`of_sheet_row`) or of a
+ *             payment already in the system (`of_payment_id`), spread over its
+ *             lines in order (PaymentService::refund)
  *   skip      leave the sheet row out (the reason is in the plan)
  *
  * Rules that hold whatever the plan says:
@@ -85,9 +89,10 @@ final class PaymentHistoryImport
 
         $result = [
             'dry_run' => $dryRun,
-            'counts' => ['payees_created' => 0, 'created' => 0, 'amended' => 0, 'mistaken' => 0, 'kept' => 0, 'skipped' => 0, 'already_done' => 0, 'held' => 0, 'errors' => 0],
+            'counts' => ['payees_created' => 0, 'created' => 0, 'amended' => 0, 'mistaken' => 0, 'kept' => 0, 'refunded' => 0, 'skipped' => 0, 'already_done' => 0, 'held' => 0, 'errors' => 0],
             'created_total' => '0.00',
             'held_total' => '0.00',
+            'refunded_total' => '0.00',
             'operations' => [],
             'checks' => [],
             'committed' => false,
@@ -160,7 +165,7 @@ final class PaymentHistoryImport
 
         foreach ($plan['operations'] as $i => $op) {
             $kind = $op['op'] ?? null;
-            if (! in_array($kind, ['create', 'amend', 'mistaken', 'keep', 'skip'], true)) {
+            if (! in_array($kind, ['create', 'amend', 'mistaken', 'keep', 'refund', 'skip'], true)) {
                 throw new RuntimeException("Operation {$i}: unknown op \"{$kind}\".");
             }
 
@@ -177,8 +182,17 @@ final class PaymentHistoryImport
                 $seenRows[(int) $row] = $i;
             }
 
-            if (in_array($kind, ['create', 'keep', 'skip'], true) && empty($op['sheet_rows'])) {
+            if (in_array($kind, ['create', 'keep', 'refund', 'skip'], true) && empty($op['sheet_rows'])) {
                 throw new RuntimeException("Operation {$i} ({$kind}) names no sheet row.");
+            }
+            if ($kind === 'refund' && empty($op['of_sheet_row']) === empty($op['of_payment_id'])) {
+                throw new RuntimeException("Operation {$i} (refund) must name what it refunds: of_sheet_row or of_payment_id.");
+            }
+            if ($kind === 'refund' && isset($op['of_sheet_row'])) {
+                $of = (int) $op['of_sheet_row'];
+                if (! isset($seenRows[$of]) || $seenRows[$of] === $i || ($plan['operations'][$seenRows[$of]]['op'] ?? null) !== 'create') {
+                    throw new RuntimeException("Operation {$i} refunds sheet row {$of}, which no earlier create operation adds.");
+                }
             }
 
             foreach ($this->paymentIdsOf($op) as $id) {
@@ -197,6 +211,7 @@ final class PaymentHistoryImport
     {
         return match ($op['op']) {
             'amend', 'mistaken' => [(int) ($op['payment_id'] ?? 0)],
+            'refund' => isset($op['of_payment_id']) ? [(int) $op['of_payment_id']] : [],
             'keep' => array_map('intval', (array) ($op['payment_ids'] ?? [])),
             default => [],
         };
@@ -374,6 +389,55 @@ final class PaymentHistoryImport
                 $result['counts']['kept']++;
                 break;
 
+            case 'refund':
+                $row = $rows[0];
+                if (LegacyMap::has(self::MAP_ROW, $row, 'payments')) {
+                    $entry['status'] = 'already_done';
+                    $entry['payment_ids'] = LegacyMap::all(self::MAP_ROW, $row, 'payments');
+                    $result['counts']['already_done']++;
+
+                    return;
+                }
+
+                if (isset($op['of_sheet_row'])) {
+                    $ofId = LegacyMap::get(self::MAP_ROW, (int) $op['of_sheet_row'], 'payments')
+                        ?? throw new RuntimeException("Sheet row {$op['of_sheet_row']} is not in the system, so its refund (row {$row}) cannot be recorded.");
+                } else {
+                    $ofId = (int) $op['of_payment_id'];
+                    $this->assertAsReviewed($ofId, $op);
+                }
+                $of = Payment::query()->findOrFail($ofId);
+
+                $amount = number_format((float) $op['amount'], 2, '.', '');
+                $refunded = $this->payments->refundedByLine($of);
+                $left = $amount;
+                $lines = [];
+                foreach ($of->lines()->get() as $line) {
+                    $can = bcsub(number_format((float) $line->amount, 2, '.', ''), $refunded[$line->id] ?? '0.00', 2);
+                    if (bccomp($left, '0', 2) <= 0 || bccomp($can, '0', 2) <= 0) {
+                        continue;
+                    }
+                    $take = bccomp($left, $can, 2) <= 0 ? $left : $can;
+                    $lines[] = ['line_id' => $line->id, 'amount' => $take];
+                    $left = bcsub($left, $take, 2);
+                }
+                if (bccomp($left, '0', 2) > 0) {
+                    throw new RuntimeException("Sheet row {$row}: a refund of {$amount} is more than payment #{$ofId} has left to refund.");
+                }
+
+                $refund = $this->payments->refund($of, [
+                    'refunded_at' => $op['refunded_at'],
+                    'payment_method_id' => $this->method($op['payment_method'] ?? null),
+                    'reason' => (string) $op['reason'],
+                    'lines' => $lines,
+                ]);
+                LegacyMap::put(self::MAP_ROW, $row, 'payments', $refund->id);
+                $entry['status'] = 'refunded';
+                $entry['payment_ids'] = [$refund->id];
+                $result['counts']['refunded']++;
+                $result['refunded_total'] = bcadd($result['refunded_total'], $amount, 2);
+                break;
+
             case 'skip':
                 foreach ($rows as $r) {
                     LegacyMap::put(self::MAP_ROW, $r, LegacyMap::SKIPPED, 0);
@@ -490,6 +554,15 @@ final class PaymentHistoryImport
             ];
         }
 
+        if (isset($expected['refund_total'])) {
+            $back = $this->createdSoFar($plan, 'refund');
+            $checks[] = [
+                'name' => 'Refunds match the plan',
+                'ok' => bccomp(bcadd($back, (string) $expected['refund_total'], 2), '0', 2) === 0,
+                'detail' => "plan {$expected['refund_total']} back, in the system {$back}",
+            ];
+        }
+
         $rows = collect($plan['operations'])->pluck('sheet_rows')->flatten()->filter(fn ($r) => $r !== null)->map(fn ($r) => (int) $r)->unique();
         $mapped = DB::table('legacy_conversion_map')->where('legacy_table', self::MAP_ROW)->whereIn('legacy_id', $rows->all())->distinct()->count('legacy_id');
         $checks[] = [
@@ -519,14 +592,14 @@ final class PaymentHistoryImport
     }
 
     /**
-     * The total of the payments the plan's create operations made, this run
-     * or an earlier one.
+     * The total of the payments the plan's create (or refund) operations
+     * made, this run or an earlier one. Refunds come out negative.
      *
      * @param  array<string, mixed>  $plan
      */
-    private function createdSoFar(array $plan): string
+    private function createdSoFar(array $plan, string $op = 'create'): string
     {
-        $rows = collect($plan['operations'])->where('op', 'create')->pluck('sheet_rows')->flatten()->filter(fn ($r) => $r !== null)->map(fn ($r) => (int) $r)->all();
+        $rows = collect($plan['operations'])->where('op', $op)->pluck('sheet_rows')->flatten()->filter(fn ($r) => $r !== null)->map(fn ($r) => (int) $r)->all();
         $ids = DB::table('legacy_conversion_map')->where('legacy_table', self::MAP_ROW)->where('new_table', 'payments')
             ->whereIn('legacy_id', $rows)->distinct()->pluck('new_id')->all();
 

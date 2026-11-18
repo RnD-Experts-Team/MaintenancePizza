@@ -71,7 +71,7 @@ class ImportPaymentHistory extends Command
         }
 
         $this->table(['What', 'How many'], collect($result['counts'])->map(fn ($n, $k) => [str_replace('_', ' ', $k), $n])->values()->all());
-        $this->line("Money in new payments: {$result['created_total']}".($result['counts']['held'] > 0 ? " (held back: {$result['held_total']})" : ''));
+        $this->line("Money in new payments: {$result['created_total']}; refunds recorded: {$result['refunded_total']}".($result['counts']['held'] > 0 ? " (held back: {$result['held_total']})" : ''));
 
         $problems = collect($result['operations'])->whereIn('status', ['error', 'held']);
         foreach ($problems->take(100) as $p) {

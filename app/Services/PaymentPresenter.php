@@ -25,6 +25,9 @@ class PaymentPresenter
         'lines.store',
         'attachments',
         'mistakenNote',
+        'refundOf',
+        'refundNote',
+        'refunds',
     ];
 
     /** Everything the payment page shows. */
@@ -57,6 +60,14 @@ class PaymentPresenter
         'attachments.creator',
         'revisions.editor',
         'mistakenNote',
+        'refundOf',
+        'refundNote',
+        'refunds.paymentMethod',
+        'refunds.lines',
+        'refunds.refundNote',
+        'refunds.mistakenNote',
+        'refunds.creator',
+        'lines.refundLines.payment',
     ];
 
     /** What an unpaid session needs: its events (durations) and its trip's stops. */
@@ -100,14 +111,33 @@ class PaymentPresenter
                 : null;
         }
 
+        $isRefund = $payment->isRefund();
+        $refunded = $isRefund || ! $payment->relationLoaded('refunds') ? '0.00' : $payment->refunds
+            ->reject(fn (Payment $r) => (bool) $r->mistaken)
+            ->reduce(fn (string $c, Payment $r) => bcsub($c, $this->money($r->total), 2), '0.00');
+
         return [
             'id' => $payment->id,
+            // payment: money we paid. refund: money that came back for the
+            // payment `refund_of`, dated `paid_at`; its total is negative.
+            'kind' => $payment->kind->value,
+            'refund_of' => $isRefund && $payment->refundOf ? [
+                'id' => $payment->refundOf->id,
+                'paid_at' => $payment->refundOf->paid_at?->toDateString(),
+                'total' => $this->money($payment->refundOf->total),
+            ] : null,
+            // Why the money came back (refunds only).
+            'refund_reason' => $isRefund ? $payment->refundNote?->body : null,
             'paid_at' => $payment->paid_at?->toDateString(),
             'paid_to' => $paidTo,
             'payment_method' => $payment->paymentMethod ? ['id' => $payment->paymentMethod->id, 'name' => $payment->paymentMethod->name] : null,
             'reference' => $payment->reference,
             'invoice_number' => $payment->invoice_number,
             'total' => $this->money($payment->total),
+            // What live refunds gave back (payments only; 0.00 when none), and
+            // what the payment cost in the end.
+            'refunded_total' => $isRefund ? null : $refunded,
+            'net_total' => $isRefund ? $this->money($payment->total) : bcsub($this->money($payment->total), $refunded, 2),
             'line_count' => $lines->count(),
             'stores' => $lines
                 ->map(fn (PaymentLine $l) => $l->store?->store_number ?? $l->other_store)
@@ -141,6 +171,11 @@ class PaymentPresenter
             'lines' => $payment->lines->map(fn (PaymentLine $l) => $this->line($l, $places))->values()->all(),
             'notes' => $this->notes->presentMany($payment),
             'attachments' => $this->attachments->presentMany($payment),
+            // The refunds of a payment, mistaken ones included (flagged);
+            // [] for a refund.
+            'refunds' => ! $payment->isRefund() && $payment->relationLoaded('refunds')
+                ? $payment->refunds->map(fn (Payment $r) => $this->refund($r))->values()->all()
+                : [],
             'revisions' => $payment->relationLoaded('revisions')
                 ? $payment->revisions->map(fn (PaymentRevision $r) => [
                     'id' => $r->id,
@@ -155,6 +190,33 @@ class PaymentPresenter
     }
 
     /**
+     * One refund as the page of the payment it refunds lists it.
+     *
+     * @return array<string, mixed>
+     */
+    public function refund(Payment $refund): array
+    {
+        return [
+            'id' => $refund->id,
+            'refunded_at' => $refund->paid_at?->toDateString(),
+            // What came back, as a positive amount.
+            'amount' => $this->money(bcmul($this->money($refund->total), '-1', 2)),
+            'payment_method' => $refund->paymentMethod ? ['id' => $refund->paymentMethod->id, 'name' => $refund->paymentMethod->name] : null,
+            'reference' => $refund->reference,
+            'reason' => $refund->refundNote?->body,
+            'mistaken' => (bool) $refund->mistaken,
+            'mistaken_reason' => $refund->mistaken ? $refund->mistakenNote?->body : null,
+            'lines' => $refund->lines->map(fn (PaymentLine $l) => [
+                'id' => $l->id,
+                'refund_of_line_id' => $l->refund_of_line_id,
+                'amount' => $this->money(bcmul($this->money($l->amount), '-1', 2)),
+            ])->values()->all(),
+            'created_by' => $refund->relationLoaded('creator') && $refund->creator ? $this->catalog->presentUser($refund->creator) : null,
+            'created_at' => $refund->created_at,
+        ];
+    }
+
+    /**
      * @param  array<string, array<int, array<string, mixed>>>  $places  see show()
      * @return array<string, mixed>
      */
@@ -162,9 +224,20 @@ class PaymentPresenter
     {
         $isParts = $line->type === PaymentLineType::Parts;
         $toStorage = $isParts && $line->storage_location_id !== null;
+        $refunded = $line->refund_of_line_id === null && $line->relationLoaded('refundLines')
+            ? $line->refundLines
+                ->reject(fn (PaymentLine $r) => (bool) $r->payment?->mistaken)
+                ->reduce(fn (string $c, PaymentLine $r) => bcsub($c, $this->money($r->amount), 2), '0.00')
+            : null;
 
         return [
             'id' => $line->id,
+            // On a refund: the line of the payment it gives money back for.
+            'refund_of_line_id' => $line->refund_of_line_id,
+            // On a payment: what live refunds gave back for this line, and
+            // what can still be refunded.
+            'refunded' => $refunded,
+            'refundable' => $refunded === null ? null : bcsub($this->money($line->amount), $refunded, 2),
             'type' => $line->type->value,
             'type_label' => $line->type->label(),
             'store_id' => $line->store_id,
