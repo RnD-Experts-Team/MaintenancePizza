@@ -246,13 +246,15 @@ class ThrottleTest extends TestCase
             [
                 'GET|HEAD api/tickets/analytics',
                 'GET|HEAD api/stores/{store}/tickets/analytics',
+                // Every report of a range in one answer (secret key, for Excel).
+                'GET|HEAD api/maintenance-reports',
                 // The report dataset queries: one literal route per dataset.
                 ...array_map(fn (string $dataset) => 'POST api/report-datasets/'.$dataset::KEY.'/query', ReportDatasets::DATASETS),
             ],
             $routesWith('throttle:api-heavy')->all(),
         );
 
-        $this->assertSame(['GET|HEAD api/export/excel'], $routesWith('throttle:service-secret')->all());
+        $this->assertEqualsCanonicalizing(['GET|HEAD api/maintenance-reports', 'GET|HEAD api/export/excel'], $routesWith('throttle:service-secret')->all());
         $this->assertSame(['GET|HEAD api/export/excel'], $routesWith('throttle:api-export')->all());
 
         $this->assertSame(

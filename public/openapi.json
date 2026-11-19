@@ -6701,6 +6701,714 @@
         }
       }
     },
+    "/maintenance-reports": {
+      "get": {
+        "tags": [
+          "Analytics",
+          "Export"
+        ],
+        "summary": "The weekly reports in one answer: weekly, pending, technical issues, status and payments",
+        "description": "Requires the secret-key header X-Secret-Key (not the bearer token): it is read by Excel (Power Query). Issues are dated by the day they were submitted, payments by the day they were paid; both dates included. Statuses are the workflow's own, as they are; outstanding means not closed and not cancelled. YTD runs from January 1 of end_date's year to end_date: closed and cancelled count the issues that finished in it, every other status the issues submitted in it that are in that status now.",
+        "operationId": "maintenanceReports",
+        "parameters": [
+          {
+            "name": "X-Secret-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The service secret (X_SECRET_KEY)"
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "First day, included"
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Last day, included. At most 400 days after start_date."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Every report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "range": {
+                          "type": "object",
+                          "properties": {
+                            "start_date": {
+                              "type": "string",
+                              "format": "date"
+                            },
+                            "end_date": {
+                              "type": "string",
+                              "format": "date"
+                            },
+                            "ytd_start_date": {
+                              "type": "string",
+                              "format": "date"
+                            },
+                            "today": {
+                              "type": "string",
+                              "format": "date"
+                            }
+                          }
+                        },
+                        "weekly_report": {
+                          "type": "array",
+                          "description": "Every issue submitted in the range",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ticket_id": {
+                                "type": "integer"
+                              },
+                              "ticket_issue_id": {
+                                "type": "integer"
+                              },
+                              "issue_id": {
+                                "type": "integer",
+                                "description": "Catalog issue; null for an issue typed in by the store",
+                                "nullable": true
+                              },
+                              "issue_date": {
+                                "type": "string",
+                                "description": "The day it was submitted",
+                                "format": "date"
+                              },
+                              "waiting_days": {
+                                "type": "integer",
+                                "description": "Calendar days from submission to the day it finished, or to today while outstanding"
+                              },
+                              "store_number": {
+                                "type": "string",
+                                "description": "The store number, or the storage location / place in words for a ticket at no store",
+                                "nullable": true
+                              },
+                              "issue": {
+                                "type": "string"
+                              },
+                              "priority": {
+                                "type": "object",
+                                "properties": {
+                                  "value": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  }
+                                },
+                                "description": "The assigned priority when set, else the store's",
+                                "nullable": true
+                              },
+                              "submitted_by_mos": {
+                                "type": "boolean",
+                                "description": "Submitted by someone who does MOS work here (has recorded a payment, trip or booking). Null when the submitter is unknown.",
+                                "nullable": true
+                              },
+                              "status": {
+                                "type": "object",
+                                "properties": {
+                                  "value": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  }
+                                },
+                                "description": "The workflow status"
+                              },
+                              "description": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "resolution": {
+                                "type": "object",
+                                "properties": {
+                                  "value": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  }
+                                },
+                                "nullable": true,
+                                "description": "How a closed issue ended (repaired, deferred, ...)"
+                              }
+                            }
+                          }
+                        },
+                        "pending_report": {
+                          "type": "array",
+                          "description": "The weekly report's issues that are still outstanding",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ticket_id": {
+                                "type": "integer"
+                              },
+                              "ticket_issue_id": {
+                                "type": "integer"
+                              },
+                              "issue_id": {
+                                "type": "integer",
+                                "description": "Catalog issue; null for an issue typed in by the store",
+                                "nullable": true
+                              },
+                              "issue_date": {
+                                "type": "string",
+                                "description": "The day it was submitted",
+                                "format": "date"
+                              },
+                              "waiting_days": {
+                                "type": "integer",
+                                "description": "Calendar days from submission to the day it finished, or to today while outstanding"
+                              },
+                              "store_number": {
+                                "type": "string",
+                                "description": "The store number, or the storage location / place in words for a ticket at no store",
+                                "nullable": true
+                              },
+                              "issue": {
+                                "type": "string"
+                              },
+                              "priority": {
+                                "type": "object",
+                                "properties": {
+                                  "value": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  }
+                                },
+                                "description": "The assigned priority when set, else the store's",
+                                "nullable": true
+                              },
+                              "submitted_by_mos": {
+                                "type": "boolean",
+                                "description": "Submitted by someone who does MOS work here (has recorded a payment, trip or booking). Null when the submitter is unknown.",
+                                "nullable": true
+                              },
+                              "status": {
+                                "type": "object",
+                                "properties": {
+                                  "value": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  }
+                                },
+                                "description": "The report status: pending, waiting, assigned, in_progress, complete, deferred, cancelled"
+                              },
+                              "workflow_status": {
+                                "type": "object",
+                                "properties": {
+                                  "value": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  }
+                                },
+                                "description": "The workflow status it was folded from"
+                              },
+                              "description": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            }
+                          }
+                        },
+                        "technical_issues": {
+                          "type": "array",
+                          "description": "Catalog issue 151: submitted in the range, plus every one still outstanding",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ticket_id": {
+                                "type": "integer"
+                              },
+                              "ticket_issue_id": {
+                                "type": "integer"
+                              },
+                              "issue_id": {
+                                "type": "integer",
+                                "description": "Catalog issue; null for an issue typed in by the store",
+                                "nullable": true
+                              },
+                              "issue_date": {
+                                "type": "string",
+                                "description": "The day it was submitted",
+                                "format": "date"
+                              },
+                              "waiting_days": {
+                                "type": "integer",
+                                "description": "Calendar days from submission to the day it finished, or to today while outstanding"
+                              },
+                              "store_number": {
+                                "type": "string",
+                                "description": "The store number, or the storage location / place in words for a ticket at no store",
+                                "nullable": true
+                              },
+                              "issue": {
+                                "type": "string"
+                              },
+                              "priority": {
+                                "type": "object",
+                                "properties": {
+                                  "value": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  }
+                                },
+                                "description": "The assigned priority when set, else the store's",
+                                "nullable": true
+                              },
+                              "submitted_by_mos": {
+                                "type": "boolean",
+                                "description": "Submitted by someone who does MOS work here (has recorded a payment, trip or booking). Null when the submitter is unknown.",
+                                "nullable": true
+                              },
+                              "status": {
+                                "type": "object",
+                                "properties": {
+                                  "value": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  }
+                                },
+                                "description": "The report status: pending, waiting, assigned, in_progress, complete, deferred, cancelled"
+                              },
+                              "workflow_status": {
+                                "type": "object",
+                                "properties": {
+                                  "value": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  }
+                                },
+                                "description": "The workflow status it was folded from"
+                              },
+                              "description": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            }
+                          }
+                        },
+                        "status_report": {
+                          "type": "object",
+                          "properties": {
+                            "statuses": {
+                              "type": "array",
+                              "description": "weekly_received, closed_weekly, <status>_ytd for every workflow status, total_outstanding",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "key": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "issues": {
+                                    "type": "integer"
+                                  },
+                                  "avg_waiting_days": {
+                                    "type": "number",
+                                    "nullable": true
+                                  }
+                                }
+                              }
+                            },
+                            "outstanding_by_priority": {
+                              "type": "object",
+                              "properties": {
+                                "ytd": {
+                                  "type": "array",
+                                  "description": "Outstanding issues submitted this year, per priority",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "priority": {
+                                        "type": "string"
+                                      },
+                                      "label": {
+                                        "type": "string"
+                                      },
+                                      "issues": {
+                                        "type": "integer"
+                                      },
+                                      "avg_waiting_days": {
+                                        "type": "number",
+                                        "nullable": true
+                                      }
+                                    }
+                                  }
+                                },
+                                "range": {
+                                  "type": "array",
+                                  "description": "Outstanding issues submitted in the range, per priority",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "priority": {
+                                        "type": "string"
+                                      },
+                                      "label": {
+                                        "type": "string"
+                                      },
+                                      "issues": {
+                                        "type": "integer"
+                                      },
+                                      "avg_waiting_days": {
+                                        "type": "number",
+                                        "nullable": true
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "by_issue_type": {
+                              "type": "object",
+                              "properties": {
+                                "rows": {
+                                  "type": "array",
+                                  "description": "Issues submitted in the range per catalog issue (issue_id null = typed in by the store)",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "issue_id": {
+                                        "type": "integer",
+                                        "nullable": true
+                                      },
+                                      "issue": {
+                                        "type": "string"
+                                      },
+                                      "received": {
+                                        "type": "integer"
+                                      },
+                                      "outstanding": {
+                                        "type": "integer"
+                                      },
+                                      "cancelled": {
+                                        "type": "integer"
+                                      },
+                                      "outstanding_pct": {
+                                        "type": "number",
+                                        "description": "Percent of received, one decimal",
+                                        "nullable": true
+                                      },
+                                      "cancelled_pct": {
+                                        "type": "number",
+                                        "description": "Percent of received, one decimal",
+                                        "nullable": true
+                                      },
+                                      "closed": {
+                                        "type": "integer"
+                                      },
+                                      "closed_pct": {
+                                        "type": "number",
+                                        "description": "Percent of received, one decimal",
+                                        "nullable": true
+                                      }
+                                    }
+                                  }
+                                },
+                                "total": {
+                                  "type": "object",
+                                  "properties": {
+                                    "received": {
+                                      "type": "integer"
+                                    },
+                                    "outstanding": {
+                                      "type": "integer"
+                                    },
+                                    "cancelled": {
+                                      "type": "integer"
+                                    },
+                                    "outstanding_pct": {
+                                      "type": "number",
+                                      "description": "Percent of received, one decimal",
+                                      "nullable": true
+                                    },
+                                    "cancelled_pct": {
+                                      "type": "number",
+                                      "description": "Percent of received, one decimal",
+                                      "nullable": true
+                                    },
+                                    "closed": {
+                                      "type": "integer"
+                                    },
+                                    "closed_pct": {
+                                      "type": "number",
+                                      "description": "Percent of received, one decimal",
+                                      "nullable": true
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "payment_report": {
+                          "type": "object",
+                          "properties": {
+                            "by_store": {
+                              "type": "array",
+                              "description": "Technician pay per store and technician category",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "store": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "description": "store, storage_location or other"
+                                      },
+                                      "id": {
+                                        "type": "integer",
+                                        "nullable": true
+                                      },
+                                      "label": {
+                                        "type": "string",
+                                        "nullable": true
+                                      }
+                                    }
+                                  },
+                                  "category": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "integer"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "nullable": true
+                                  },
+                                  "hours": {
+                                    "type": "number",
+                                    "description": "Hourly lines' paid hours, travel included"
+                                  },
+                                  "hourly_rate": {
+                                    "type": "string",
+                                    "description": "Hourly money over hours (the average when rates differ)",
+                                    "example": "120.00",
+                                    "nullable": true
+                                  },
+                                  "hourly_amount": {
+                                    "type": "string",
+                                    "example": "120.00"
+                                  },
+                                  "travel_hours": {
+                                    "type": "number",
+                                    "description": "Driving time in the sessions the lines paid"
+                                  },
+                                  "gas": {
+                                    "type": "string",
+                                    "example": "120.00"
+                                  },
+                                  "money_owed": {
+                                    "type": "string",
+                                    "description": "Other lines (the old sheet's money owed; a deduction is negative)",
+                                    "example": "120.00"
+                                  },
+                                  "fixed_amount": {
+                                    "type": "string",
+                                    "example": "120.00"
+                                  },
+                                  "inspection": {
+                                    "type": "string",
+                                    "example": "120.00"
+                                  },
+                                  "parts": {
+                                    "type": "string",
+                                    "example": "120.00"
+                                  },
+                                  "total": {
+                                    "type": "string",
+                                    "description": "Every line, refunds netted",
+                                    "example": "120.00"
+                                  }
+                                }
+                              }
+                            },
+                            "by_technician": {
+                              "type": "array",
+                              "description": "Technician pay per technician",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "technician": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "integer"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  "category": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "integer"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "nullable": true
+                                  },
+                                  "hours": {
+                                    "type": "number",
+                                    "description": "Hourly lines' paid hours, travel included"
+                                  },
+                                  "hourly_rate": {
+                                    "type": "string",
+                                    "description": "Hourly money over hours (the average when rates differ)",
+                                    "example": "120.00",
+                                    "nullable": true
+                                  },
+                                  "hourly_amount": {
+                                    "type": "string",
+                                    "example": "120.00"
+                                  },
+                                  "travel_hours": {
+                                    "type": "number",
+                                    "description": "Driving time in the sessions the lines paid"
+                                  },
+                                  "gas": {
+                                    "type": "string",
+                                    "example": "120.00"
+                                  },
+                                  "money_owed": {
+                                    "type": "string",
+                                    "description": "Other lines (the old sheet's money owed; a deduction is negative)",
+                                    "example": "120.00"
+                                  },
+                                  "fixed_amount": {
+                                    "type": "string",
+                                    "example": "120.00"
+                                  },
+                                  "inspection": {
+                                    "type": "string",
+                                    "example": "120.00"
+                                  },
+                                  "parts": {
+                                    "type": "string",
+                                    "example": "120.00"
+                                  },
+                                  "total": {
+                                    "type": "string",
+                                    "description": "Every line, refunds netted",
+                                    "example": "120.00"
+                                  }
+                                }
+                              }
+                            },
+                            "total": {
+                              "type": "object",
+                              "properties": {
+                                "hours": {
+                                  "type": "number",
+                                  "description": "Hourly lines' paid hours, travel included"
+                                },
+                                "hourly_rate": {
+                                  "type": "string",
+                                  "description": "Hourly money over hours (the average when rates differ)",
+                                  "example": "120.00",
+                                  "nullable": true
+                                },
+                                "hourly_amount": {
+                                  "type": "string",
+                                  "example": "120.00"
+                                },
+                                "travel_hours": {
+                                  "type": "number",
+                                  "description": "Driving time in the sessions the lines paid"
+                                },
+                                "gas": {
+                                  "type": "string",
+                                  "example": "120.00"
+                                },
+                                "money_owed": {
+                                  "type": "string",
+                                  "description": "Other lines (the old sheet's money owed; a deduction is negative)",
+                                  "example": "120.00"
+                                },
+                                "fixed_amount": {
+                                  "type": "string",
+                                  "example": "120.00"
+                                },
+                                "inspection": {
+                                  "type": "string",
+                                  "example": "120.00"
+                                },
+                                "parts": {
+                                  "type": "string",
+                                  "example": "120.00"
+                                },
+                                "total": {
+                                  "type": "string",
+                                  "description": "Every line, refunds netted",
+                                  "example": "120.00"
+                                }
+                              }
+                            }
+                          },
+                          "description": "Payments to technicians dated in the range; mistaken payments left out, refunds netted, supplier payments not included"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "security": []
+      }
+    },
     "/troubleshooting-guides": {
       "get": {
         "tags": [
