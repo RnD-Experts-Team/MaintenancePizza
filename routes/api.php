@@ -10,6 +10,7 @@ use App\Http\Controllers\IssueInspectionController;
 use App\Http\Controllers\IssueScheduleController;
 use App\Http\Controllers\IssueWorkflowController;
 use App\Http\Controllers\MaintenanceAnalyticsController;
+use App\Http\Controllers\MaintenanceReportsController;
 use App\Http\Controllers\MaintenanceSettingController;
 use App\Http\Controllers\NoteController;
 use App\Http\Controllers\PartUnitController;
@@ -327,6 +328,11 @@ Route::middleware(['throttle:api', 'auth.token.store'])->group(function () {
     Route::get('maintenance-analytics/{section}', MaintenanceAnalyticsController::class)
         ->whereIn('section', ['summary', 'activity', 'watchlist', 'finances', 'coverage'])
         ->name('maintenance-analytics.show');
+    // The weekly reports in one answer: weekly, pending, technical issues,
+    // status and payments, for start_date..end_date. Read by Excel (Power
+    // Query), so it is behind the X-Secret-Key header like the export, not a
+    // user's bearer token.
+    Route::get('maintenance-reports', MaintenanceReportsController::class)->name('maintenance-reports.show')->withoutMiddleware('auth.token.store')->middleware(['throttle:service-secret', 'throttle:api-heavy', 'auth.secret.key']);
     Route::get('export/excel', ExportController::class)->name('export.excel')->withoutMiddleware('auth.token.store')->middleware(['throttle:service-secret', 'throttle:api-export', 'auth.secret.key']);
 
     /*
