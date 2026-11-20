@@ -15,7 +15,8 @@ use Illuminate\Support\Facades\DB;
  * GET /api/maintenance-reports: the weekly maintenance reports, in one answer.
  *
  *   weekly_report     every issue submitted in the range
- *   pending_report    the same, only the ones still outstanding
+ *   pending_report    every issue still outstanding, whenever it was
+ *                     submitted (up to the end date)
  *   technical_issues  catalog issue TECHNICAL_ISSUE_ID: submitted in the
  *                     range, plus every one still outstanding from before
  *   status_report     counts and average waiting days by status, outstanding
@@ -75,7 +76,7 @@ class MaintenanceReportsService
                 'today' => $today->toDateString(),
             ],
             'weekly_report' => $this->rows($submitted),
-            'pending_report' => $this->rows($submitted->where('outstanding', true)),
+            'pending_report' => $this->rows($issues->where('outstanding', true)),
             'technical_issues' => $this->rows($issues->filter(
                 fn (array $i) => $i['issue_id'] === self::TECHNICAL_ISSUE_ID && ($i['outstanding'] || $inRange($i['submitted_at']))
             )),
