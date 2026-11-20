@@ -170,7 +170,8 @@ class MaintenanceReportsTest extends TestCase
         $i = $this->issues;
 
         $this->assertSame([$i['open']->id, $i['closed']->id, $i['tech_cancelled']->id], $this->ids($data['weekly_report']));
-        $this->assertSame([$i['open']->id], $this->ids($data['pending_report']));
+        // Every outstanding issue, the ones from before the range too; not the one after it.
+        $this->assertSame([$i['tech_old']->id, $i['open']->id], $this->ids($data['pending_report']));
         // Issue 151: the cancelled one from the range, and the one outstanding since October.
         $this->assertSame([$i['tech_old']->id, $i['tech_cancelled']->id], $this->ids($data['technical_issues']));
     }

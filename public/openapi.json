@@ -6859,7 +6859,7 @@
                         },
                         "pending_report": {
                           "type": "array",
-                          "description": "The weekly report's issues that are still outstanding",
+                          "description": "Every issue still outstanding, whenever it was submitted (up to end_date)",
                           "items": {
                             "type": "object",
                             "properties": {
