@@ -172,7 +172,10 @@ class CatalogService
         $ranking = $store !== null || $issueId !== null;
 
         if (! $ranking) {
-            return $this->withPaidThisMonth($query)->latest()->paginate($perPage)
+            // A to Z, whatever the case: with a few hundred technicians and
+            // companies, "newest first" buried the older ones. Ranking
+            // (a store or an issue was picked) is the other order, below.
+            return $this->withPaidThisMonth($query)->orderByRaw('LOWER(technicians.name)')->orderBy('technicians.id')->paginate($perPage)
                 ->through(fn (Technician $t) => $this->presentTechnician($t) + $this->paidThisMonth($t));
         }
 
